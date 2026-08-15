@@ -1,0 +1,140 @@
+# dsh-save-money
+
+**Save-money plugin** for DSH (DeepSeek Harness) — define your own "pause / resume" time windows; at pause time running long tasks are **paused** (not stopped) automatically, and they resume when the window ends. Built for LLM API **peak/off-peak pricing** (e.g. DeepSeek peak hours 9:00–12:00, 14:00–18:00 Beijing time, off-peak at half price), and equally useful for time-of-use electricity rates, bandwidth off-peak shifting, or any "I don't want the machine working during this period" scenario.
+
+> Status: ✅ Implemented, continuously maintained. [中文版](./README.zh.md)
+
+## Interface
+
+![Save-money plugin screenshot](./screenshot.en.png)
+
+The colored status text in the top-right of the session header (Save · ⚪/🟢/🟡/🔴, color follows the state) is the single persistent entry — click it to open the settings popover. When a pause is upcoming or active, a reminder banner appears at the top of the page (with the **Disable save mode** button).
+
+## Features
+
+- **Multiple time windows**: add / remove pause-resume windows freely; supports midnight-crossing windows (23:00–08:00) and per-weekday filtering;
+- **Automatic pause on schedule**: when the pause time arrives, running tasks are safely "frozen" (their progress is preserved exactly — nothing is interrupted or lost) and resume automatically when the window ends; **if nothing is running, nothing is paused**;
+- **No requests during the window (the saving core)**: inside a pause window the AI sends no new requests to the model service, so **no cost is incurred**; after the window ends (or on disable / ignore) everything resumes, with conversation context and in-flight tasks unaffected. **The AI not replying inside a window (including new conversations) is expected** — to resume right away, click the **Disable save mode** or **Skip pause** button (takes effect directly, no AI involved);
+- **Skip / resume now**: skip the upcoming pause before it starts, or resume immediately while paused (settings popover / automatic at window end); the floating banner button is **Disable save mode** — one click disables the whole feature (the fastest escape hatch);
+- **UI reminders**: top floating banner (light yellow for upcoming pause / light red for paused, with the **Disable save mode** button) + the single persistent session-header entry (next to the Session log, "Save · 🟢 Working" colored status text; click to expand settings), colors follow the state in real time;
+- **Timezone support**: IANA timezone dropdown, browser auto-detection with Beijing time (+8) fallback; UTC projection checked (Beijing 09:00 == UTC 01:00);
+- **One-click DeepSeek preset**: dedupe-append the peak windows (**08:58–12:02, 13:58–18:02**, with a 2-minute boundary margin — pause 2 min early, resume 2 min late); it does **not** auto-enable — your call; legacy no-margin windows are upgraded automatically on one-click;
+- **Persistent config**: all settings are saved automatically to the workspace file `save-money.config.json` (gitignored); configuration survives browser refresh and plugin disable/re-activate, and is loaded on startup with optional reconciliation of paused goals;
+- **Non-intrusive by design**: no screen lock, no overlay blocking, no user action prevented — only the automatic continuation of goals is paused; manual interaction always flows.
+
+---
+
+## Install
+
+The official DSH plugin form is a **module exporting `apply` + cordis.yml mounting** (see the [DSH official tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)). This repository follows that form and offers two install paths (recommended), plus one dynamic-plugin debug form.
+
+> Prerequisite: `dsh` CLI installed (or check out the [deepseek-harness source](https://github.com/deepseek-ai/deepseek-harness) and run with `pnpm dsh`). The repo ships a prebuilt `plugin/index.js` — installable without building; to use the latest code, run `npm install` first and rebuild.
+
+### Path 1: `--patch` quick try (official, loads local source)
+
+1. (Optional) Rebuild the latest plugin module — a fresh clone needs the build deps first:
+
+   ```sh
+   npm install          # first clone: installs typescript and friends
+   npm run prepare      # one step: src/*.ts -> dist/*.js -> plugin/index.js
+   ```
+
+2. Edit `cordis.patch.yml`, replacing `<REPO_ROOT>` with the repository's absolute path:
+
+   ```yaml
+   - insert:
+       - id: save-money
+         name: '<REPO_ROOT>/plugin/index.js'
+   ```
+
+3. Start with the overlay:
+
+   ```sh
+   dsh web --patch ./cordis.patch.yml
+   # from source: pnpm dsh web --patch ./cordis.patch.yml
+   ```
+
+   The plugin loads with the Web startup; see [Quick start](#quick-start) for the status entry.
+
+### Path 2: bundle + `dsh plugin add` (official, distributable)
+
+1. Pack a bundle (`npm pack` inside `plugin/` runs its `prepare` build automatically):
+
+   ```sh
+   npm install          # first clone
+   cd plugin
+   npm pack             # auto-builds the TS and produces dsh-save-money-*.tgz
+   ```
+
+   `plugin/` is the standard bundle layout: `package.json` declares `dsh.bundle.patch`, `cordis.patch.yml` inserts the plugin row, `index.js` is the plugin module.
+
+2. Install into a profile (first run initializes with `@deepseek-ai/dsh-base`):
+
+   ```sh
+   dsh plugin --profile web add ./dsh-save-money-1.1.0.tgz
+   ```
+
+   Git install also works: `dsh plugin --profile web add github:you/dsh-save-money#<sha>` (git install requires `prepare` builds and `allowBuilds`, see the [DSH publish tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)).
+
+3. Verify the layer mounted, then start:
+
+   ```sh
+   dsh --profile web --dump-config   # should show the "# == dsh-save-money" layer
+   dsh --profile web
+   ```
+
+   Uninstall: `dsh plugin --profile web remove dsh-save-money`.
+
+### Path 3: dynamic Cordis plugin (dev / debug form, not officially recommended)
+
+Only for fast single-session iteration (the process-local plugin disappears on restart; the config still persists in the workspace):
+
+```text
+cordis_define(
+  plugin: { kind: "new", idPrefix: "savem" },
+  code:   { host: <dist/host.js content>, client: <dist/client.js content> },
+  name:   "save-money",
+  purpose: "Time-window pause/resume save-money plugin",
+)
+cordis_run(...)   # the Client half needs one-time approval
+```
+
+> Note: the `--patch` and bundle forms mount the **Host half** (scheduling, gate, goal freeze, tools, RPC, persistence — fully functional); the Client UI (session-header status text, banner, settings page) is provided by the dynamic-plugin form. Bundling the Client half officially is future work.
+
+### Config persistence (all forms)
+
+The plugin writes its settings to **the workspace root** `save-money.config.json` (excluded by `.gitignore`, never committed): loaded automatically at startup, persisted immediately on every change. A browser refresh only affects the Client UI in the dynamic-plugin form (re-run `cordis_run` to restore); in the `--patch` / bundle forms the plugin lives with the process, so config and scheduling are unaffected by refreshes.
+
+---
+
+## Quick start
+
+1. After install and activation, click the **"Save · 🟢 Working"** status text in the top-right of the session header (next to the Session log) to open settings (the single persistent entry); or use the **system settings page** (sidebar → Settings → **Save-money**);
+2. Click **One-click DeepSeek peak/off-peak savings** → the peak windows are added automatically (**08:58–12:02, 13:58–18:02** Beijing time, with the 2-minute boundary margin);
+3. **Check "Enable"** (the one-click does not auto-enable);
+4. Save the window settings — the plugin starts watching: tasks pause automatically at the window start and resume when it ends.
+
+### Entries
+
+| Entry | Where |
+| --- | --- |
+| Status text (single persistent entry) | Session header top-right (next to the Session log) "Save · 🟢 Working", click to open the settings popover |
+| System settings page | Sidebar → Settings → Save-money |
+| Floating banner | Top capsule when a pause is upcoming / active + **Disable save mode** button (disables the whole feature) |
+
+### Dynamic tools (Host)
+
+| Tool | Purpose |
+| --- | --- |
+| `save_money_status` | Query state / **gate state (gate: open\|closed)** / window / pause record / UTC projection |
+| `save_money_configure` | Configure (enabled / timezone / warnMinutes / windows) |
+| `save_money_ignore` | Skip the current or next window's pause (also releases the gate) |
+| `save_money_debug_tick` | Dev tool: manually advance the state machine |
+
+---
+
+## Docs & License
+
+- **Repository layout**: `src/core.ts` (pure logic, unit-tested) / `src/host.ts` / `src/client.ts` (TypeScript plugin sources, single source of truth), `tests/` (unit tests, `npm test`), `scripts/build.js` (TS → JS plugin bodies), `scripts/typecheck.js` (type check), `scripts/make-plugin.js` (official-module generator), `plugin/` (bundle: `package.json` + `cordis.patch.yml` + `index.js`), `cordis.patch.yml` (quick-try overlay), `package.json` / `tsconfig.json` (build & type config), `dist/` (build output, gitignored), `save-money.config.json` (runtime config, gitignored)
+- **i18n**: UI strings are in the `I18N` dictionary in `src/client.ts` (zh + en); language is auto-detected from the browser locale (`zh*` → Chinese, anything else → English)
+- **License**: MIT (see [`LICENSE`](./LICENSE))

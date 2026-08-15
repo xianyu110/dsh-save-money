@@ -1,0 +1,672 @@
+/**
+ * dsh-save-money — Host half (single source for both the dynamic-plugin
+ * code.host and the official plugin/index.js bundle form).
+ *
+ * Dynamic Cordis plugin: time-window scheduling + goal freeze/resume +
+ * PauseRecord + tools + RPC.
+ * Dependencies: timer (injected), agents / goals / fs (optional via ctx.get).
+ *
+ * Request-level gate (user requirement: "paused = no API requests at all"):
+ *  - A llm/stream listener is registered via ctx.on (the Cordis 3 registration
+ *    API; llm/stream is dispatched through ctx.waterfall, so every listener
+ *    receives (options, next)) — inside a pause window every streaming model
+ *    call (including retries, sub-agents, workflows and title generation) is
+ *    suspended before it is sent, so nothing ever reaches the API provider and
+ *    no cost is incurred.
+ *  - Goals.pause is the second layer: turn-boundary freeze (state preserved)
+ *    plus this hard request-level gate (no request leaves).
+ *  - Suspension semantics (user requirement: "like a C hook + spin sleep —
+ *    intercept before the request is sent, do not disturb the context or the
+ *    API interaction trajectory, keep flowing once released"): llm.stream is
+ *    dispatched through ctx.waterfall and each listener must synchronously
+ *    return an AsyncIterable; we return a WRAPPER stream: iteration waits for
+ *    the gate to open, then calls next() to obtain the real stream — the
+ *    options request object passes through untouched and the underlying
+ *    routing / retry / validation chain is unaffected (retries happen at the
+ *    agent/request-error extension point and are unrelated to this pause).
+ *  - Waiting is EVENT-DRIVEN: waiters register into gateWaiters and are woken
+ *    by one of five events — the 60s tick (registered in the plugin apply
+ *    context), applyConfig (disable / window change), ignoreHandler (ignore),
+ *    plugin unload (fail-open), or the request signal abort. Then next() is
+ *    called to release. Zero timers, zero fiber-effect calls: it cannot throw
+ *    and cannot interrupt a turn.
+ *  - Release conditions: window ended / enabled:false (disabled) / ignored /
+ *    plugin unloaded (fail-open, so requests never hang forever after
+ *    unload) / request signal aborted (delegated to the underlying layer to
+ *    emit an aborted finish chunk).
+ *  - Note: llm/stream is a global waterfall (bound to LlmRuntime), so the
+ *    suspension also applies to manual conversations in the current session —
+ *    the AI not replying inside a window is expected behaviour (that is the
+ *    saving-money semantics); the user can release via the
+ *    "disable save mode / ignore" UI buttons (host.call RPC, no model needed).
+ *
+ * Config persistence: written to the workspace save-money.config.json, surviving
+ * refresh/restart. The workspace root is resolved AT RUNTIME from the
+ * sandboxPolicy service (ctx.get('sandboxPolicy').workspaceRoot) — no machine
+ * path is ever hard-coded, so the plugin works from any checkout/workspace.
+ */
+
+// --- Type-only declarations (erased at build time) ---
+interface TimeWindow {
+  pauseAt: string
+  resumeAt: string
+  days?: number[]
+  timezone?: string
+}
+type LangChoice = 'auto' | 'zh' | 'en'
+interface WallClock {
+  y: number
+  mo: number
+  d: number
+  weekday: number
+  minutes: number
+}
+interface NextPause {
+  dayOffset: number
+  minutes: number
+}
+interface GoalRef {
+  sessionId: string
+  goalId: string
+  revision: number
+  pausedAt?: number
+}
+interface TaskInfo {
+  agent: any
+  sessionId: string
+  goalId: string
+  revision: number
+  phase: string
+}
+interface RawState {
+  name: 'NORMAL' | 'WARN' | 'PAUSED'
+  reason?: string
+  window?: TimeWindow
+  minutesToPause?: number
+}
+interface CtxLike {
+  get(name: string): any
+  on(event: string, listener: (...args: any[]) => any, opts?: any): () => void
+  effect(fn: () => void | (() => void)): void
+  timer: {
+    timeout(fn: () => void, ms: number): any
+    interval(fn: () => void, ms: number): any
+  }
+}
+
+// --- Pure helpers inlined from src/core.ts at build time (scripts/build.js) ---
+// The declarations below keep this file type-checked; the real implementations
+// live in src/core.ts and are unit-tested there.
+declare function wallClock(tz: string, date: Date): WallClock
+declare function parseHHMM(s: string): number | null
+declare function dowNum(wd: number): number
+declare function windowMatchesAt(w: TimeWindow, wc: WallClock): boolean
+declare function nextPause(w: TimeWindow, tz: string, wc: WallClock): NextPause | null
+declare function wallToUTC(tz: string, y: number, mo: number, d: number, hhmm: number): number
+declare function isValidTz(tz: string): boolean
+declare function validateWindows(windows: TimeWindow[], defaultTz: string): { ok: boolean; error?: string }
+
+return {
+  inject: ['timer'],
+  apply(ctx: CtxLike) {
+    const DEFAULTS = {
+      enabled: false,
+      timezone: 'Asia/Shanghai',
+      warnMinutes: 5,
+      windows: [] as TimeWindow[],
+      reconcileOnStart: true,
+      lang: 'auto' as LangChoice,
+    }
+    let cfg = { ...DEFAULTS, windows: [] as TimeWindow[] }
+    let pauseRecord: {
+      pausedBySaveMoney: boolean
+      at: string
+      window: { pauseAt: string; resumeAt: string; timezone: string } | null
+      paused: GoalRef[]
+      cascaded: boolean
+    } | null = null
+    let ignoredUntil = 0
+    let ignoredWindowKey: string | null = null
+    let lastStateKey = 'NORMAL'
+    let configLoaded = false
+    let configPath = ''
+    const unwrap = (args: any) => (args && typeof args === 'object' && args.arguments && typeof args.arguments === 'object' ? args.arguments : args)
+
+    // Config persistence to the workspace file (survives browser refresh /
+    // plugin re-activation). The workspace root is fetched at runtime from the
+    // sandboxPolicy service; when unavailable, fs.resolve falls back to its
+    // default cwd (the workspace). No machine path is ever hard-coded.
+    const CONFIG_FILE = 'save-money.config.json'
+    const sandboxPolicy = ctx.get('sandboxPolicy')
+    const sessionsSvc = ctx.get('sessions')
+    const defaultWorkspaceRoot: string = (sandboxPolicy && typeof sandboxPolicy.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot.length > 0)
+      ? sandboxPolicy.workspaceRoot
+      : ''
+    // sandboxPolicy.workspaceRoot is the process cwd (the DSH install dir), not
+    // the session workspace. The plugin config belongs to the save-money
+    // workspace, so prefer a session whose cwd points at this repo (matched by
+    // directory basename only — no machine path is hard-coded).
+    const sessionCwdOf = (s: any): string => {
+      const c = s && (s.meta && s.meta.cwd || s.header && s.header.cwd || s.cwd)
+      return typeof c === 'string' ? c : ''
+    }
+    const resolveWorkspaceRoot = (): string => {
+      let ws = defaultWorkspaceRoot
+      if (sessionsSvc && typeof sessionsSvc.list === 'function') {
+        try {
+          for (const s of sessionsSvc.list()) {
+            const c = sessionCwdOf(s).replace(/[\\/]+$/, '')
+            if (/dsh-save-money$/i.test(c)) { ws = c; break }
+          }
+        } catch (e) { /* keep the default */ }
+      }
+      return ws
+    }
+    const fsSvc = ctx.get('fs')
+    const windowKey = (w: TimeWindow, tz: string) => w.pauseAt + '|' + w.resumeAt + '|' + (w.timezone || tz)
+    const persistConfig = async () => {
+      if (!fsSvc) return
+      try {
+        const workspaceRoot = resolveWorkspaceRoot()
+        const resolveOpts = workspaceRoot ? { cwd: workspaceRoot } : undefined
+        const writePolicy = workspaceRoot ? { mode: 'workspace-write', workspaceRoot } : undefined
+        const target = await fsSvc.resolve(CONFIG_FILE, resolveOpts)
+        configPath = fsSvc.processPath ? String(fsSvc.processPath(target)) : String(target && (target.path || target.filePath || ''))
+        await fsSvc.writeText(target, JSON.stringify(snapshot(), null, 2), undefined, undefined, writePolicy)
+        console.log('[save-money] config persisted to ' + (workspaceRoot ? workspaceRoot + '\\' + CONFIG_FILE : CONFIG_FILE))
+      } catch (e: any) {
+        console.error('[save-money] persist failed: ' + String((e && e.message) || e))
+      }
+    }
+    const loadConfig = async () => {
+      if (!fsSvc) return
+      try {
+        const workspaceRoot = resolveWorkspaceRoot()
+        const resolveOpts = workspaceRoot ? { cwd: workspaceRoot } : undefined
+        const target = await fsSvc.resolve(CONFIG_FILE, resolveOpts)
+        configPath = fsSvc.processPath ? String(fsSvc.processPath(target)) : String(target && (target.path || target.filePath || ''))
+        const text = await fsSvc.readText(target)
+        const data = JSON.parse(text)
+        configLoaded = true
+        const next = { ...cfg }
+        if (typeof data.enabled === 'boolean') next.enabled = data.enabled
+        if (typeof data.timezone === 'string' && isValidTz(data.timezone)) next.timezone = data.timezone
+        if (typeof data.warnMinutes === 'number' && data.warnMinutes >= 0) next.warnMinutes = data.warnMinutes
+        if (typeof data.reconcileOnStart === 'boolean') next.reconcileOnStart = data.reconcileOnStart
+        if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'en') next.lang = data.lang
+        if (Array.isArray(data.windows)) {
+          const v = validateWindows(data.windows, next.timezone)
+          if (v.ok) next.windows = data.windows.map((w: TimeWindow) => ({ ...w }))
+        }
+        cfg = next
+        console.log('[save-money] config loaded from ' + (workspaceRoot ? workspaceRoot + '\\' + CONFIG_FILE : CONFIG_FILE))
+      } catch (e: any) {
+        console.log('[save-money] no config file (fresh start): ' + String((e && e.message) || e))
+      }
+    }
+
+    // ---------- Config ----------
+    // Pure helpers (wallClock / parseHHMM / windowMatchesAt / nextPause /
+    // wallToUTC / isValidTz / validateWindows) live in src/core.ts and are
+    // inlined into this body at build time; see the declarations above.
+    function applyConfig(patch: any): any {
+      const next = { ...cfg, ...patch }
+      if (next.windows === undefined) next.windows = []
+      const v = validateWindows(next.windows, next.timezone)
+      if (!v.ok) return { ok: false, error: v.error }
+      if (next.timezone !== undefined && !isValidTz(next.timezone)) {
+        return { ok: false, error: 'invalid IANA timezone: ' + next.timezone }
+      }
+      if (next.warnMinutes !== undefined && (!Number.isFinite(next.warnMinutes) || next.warnMinutes < 0)) {
+        return { ok: false, error: 'warnMinutes must be >= 0' }
+      }
+      if (next.lang !== undefined && next.lang !== 'auto' && next.lang !== 'zh' && next.lang !== 'en') {
+        return { ok: false, error: 'lang must be one of auto/zh/en' }
+      }
+      cfg = next
+      // Wake waiters only when the gate is actually open (unconditional wake
+      // released suspended requests inside the window — observed as "still
+      // thinking after pause" caused by the tick releasing every 60s).
+      if (!gateClosedAt(new Date())) wakeGateWaiters()
+      void persistConfig() // persist on every config change
+      return { ok: true, config: snapshot() }
+    }
+    function snapshot() {
+      return {
+        enabled: cfg.enabled,
+        timezone: cfg.timezone,
+        warnMinutes: cfg.warnMinutes,
+        reconcileOnStart: cfg.reconcileOnStart,
+        lang: cfg.lang,
+        windows: cfg.windows.map((w) => ({ ...w })),
+      }
+    }
+
+    // ---------- Busy detection / freeze / resume ----------
+    function collectTasks(): { ok: boolean; tasks: TaskInfo[]; reason?: string } {
+      const agents = ctx.get('agents')
+      const goals = ctx.get('goals')
+      if (!agents || !goals) return { ok: false, tasks: [], reason: 'agents/goals services unavailable' }
+      const tasks: TaskInfo[] = []
+      for (const agent of agents.list()) {
+        let gv: any = undefined
+        try { gv = goals.get(agent) } catch (e) { gv = undefined }
+        if (gv && (gv.phase === 'active' || (pauseRecord && pauseRecord.paused && pauseRecord.paused.some((p) => p.sessionId === agent.id)))) {
+          tasks.push({ agent, sessionId: agent.id, goalId: gv.id, revision: gv.revision, phase: gv.phase })
+        }
+      }
+      return { ok: true, tasks }
+    }
+    function freeze(window: TimeWindow | undefined): { frozen: number; record: any } {
+      const col = collectTasks()
+      if (!col.ok) { console.error('[save-money] freeze skipped:', col.reason); return { frozen: 0, record: null } }
+      const freezeTargets = col.tasks.filter((t) => t.phase === 'active')
+      if (freezeTargets.length === 0) {
+        console.log('[save-money] pauseAt reached but no active tasks; not pausing')
+        return { frozen: 0, record: null }
+      }
+      const goals = ctx.get('goals')
+      const paused: GoalRef[] = []
+      for (const t of freezeTargets) {
+        try {
+          goals.pause(t.agent, { id: t.goalId, revision: t.revision })
+          paused.push({ sessionId: t.sessionId, goalId: t.goalId, revision: t.revision, pausedAt: Date.now() })
+        } catch (e: any) {
+          console.error('[save-money] goals.pause failed for ' + t.sessionId + ': ' + String((e && e.message) || e))
+        }
+      }
+      pauseRecord = {
+        pausedBySaveMoney: true,
+        at: new Date().toISOString(),
+        window: window ? { pauseAt: window.pauseAt, resumeAt: window.resumeAt, timezone: window.timezone || cfg.timezone } : null,
+        paused,
+        cascaded: true,
+      }
+      console.log('[save-money] FROZEN ' + paused.length + ' goal(s), record written')
+      return { frozen: paused.length, record: pauseRecord }
+    }
+    function unfreeze(): { resumed: number; record: any } {
+      if (!pauseRecord) return { resumed: 0, record: null }
+      const agents = ctx.get('agents')
+      const goals = ctx.get('goals')
+      const remaining: GoalRef[] = []
+      let resumed = 0
+      const targets = pauseRecord.paused || []
+      for (const p of targets) {
+        const agent = agents && agents.get(p.sessionId)
+        if (!agent) continue
+        try {
+          const gv = goals.get(agent)
+          if (gv && gv.phase === 'paused') {
+            goals.resume(agent, { id: gv.id, revision: gv.revision })
+            resumed++
+          } else if (gv && gv.phase === 'active') {
+            resumed++
+          }
+        } catch (e: any) {
+          console.error('[save-money] goals.resume failed for ' + p.sessionId + ': ' + String((e && e.message) || e))
+          remaining.push(p)
+        }
+      }
+      pauseRecord = remaining.length > 0 ? { ...pauseRecord, paused: remaining } : null
+      console.log('[save-money] RESUMED ' + resumed + ' goal(s)' + (remaining.length > 0 ? ', ' + remaining.length + ' still pending' : ', record cleared'))
+      return { resumed, record: pauseRecord }
+    }
+    ctx.effect(() => {
+      return () => {
+        if (pauseRecord && pauseRecord.paused && pauseRecord.paused.length > 0) {
+          console.log('[save-money] plugin unloading: restoring paused goals')
+          unfreeze()
+        }
+      }
+    })
+
+    // ---------- State computation ----------
+    function computeRawState(now: Date): RawState {
+      if (!cfg.enabled) return { name: 'NORMAL', reason: 'disabled' }
+      for (const w of cfg.windows) {
+        const tz = w.timezone || cfg.timezone
+        if (windowMatchesAt(w, wallClock(tz, now))) {
+          // Ignore only affects the exact window it was applied to — a stale
+          // ignoredUntil (e.g. from clock manipulation during tests) must not
+          // suppress later windows.
+          if (ignoredUntil > now.getTime() && ignoredWindowKey === windowKey(w, tz)) return { name: 'NORMAL', reason: 'ignored', window: w }
+          return { name: 'PAUSED', window: w }
+        }
+      }
+      let nearest: { delta: number; window: TimeWindow } | null = null
+      for (const w of cfg.windows) {
+        const tz = w.timezone || cfg.timezone
+        const wc = wallClock(tz, now)
+        const np = nextPause(w, tz, wc)
+        if (!np) continue
+        const delta = np.dayOffset * 1440 + np.minutes - wc.minutes
+        if (nearest === null || delta < nearest.delta) nearest = { delta, window: w }
+      }
+      if (nearest !== null && nearest.delta > 0 && nearest.delta <= cfg.warnMinutes) {
+        return { name: 'WARN', window: nearest.window, minutesToPause: nearest.delta }
+      }
+      return { name: 'NORMAL', reason: 'no-window' }
+    }
+    function onTick(now: Date) {
+      const raw = computeRawState(now)
+      let st = raw
+      if (raw.name === 'PAUSED') {
+        if (!pauseRecord) {
+          const col = collectTasks()
+          if (!col.ok || col.tasks.length === 0) st = { name: 'NORMAL', reason: 'no-task' }
+        }
+      }
+      const key = st.name + (st.window ? ':' + st.window.pauseAt : '')
+      if (key !== lastStateKey) {
+        const prevName = lastStateKey.split(':')[0]
+        lastStateKey = key
+        if (st.name === 'PAUSED' && prevName !== 'PAUSED') {
+          freeze(st.window)
+        } else if (st.name !== 'PAUSED' && prevName === 'PAUSED') {
+          unfreeze()
+        }
+        console.log('[save-money] state -> ' + key)
+      }
+    }
+
+    // ---------- Request-level gate (event-driven suspension; never throws,
+    //            zero timer dependencies) ----------
+    // Inside a pause window every streaming model call is intercepted (llm/stream
+    // is the mandatory waterfall every call goes through). The gate uses the
+    // same "inside window and not ignored" check as the state machine, and does
+    // NOT depend on the freeze record: even when no active goal is frozen,
+    // manual-conversation model requests are still suspended — that is
+    // the saving-money semantics.
+    // Implementation notes:
+    //  - Cordis 3 registration API is ctx.on only; llm.stream dispatches via
+    //    ctx.waterfall, and listeners must synchronously return an AsyncIterable
+    //    (the caller for-await's it; an async listener would break the return
+    //    type). So we return a WRAPPER stream: iteration waits for the gate to
+    //    open first, then calls next() to get the real stream — options pass
+    //    through untouched, routing/retry/validation are unaffected (we are
+    //    registered at the chain tail; the suspend happens before the actual
+    //    adapterStream).
+    //  - The sandbox has no Node timer globals (setTimeout throws and fails the
+    //    turn as "this run failed"); ctx.timer.timeout is a fiber effect and can
+    //    still throw when registered inside an agent-turn fiber context. So
+    //    waiting is EVENT-DRIVEN: suspending = registering the resolve into
+    //    gateWaiters, woken by: ① the 60s tick (registered in the plugin apply
+    //    context, runs reliably); ② applyConfig (disable / window change);
+    //    ③ ignoreHandler (ignore); ④ plugin unload (fail-open); ⑤ request
+    //    signal abort. No timers / fiber-effect calls → cannot throw, cannot
+    //    interrupt a turn.
+    let gateDisposed = false
+    let gateWaiters: (() => void)[] = []
+    const wakeGateWaiters = () => {
+      const waiters = gateWaiters
+      gateWaiters = []
+      for (const resolve of waiters) resolve()
+    }
+    const gateClosedAt = (now: Date): boolean => {
+      if (!cfg.enabled) return false
+      const st = computeRawState(now)
+      if (st.name !== 'PAUSED') return false
+      if (ignoredUntil > now.getTime()) return false
+      return true
+    }
+    const gateInstalled = typeof ctx.on === 'function'
+    if (typeof ctx.on === 'function') {
+      ctx.effect(() => {
+        const dispose = ctx.on('llm/stream', (options: any, next: any) => {
+          if (!gateClosedAt(new Date())) return next()
+          const waitForOpen = () => new Promise((resolve) => {
+            const ready = () => gateDisposed || !gateClosedAt(new Date())
+              || !!(options && options.signal && options.signal.aborted)
+            // On wake, resolve with next()'s result (the real stream); if next()
+            // throws, the executor throws → promise rejects.
+            if (ready()) return resolve(next())
+            const waiter = () => resolve(next())
+            gateWaiters.push(waiter)
+            if (options && options.signal && typeof options.signal.addEventListener === 'function') {
+              options.signal.addEventListener('abort', () => {
+                const i = gateWaiters.indexOf(waiter)
+                if (i >= 0) gateWaiters.splice(i, 1)
+                resolve(next())
+              }, { once: true })
+            }
+          })
+          // Wrapper stream: iteration waits only when the gate is closed; once
+          // open → next() → the real request proceeds as usual.
+          let inner: any = null
+          const getInner = () => (inner !== null ? Promise.resolve(inner) : waitForOpen().then((s) => { inner = s; return inner }))
+          return {
+            [Symbol.asyncIterator]() {
+              let it: any = null
+              return {
+                next() {
+                  return getInner().then((s: any) => {
+                    if (!it) it = s[Symbol.asyncIterator]()
+                    return it.next()
+                  })
+                },
+                return(value: any) {
+                  return getInner().then((s: any) => {
+                    if (!it) it = s[Symbol.asyncIterator]()
+                    return it.return ? it.return(value) : { done: true, value }
+                  })
+                },
+                throw(e: any) {
+                  return getInner().then((s: any) => {
+                    if (!it) it = s[Symbol.asyncIterator]()
+                    return it.throw ? it.throw(e) : { done: true, value: e }
+                  })
+                },
+              }
+            },
+          }
+        }, { global: true })
+        return () => { gateDisposed = true; wakeGateWaiters(); dispose() }
+      })
+    } else {
+      console.error('[save-money] ctx.on unavailable; llm/stream gate not installed')
+    }
+
+    // ---------- Startup reconciliation ----------
+    function reconcile(): { restored: number; reason?: string } {
+      const col = collectTasks()
+      if (!col.ok) return { restored: 0, reason: col.reason }
+      const goals = ctx.get('goals')
+      const agents = ctx.get('agents')
+      let restored = 0
+      for (const agent of agents.list()) {
+        let gv: any = undefined
+        try { gv = goals.get(agent) } catch (e) { gv = undefined }
+        if (gv && gv.phase === 'paused') {
+          try {
+            goals.resume(agent, { id: gv.id, revision: gv.revision })
+            restored++
+            console.log('[save-money] reconcile: restored paused goal of ' + agent.id)
+          } catch (e: any) {
+            console.error('[save-money] reconcile resume failed for ' + agent.id + ': ' + String((e && e.message) || e))
+          }
+        }
+      }
+      return { restored }
+    }
+    ctx.timer.timeout(() => {
+      // Load the persisted config first, then run startup reconciliation
+      void loadConfig().then(() => {
+        if (cfg.reconcileOnStart) {
+          const r = reconcile()
+          if (r.restored > 0) console.log('[save-money] startup reconcile restored ' + r.restored + ' goal(s)')
+        }
+      })
+    }, 100)
+
+    // ---------- Tick ----------
+    ctx.timer.interval(() => {
+      // Fallback release: whenever the gate is open (window ended / disabled /
+      // ignore active) wake the waiters — this MUST run before the enabled
+      // check, so disabling also releases waiters and suspended requests never
+      // hang forever.
+      if (!gateClosedAt(new Date())) wakeGateWaiters()
+      if (!cfg.enabled) return
+      onTick(new Date())
+    }, 60000)
+
+    // ---------- Status ----------
+    function status(now: Date) {
+      const st = computeRawState(now)
+      const col = collectTasks()
+      const out: any = {
+        enabled: cfg.enabled,
+        state: st.name,
+        reason: st.reason || null,
+        gate: gateClosedAt(now) ? 'closed' : 'open',
+        gateInstalled,
+        // Diagnostics (runtime workspace resolution) — helps verify where the
+        // config file is loaded from / persisted to.
+        workspaceRoot: resolveWorkspaceRoot(),
+        configLoaded,
+        configPath,
+        nowUTC: now.toISOString(),
+        nowLocal: String(now),
+        busy: col.ok ? (col.tasks.length > 0) : null,
+        activeGoals: col.ok ? col.tasks.filter((t) => t.phase === 'active').length : null,
+      }
+      if (st.window) {
+        const tz = st.window.timezone || cfg.timezone
+        const wc = wallClock(tz, now)
+        const pUTC = wallToUTC(tz, wc.y, wc.mo, wc.d, parseHHMM(st.window.pauseAt)!)
+        const rUTC = wallToUTC(tz, wc.y, wc.mo, wc.d, parseHHMM(st.window.resumeAt)!)
+        out.window = {
+          pauseAt: st.window.pauseAt,
+          resumeAt: st.window.resumeAt,
+          timezone: tz,
+          pauseUTC: new Date(pUTC).toISOString(),
+          resumeUTC: new Date(rUTC).toISOString(),
+        }
+      }
+      if (st.name === 'WARN') out.minutesToPause = st.minutesToPause
+      if (ignoredUntil > now.getTime()) out.ignoredUntil = new Date(ignoredUntil).toISOString()
+      out.pauseRecord = pauseRecord ? {
+        at: pauseRecord.at,
+        window: pauseRecord.window,
+        pausedCount: (pauseRecord.paused || []).length,
+        paused: (pauseRecord.paused || []).map((p) => ({ sessionId: p.sessionId, goalId: p.goalId })),
+      } : null
+      out.config = snapshot()
+      return out
+    }
+
+    // ---- Host RPC (polled and driven by the Client) ----
+    ctx.effect(() => harness.handle('save-money/status', async () => status(new Date())))
+    ctx.effect(() => harness.handle('save-money/configure', async (args: any) => applyConfig(unwrap(args) || {})))
+    const ignoreUntilWindow = (w: TimeWindow, tz: string, baseWc: WallClock, dayOffset: number): number => {
+      const p = parseHHMM(w.pauseAt)!, r = parseHHMM(w.resumeAt)!
+      const off = dayOffset + (r < p ? 1 : 0)
+      const base = new Date(Date.UTC(baseWc.y, baseWc.mo - 1, baseWc.d + off))
+      return wallToUTC(tz, base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate(), r)
+    }
+    const ignoreHandler = async (): Promise<any> => {
+      const now = new Date()
+      const raw = computeRawState(now)
+      if (raw.window) {
+        const tz = raw.window.timezone || cfg.timezone
+        const wc = wallClock(tz, now)
+        ignoredUntil = ignoreUntilWindow(raw.window, tz, wc, 0)
+        ignoredWindowKey = windowKey(raw.window, tz)
+      } else {
+        let nearest: { delta: number; w: TimeWindow; tz: string; wc: WallClock; dayOffset: number } | null = null
+        for (const w of cfg.windows) {
+          const tz = w.timezone || cfg.timezone
+          const wc = wallClock(tz, now)
+          const np = nextPause(w, tz, wc)
+          if (!np) continue
+          const delta = np.dayOffset * 1440 + np.minutes - wc.minutes
+          if (delta <= 0) continue
+          if (nearest === null || delta < nearest.delta) nearest = { delta, w, tz, wc, dayOffset: np.dayOffset }
+        }
+        if (nearest !== null) {
+          ignoredUntil = ignoreUntilWindow(nearest.w, nearest.tz, nearest.wc, nearest.dayOffset)
+          ignoredWindowKey = windowKey(nearest.w, nearest.tz)
+        } else {
+          ignoredUntil = 0
+          ignoredWindowKey = null
+          console.log('[save-money] ignore: no upcoming window')
+          return { ok: false, message: 'no upcoming window to ignore', ...status(now) }
+        }
+      }
+      if (lastStateKey.split(':')[0] === 'PAUSED') {
+        lastStateKey = 'NORMAL'
+        unfreeze()
+      }
+      wakeGateWaiters() // ignore guarantees the gate is open (ignoredUntil), release immediately
+      console.log('[save-money] ignored until ' + new Date(ignoredUntil).toISOString())
+      return status(new Date())
+    }
+    ctx.effect(() => harness.handle('save-money/ignore', async () => ignoreHandler()))
+
+    // ---- Dynamic tools ----
+    ctx.effect(() => harness.registerTool(ctx, harness.defineTool({
+      name: 'save_money_status',
+      description: 'Query the save-money plugin state: enabled, gate state (NORMAL/WARN/PAUSED), busy detection, current window with UTC projection, PauseRecord summary, and full config.',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => status(new Date()),
+      output: {
+        schema: { type: 'object', properties: {}, additionalProperties: true },
+        render: (_args: any, result: any) => [{ type: 'text', text: JSON.stringify(result) }],
+      },
+    })))
+    ctx.effect(() => harness.registerTool(ctx, harness.defineTool({
+      name: 'save_money_configure',
+      description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/en), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+      parameters: {
+        type: 'object',
+        properties: {
+          enabled: { type: 'boolean' },
+          timezone: { type: 'string' },
+          warnMinutes: { type: 'number' },
+          reconcileOnStart: { type: 'boolean' },
+          lang: { type: 'string' },
+          windows: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                pauseAt: { type: 'string' },
+                resumeAt: { type: 'string' },
+                days: { type: 'array', items: { type: 'number' } },
+                timezone: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      execute: async (args: any) => applyConfig(unwrap(args) || {}),
+      output: {
+        schema: { type: 'object', properties: {}, additionalProperties: true },
+        render: (_args: any, result: any) => [{ type: 'text', text: JSON.stringify(result) }],
+      },
+    })))
+    ctx.effect(() => harness.registerTool(ctx, harness.defineTool({
+      name: 'save_money_ignore',
+      description: 'Ignore the upcoming pause of the current window: the window is skipped until its resumeAt (no pause, no record). If already paused, immediately restores and clears the record. When no window is active, only the next upcoming window is ignored. Next window still takes effect.',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => ignoreHandler(),
+      output: {
+        schema: { type: 'object', properties: {}, additionalProperties: true },
+        render: (_args: any, result: any) => [{ type: 'text', text: JSON.stringify(result) }],
+      },
+    })))
+    ctx.effect(() => harness.registerTool(ctx, harness.defineTool({
+      name: 'save_money_debug_tick',
+      description: 'Development tool: run one state-machine transition manually (as if a tick fired now). Returns the new status. Useful to verify freeze/resume without waiting for the timer.',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => {
+        onTick(new Date())
+        return status(new Date())
+      },
+      output: {
+        schema: { type: 'object', properties: {}, additionalProperties: true },
+        render: (_args: any, result: any) => [{ type: 'text', text: JSON.stringify(result) }],
+      },
+    })))
+  },
+}

@@ -1,0 +1,9 @@
+# Runtime config persisted by the plugin (never committed)
+save-money.config.json
+
+# Third-party reference copy of the DSH source (never committed)
+/deepseek-harness-0.1/
+
+# Build output
+node_modules/
+dist/

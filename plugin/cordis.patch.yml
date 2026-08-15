@@ -1,0 +1,5 @@
+# dsh-save-money bundle patch：插入省钱插件行。
+# 以 bundle 安装时，插件行按包名引用（Node 解析已安装代码）；激活顺序由服务依赖驱动。
+- insert:
+    - id: save-money
+      name: dsh-save-money

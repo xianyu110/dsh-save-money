@@ -1,0 +1,8 @@
+# dsh-save-money 快速试用 overlay（官方 --patch 方式，见 README「安装-方式一」）
+# 用法：把 <REPO_ROOT> 换成仓库绝对路径，然后：
+#   dsh web --patch ./cordis.patch.yml
+# 或（从仓库根，源码运行）：
+#   pnpm dsh web --patch ./cordis.patch.yml
+- insert:
+    - id: save-money
+      name: '<REPO_ROOT>/plugin/index.js'

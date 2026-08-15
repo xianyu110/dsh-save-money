@@ -1,0 +1,21 @@
+{
+  "name": "dsh-save-money",
+  "version": "1.1.0",
+  "private": true,
+  "description": "DSH save-money plugin — time-window auto pause/resume for peak/off-peak API pricing (TypeScript sources, i18n zh/en).",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zhu168/dsh-save-money.git"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "typecheck": "node scripts/typecheck.js",
+    "test": "npm run build && node --test tests/core.test.js",
+    "prepare": "node scripts/build.js && node scripts/make-plugin.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "license": "MIT",
+  "type": "module"
+}
