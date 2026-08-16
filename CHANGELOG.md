@@ -4,6 +4,12 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — 1.2.4
+
+### Fixed
+
+- The official install bundle now loads its browser UI correctly: v1.2.3's package manifest omitted the `./package.json` export entry, so DSH could not discover the bundled Client half and no status text / banner / settings page appeared after install. From v1.2.4 the UI loads automatically (refresh the browser page once after installing).
+
 ## [Unreleased] — 1.2.3
 
 ### Added

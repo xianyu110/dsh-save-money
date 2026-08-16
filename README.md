@@ -98,7 +98,7 @@ The official DSH plugin form is a **module exporting `apply` + cordis.yml mounti
 2. Install into a profile (first run initializes with `@deepseek-ai/dsh-base`):
 
    ```sh
-   dsh plugin --profile web add ./dsh-save-money-1.2.3.tgz
+   dsh plugin --profile web add ./dsh-save-money-1.2.4.tgz
    ```
 
    Git install also works: `dsh plugin --profile web add github:you/dsh-save-money#<sha>` (git install requires `prepare` builds and `allowBuilds`, see the [DSH publish tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)).
@@ -139,7 +139,7 @@ The plugin writes its settings to **the workspace root** `save-money.config.json
 | Symptom | Cause & fix |
 | --- | --- |
 | Plugin fails to load with `ReferenceError: harness is not defined` | You are running a build older than **v1.2.2** — the official form was fixed in v1.2.2. Rebuild (`npm run prepare`), re-pack, reinstall, and restart. |
-| Installed but no status text / banner / settings page | Restart the browser page after installing (the Client half is discovered on startup). If it still does not appear, you are running a build older than **v1.2.3** — upgrade. |
+| Installed but no status text / banner / settings page | Restart the browser page after installing (the Client half is discovered on startup). If it still does not appear, you are running a build older than **v1.2.4** — upgrade. |
 
 ---
 

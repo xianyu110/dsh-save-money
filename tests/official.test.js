@@ -150,11 +150,19 @@ test('official client bundle: plugin/client.js is a __ModuleLoader__ factory exp
 
 test('official bundle manifest: package.json declares dsh.client + exports["./client"]', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'plugin', 'package.json'), 'utf8'))
-  assert.equal(pkg.version, '1.2.3')
+  assert.equal(pkg.version, '1.2.4')
   assert.equal(pkg.exports['./client'], './client.js')
   assert.equal(pkg.dsh.client.platform, 'web')
   assert.ok(pkg.files.includes('client.js'))
   assert.ok(pkg.files.includes('index.js'))
+})
+
+test('official bundle manifest: exports declares ./package.json so client-modules can resolve the package', () => {
+  // client-modules resolves the plugin package via require.resolve('<name>/package.json');
+  // Node's "exports" map blocks undeclared subpaths, which silently disables the
+  // client half (regression: v1.2.3 shipped without this entry and the UI never loaded).
+  const pkg = JSON.parse(readFileSync(join(root, 'plugin', 'package.json'), 'utf8'))
+  assert.equal(pkg.exports['./package.json'], './package.json')
 })
 
 test('official client bundle parses (node --check equivalent)', () => {

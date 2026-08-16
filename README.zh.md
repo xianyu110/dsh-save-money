@@ -102,7 +102,7 @@ DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml
 2. 安装进 profile（首次会以 `@deepseek-ai/dsh-base` 初始化）：
 
    ```sh
-   dsh plugin --profile web add ./dsh-save-money-1.2.3.tgz
+   dsh plugin --profile web add ./dsh-save-money-1.2.4.tgz
    ```
 
    也可从 git 安装：`dsh plugin --profile web add github:you/dsh-save-money#<sha>`（git 安装需要 `prepare` 构建与 `allowBuilds` 放行，见 [DSH 发布教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)）。
@@ -143,7 +143,7 @@ cordis_run(...)   # Client 半边需要一次授权
 | 现象 | 原因与解决 |
 | --- | --- |
 | 插件加载失败，报 `ReferenceError: harness is not defined` | 使用的是 **v1.2.2 之前**的构建（官方形态在 v1.2.2 修复）。重新构建（`npm run prepare`）、重新打包安装后重启。 |
-| 安装后没有状态文字 / 横幅 / 设置页 | 安装完成后刷新浏览器页面（Client 半边在启动时发现）。若仍不出现,说明是 **v1.2.3 之前**的构建——请升级。 |
+| 安装后没有状态文字 / 横幅 / 设置页 | 安装完成后刷新浏览器页面（Client 半边在启动时发现）。若仍不出现,说明是 **v1.2.4 之前**的构建——请升级。 |
 
 ---
 

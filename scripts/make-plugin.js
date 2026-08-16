@@ -118,6 +118,7 @@ const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
 pkg.exports = {
   '.': './index.js',
   './client': './client.js',
+  './package.json': './package.json',
 }
 pkg.dsh = {
   bundle: { patch: './cordis.patch.yml' },
