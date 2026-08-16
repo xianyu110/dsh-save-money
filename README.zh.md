@@ -85,7 +85,7 @@ DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml
    # 源码运行：pnpm dsh web --patch ./cordis.patch.yml
    ```
 
-   插件随 Web 启动加载；状态入口见 [快速上手](#快速上手)。
+   插件随 Web 启动加载。**该形态没有设置界面** —— 请在对话中让 AI 执行 `save_money_configure` 工具进行配置（见 [动态工具（Host）](#动态工具host)），或直接编辑 `save-money.config.json`。
 
 ### 方式二：bundle 打包 + `dsh plugin add` 正式安装（官方推荐，可分发）
 
@@ -102,7 +102,7 @@ DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml
 2. 安装进 profile（首次会以 `@deepseek-ai/dsh-base` 初始化）：
 
    ```sh
-   dsh plugin --profile web add ./dsh-save-money-1.2.1.tgz
+   dsh plugin --profile web add ./dsh-save-money-1.2.2.tgz
    ```
 
    也可从 git 安装：`dsh plugin --profile web add github:you/dsh-save-money#<sha>`（git 安装需要 `prepare` 构建与 `allowBuilds` 放行，见 [DSH 发布教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)）。
@@ -113,6 +113,8 @@ DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml
    dsh --profile web --dump-config   # 应出现 "# == dsh-save-money" 层
    dsh --profile web
    ```
+
+   在对话中让 AI 执行 `save_money_status` 可确认插件已加载（该形态无界面）。
 
    卸载：`dsh plugin --profile web remove dsh-save-money`。
 
@@ -130,15 +132,24 @@ cordis_define(
 cordis_run(...)   # Client 半边需要一次授权
 ```
 
-> 说明：`--patch` 与 bundle 形态目前挂载 **Host 半边**（调度、闸门、目标冻结、工具、RPC、持久化全部在内，功能完整）；Client UI（会话头部状态文字、横幅、设置页）在动态插件形态下提供。正式把 Client 半边 bundle 化是后续工作。
+> 说明：`--patch` 与 bundle 形态挂载 **Host 半边**（调度、闸门、目标冻结、经工具注册表注册的工具、持久化——功能完整）。这两种形态**没有设置界面、也没有 RPC**：会话头部状态文字、横幅、设置浮层以及 `harness` RPC 桥只在动态插件形态（方式三）下存在。官方形态下请在对话中通过工具管理设置，或直接编辑配置文件。正式把 Client 半边 bundle 化是后续工作。
 
 ### 配置持久化（所有形态通用）
 
 插件把设置写入**工作区根目录**的 `save-money.config.json`（已被 `.gitignore` 排除，不入库）：启动时自动加载，每次配置变更立即落盘。浏览器刷新只影响动态插件形态的 Client 界面（重新 `cordis_run` 即恢复）；`--patch` / bundle 形态下插件随进程常驻，配置与调度不受刷新影响。
 
+### 故障排查
+
+| 现象 | 原因与解决 |
+| --- | --- |
+| 插件加载失败，报 `ReferenceError: harness is not defined` | 使用的是 **v1.2.2 之前**的构建（官方形态在 v1.2.2 修复）。重新构建（`npm run prepare`）、重新打包安装后重启。 |
+| 安装后没有状态文字 / 横幅 / 设置页 | 正常现象：官方形态（`--patch` / bundle）没有 Client UI。请在对话中使用工具（`save_money_configure`、`save_money_status`）或编辑 `save-money.config.json`。 |
+
 ---
 
 ## 快速上手
+
+> 以下步骤针对带设置界面的动态插件形态（方式三）。官方形态（`--patch` / bundle）没有界面：请在对话中让 AI 执行 `save_money_configure`，或编辑 `save-money.config.json`（手动修改在启动时读取，改后需重启 DSH）。
 
 1. 安装并激活后，点击**会话头部右上角**（Session log 旁）的"省钱 · 🟢 工作中"状态文字进入设置（唯一常驻入口）；或从**系统设置页**（侧栏 → 设置 → **省钱插件**）进入；
 2. 点击【一键 DeepSeek 分时计价省钱策略】→ 自动补上高峰窗口（**08:58–12:02、13:58–18:02** 北京时间，暂停提前 2 分钟、继续延后 2 分钟留余量）；
@@ -167,5 +178,5 @@ cordis_run(...)   # Client 半边需要一次授权
 ## 文档与许可
 
 - **仓库结构**：`src/core.ts`（纯逻辑，单测覆盖）/ `src/host.ts` / `src/client.ts`（TypeScript 插件源码，单源）、`tests/`（单元测试，`npm test`）、`scripts/build.js`（TS → JS 插件函数体）、`scripts/typecheck.js`（类型检查）、`scripts/make-plugin.js`（官方形态生成器）、`plugin/`（bundle：`package.json` + `cordis.patch.yml` + `index.js`）、`cordis.patch.yml`（快速试用 overlay）、`package.json` / `tsconfig.json`（构建与类型配置）、`dist/`（构建产物，gitignored）、`save-money.config.json`（运行时配置，gitignored）
-- **国际化**：UI 文案在 `src/client.ts` 的 `I18N` 字典（中文 + 英文），语言随浏览器自动检测（`zh*` → 中文，其余 → 英文）
+- **国际化**：UI 文案在 `src/client.ts` 的 `I18N` 字典（10 种语言：zh、zh-TW、en、de、fr、es、it、pt、ja、ko），语言随浏览器自动检测，也可手动选择（自动 + 10 种），选择随配置持久化
 - **许可证**：MIT（见 [`LICENSE`](./LICENSE)）

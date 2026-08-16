@@ -48,6 +48,12 @@
  */
 
 // --- Type-only declarations (erased at build time) ---
+// `harness` is injected as a global ONLY in the dynamic-plugin sandbox
+// (cordis-host-runner); the official module form (plugin/index.js, mounted via
+// --patch or a bundle) has no harness global and registers tools through the
+// ctx.tools service instead. Runtime detection keeps one source working in
+// both forms. (The `harness` declaration itself comes from the typecheck
+// wrapper; see scripts/typecheck.js.)
 interface TimeWindow {
   pauseAt: string
   resumeAt: string
@@ -599,9 +605,13 @@ return {
       return out
     }
 
-    // ---- Host RPC (polled and driven by the Client) ----
-    ctx.effect(() => harness.handle('save-money/status', async () => status(new Date())))
-    ctx.effect(() => harness.handle('save-money/configure', async (args: any) => applyConfig(unwrap(args) || {})))
+    // ---- Host RPC (dynamic-plugin form only: the official module has no
+    //      Client half, so it registers tools via ctx.tools instead) ----
+    const harnessApi = typeof harness !== 'undefined' ? harness : null
+    if (harnessApi) {
+      ctx.effect(() => harnessApi.handle('save-money/status', async () => status(new Date())))
+      ctx.effect(() => harnessApi.handle('save-money/configure', async (args: any) => applyConfig(unwrap(args) || {})))
+    }
     // UTC instant of a window's resumeAt (handles midnight-crossing windows).
     const endWindowUntilUTC = (w: TimeWindow, tz: string, baseWc: WallClock, dayOffset: number): number => {
       const p = parseHHMM(w.pauseAt)!, r = parseHHMM(w.resumeAt)!
@@ -634,72 +644,77 @@ return {
       console.log('[save-money] ended save mode for this window until ' + new Date(endWindowUntil).toISOString())
       return status(new Date())
     }
-    ctx.effect(() => harness.handle('save-money/end-window', async () => endWindowHandler()))
+    if (harnessApi) {
+      ctx.effect(() => harnessApi.handle('save-money/end-window', async () => endWindowHandler()))
+    }
 
     // ---- Dynamic tools ----
-    ctx.effect(() => harness.registerTool(ctx, harness.defineTool({
-      name: 'save_money_status',
-      description: 'Query the save-money plugin state: enabled, gate state (NORMAL/WARN/PAUSED), busy detection, current window with UTC projection, PauseRecord summary, and full config.',
-      parameters: { type: 'object', properties: {} },
-      execute: async () => status(new Date()),
-      output: {
-        schema: { type: 'object', properties: {}, additionalProperties: true },
-        render: (_args: any, result: any) => [{ type: 'text', text: JSON.stringify(result) }],
+    // Registered through harness in the dynamic-plugin sandbox; through the
+    // ctx.tools service in the official module (plugin/index.js) form.
+    const TOOL_DEFS: any[] = [
+      {
+        name: 'save_money_status',
+        description: 'Query the save-money plugin state: enabled, gate state (NORMAL/WARN/PAUSED), busy detection, current window with UTC projection, PauseRecord summary, and full config.',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => status(new Date()),
       },
-    })))
-    ctx.effect(() => harness.registerTool(ctx, harness.defineTool({
-      name: 'save_money_configure',
-      description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/en), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
-      parameters: {
-        type: 'object',
-        properties: {
-          enabled: { type: 'boolean' },
-          timezone: { type: 'string' },
-          warnMinutes: { type: 'number' },
-          reconcileOnStart: { type: 'boolean' },
-          lang: { type: 'string' },
-          windows: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                pauseAt: { type: 'string' },
-                resumeAt: { type: 'string' },
-                days: { type: 'array', items: { type: 'number' } },
-                timezone: { type: 'string' },
+      {
+        name: 'save_money_configure',
+        description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+        parameters: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+            timezone: { type: 'string' },
+            warnMinutes: { type: 'number' },
+            reconcileOnStart: { type: 'boolean' },
+            lang: { type: 'string' },
+            windows: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  pauseAt: { type: 'string' },
+                  resumeAt: { type: 'string' },
+                  days: { type: 'array', items: { type: 'number' } },
+                  timezone: { type: 'string' },
+                },
               },
             },
           },
         },
+        execute: async (args: any) => applyConfig(unwrap(args) || {}),
       },
-      execute: async (args: any) => applyConfig(unwrap(args) || {}),
-      output: {
-        schema: { type: 'object', properties: {}, additionalProperties: true },
-        render: (_args: any, result: any) => [{ type: 'text', text: JSON.stringify(result) }],
+      {
+        name: 'save_money_end_window',
+        description: 'End save mode for the currently active pause window only (one-shot, in-memory, not persisted): if paused, immediately resumes frozen goals and releases the request gate; if a pause is upcoming, cancels it. The window is skipped until its resumeAt. The next window (today or later) still takes effect; the persistent enabled flag is untouched. Returns the new status.',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => endWindowHandler(),
       },
-    })))
-    ctx.effect(() => harness.registerTool(ctx, harness.defineTool({
-      name: 'save_money_end_window',
-      description: 'End save mode for the currently active pause window only (one-shot, in-memory, not persisted): if paused, immediately resumes frozen goals and releases the request gate; if a pause is upcoming, cancels it. The window is skipped until its resumeAt. The next window (today or later) still takes effect; the persistent enabled flag is untouched. Returns the new status.',
-      parameters: { type: 'object', properties: {} },
-      execute: async () => endWindowHandler(),
-      output: {
-        schema: { type: 'object', properties: {}, additionalProperties: true },
-        render: (_args: any, result: any) => [{ type: 'text', text: JSON.stringify(result) }],
+      {
+        name: 'save_money_debug_tick',
+        description: 'Development tool: run one state-machine transition manually (as if a tick fired now). Returns the new status. Useful to verify freeze/resume without waiting for the timer.',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => {
+          onTick(new Date())
+          return status(new Date())
+        },
       },
-    })))
-    ctx.effect(() => harness.registerTool(ctx, harness.defineTool({
-      name: 'save_money_debug_tick',
-      description: 'Development tool: run one state-machine transition manually (as if a tick fired now). Returns the new status. Useful to verify freeze/resume without waiting for the timer.',
-      parameters: { type: 'object', properties: {} },
-      execute: async () => {
-        onTick(new Date())
-        return status(new Date())
-      },
-      output: {
-        schema: { type: 'object', properties: {}, additionalProperties: true },
-        render: (_args: any, result: any) => [{ type: 'text', text: JSON.stringify(result) }],
-      },
-    })))
+    ]
+    for (const def of TOOL_DEFS) {
+      const tool = {
+        ...def,
+        output: {
+          schema: { type: 'object', properties: {}, additionalProperties: true },
+          render: (_args: any, result: any) => [{ type: 'text', text: JSON.stringify(result) }],
+        },
+      }
+      if (harnessApi) {
+        ctx.effect(() => harnessApi.registerTool(ctx, harnessApi.defineTool(tool)))
+      } else {
+        const tools = ctx.get('tools')
+        if (tools && typeof tools.register === 'function') ctx.effect(() => tools.register(tool))
+      }
+    }
   },
 }
