@@ -7,3 +7,11 @@ save-money.config.json
 # Build output
 node_modules/
 dist/
+
+# npm pack artifacts (plugin/dsh-save-money-*.tgz)
+*.tgz
+
+# Logs, editor/OS droppings
+*.log
+.DS_Store
+Thumbs.db

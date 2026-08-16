@@ -26,11 +26,12 @@
  *    agent/request-error extension point and are unrelated to this pause).
  *  - Waiting is EVENT-DRIVEN: waiters register into gateWaiters and are woken
  *    by one of five events — the 60s tick (registered in the plugin apply
- *    context), applyConfig (disable / window change), ignoreHandler (ignore),
- *    plugin unload (fail-open), or the request signal abort. Then next() is
- *    called to release. Zero timers, zero fiber-effect calls: it cannot throw
- *    and cannot interrupt a turn.
- *  - Release conditions: window ended / enabled:false (disabled) / ignored /
+ *    context), applyConfig (disable / window change), endWindowHandler
+ *    (end-window), plugin unload (fail-open), or the request signal abort.
+ *    Then next() is called to release. Zero timers, zero fiber-effect calls:
+ *    it cannot throw and cannot interrupt a turn.
+ *  - Release conditions: window ended / enabled:false (disabled) / window
+ *    ended early via "end this save mode" (one-shot, current window only) /
  *    plugin unloaded (fail-open, so requests never hang forever after
  *    unload) / request signal aborted (delegated to the underlying layer to
  *    emit an aborted finish chunk).
@@ -38,7 +39,7 @@
  *    suspension also applies to manual conversations in the current session —
  *    the AI not replying inside a window is expected behaviour (that is the
  *    saving-money semantics); the user can release via the
- *    "disable save mode / ignore" UI buttons (host.call RPC, no model needed).
+ *    "end this save mode" UI buttons (host.call RPC, no model needed).
  *
  * Config persistence: written to the workspace save-money.config.json, surviving
  * refresh/restart. The workspace root is resolved AT RUNTIME from the
@@ -125,8 +126,12 @@ return {
       paused: GoalRef[]
       cascaded: boolean
     } | null = null
-    let ignoredUntil = 0
-    let ignoredWindowKey: string | null = null
+    // "End this save mode" state — one-shot, in-memory only (never persisted):
+    // applies to the exact window it was invoked for (matched by key), expires
+    // at that window's resumeAt, and leaves the persistent `enabled` flag
+    // untouched. The next window (today or later) is unaffected.
+    let endWindowUntil = 0
+    let endWindowKey: string | null = null
     let lastStateKey = 'NORMAL'
     let configLoaded = false
     let configPath = ''
@@ -151,13 +156,33 @@ return {
       return typeof c === 'string' ? c : ''
     }
     const resolveWorkspaceRoot = (): string => {
+      // Prefer the CALLING session (agents.currentInitiator) so the config
+      // follows the session that actually uses the plugin (tool/RPC calls
+      // resolve to the workspace the user is working in, not an older
+      // checkout that happens to be listed first).
+      try {
+        const agentsSvc = ctx.get('agents')
+        const init = agentsSvc && typeof agentsSvc.currentInitiator === 'function'
+          ? agentsSvc.currentInitiator()
+          : undefined
+        if (init && sessionsSvc && typeof sessionsSvc.get === 'function') {
+          const s = sessionsSvc.get(init.id)
+          const c = sessionCwdOf(s || init).replace(/[\\/]+$/, '')
+          if (/dsh-save-money$/i.test(c)) return c
+        }
+      } catch (e) { /* keep the default */ }
       let ws = defaultWorkspaceRoot
       if (sessionsSvc && typeof sessionsSvc.list === 'function') {
         try {
+          let matched = ''
+          // sessions.list() returns creation order; keep the LAST match so
+          // the newest (current) workspace wins when several checkouts
+          // exist, while a single checkout still resolves trivially.
           for (const s of sessionsSvc.list()) {
             const c = sessionCwdOf(s).replace(/[\\/]+$/, '')
-            if (/dsh-save-money$/i.test(c)) { ws = c; break }
+            if (/dsh-save-money$/i.test(c)) matched = c
           }
+          if (matched) ws = matched
         } catch (e) { /* keep the default */ }
       }
       return ws
@@ -222,6 +247,16 @@ return {
       }
       if (next.lang !== undefined && next.lang !== 'auto' && next.lang !== 'zh' && next.lang !== 'en') {
         return { ok: false, error: 'lang must be one of auto/zh/en' }
+      }
+      // Re-activation resets the one-shot "end this save mode" state: when
+      // `enabled` goes false -> true, clear endWindowUntil/endWindowKey so
+      // every window takes effect again. The user gets a deterministic way to
+      // re-arm saving money (e.g. after skipping a window during a test) by
+      // toggling the Enable switch off and on.
+      if (patch && patch.enabled === true && !cfg.enabled) {
+        endWindowUntil = 0
+        endWindowKey = null
+        console.log('[save-money] re-enabled: end-this-save-mode state reset')
       }
       cfg = next
       // Wake waiters only when the gate is actually open (unconditional wake
@@ -327,10 +362,9 @@ return {
       for (const w of cfg.windows) {
         const tz = w.timezone || cfg.timezone
         if (windowMatchesAt(w, wallClock(tz, now))) {
-          // Ignore only affects the exact window it was applied to — a stale
-          // ignoredUntil (e.g. from clock manipulation during tests) must not
-          // suppress later windows.
-          if (ignoredUntil > now.getTime() && ignoredWindowKey === windowKey(w, tz)) return { name: 'NORMAL', reason: 'ignored', window: w }
+          // "End this save mode" only affects the exact window it was applied
+          // to — a stale endWindowUntil must not suppress later windows.
+          if (endWindowUntil > now.getTime() && endWindowKey === windowKey(w, tz)) return { name: 'NORMAL', reason: 'ended', window: w }
           return { name: 'PAUSED', window: w }
         }
       }
@@ -344,6 +378,12 @@ return {
         if (nearest === null || delta < nearest.delta) nearest = { delta, window: w }
       }
       if (nearest !== null && nearest.delta > 0 && nearest.delta <= cfg.warnMinutes) {
+        // The upcoming window may already be ended via "end this save mode"
+        // (clicked while WARN) — do not keep showing "pause soon", suppress it
+        // until the window's own resumeAt.
+        if (endWindowUntil > now.getTime() && endWindowKey === windowKey(nearest.window, nearest.window.timezone || cfg.timezone)) {
+          return { name: 'NORMAL', reason: 'ended', window: nearest.window }
+        }
         return { name: 'WARN', window: nearest.window, minutesToPause: nearest.delta }
       }
       return { name: 'NORMAL', reason: 'no-window' }
@@ -393,7 +433,7 @@ return {
     //    waiting is EVENT-DRIVEN: suspending = registering the resolve into
     //    gateWaiters, woken by: ① the 60s tick (registered in the plugin apply
     //    context, runs reliably); ② applyConfig (disable / window change);
-    //    ③ ignoreHandler (ignore); ④ plugin unload (fail-open); ⑤ request
+    //    ③ endWindowHandler (end-window); ④ plugin unload (fail-open); ⑤ request
     //    signal abort. No timers / fiber-effect calls → cannot throw, cannot
     //    interrupt a turn.
     let gateDisposed = false
@@ -405,10 +445,11 @@ return {
     }
     const gateClosedAt = (now: Date): boolean => {
       if (!cfg.enabled) return false
+      // The gate follows the state machine exactly: computeRawState already
+      // exempts the ended window (endWindowKey match + endWindowUntil), so a
+      // different window (e.g. cross-timezone overlap) stays gated.
       const st = computeRawState(now)
-      if (st.name !== 'PAUSED') return false
-      if (ignoredUntil > now.getTime()) return false
-      return true
+      return st.name === 'PAUSED'
     }
     const gateInstalled = typeof ctx.on === 'function'
     if (typeof ctx.on === 'function') {
@@ -502,7 +543,7 @@ return {
     // ---------- Tick ----------
     ctx.timer.interval(() => {
       // Fallback release: whenever the gate is open (window ended / disabled /
-      // ignore active) wake the waiters — this MUST run before the enabled
+      // end-window active) wake the waiters — this MUST run before the enabled
       // check, so disabling also releases waiters and suspended requests never
       // hang forever.
       if (!gateClosedAt(new Date())) wakeGateWaiters()
@@ -544,7 +585,7 @@ return {
         }
       }
       if (st.name === 'WARN') out.minutesToPause = st.minutesToPause
-      if (ignoredUntil > now.getTime()) out.ignoredUntil = new Date(ignoredUntil).toISOString()
+      if (endWindowUntil > now.getTime()) out.endWindowUntil = new Date(endWindowUntil).toISOString()
       out.pauseRecord = pauseRecord ? {
         at: pauseRecord.at,
         window: pauseRecord.window,
@@ -558,50 +599,39 @@ return {
     // ---- Host RPC (polled and driven by the Client) ----
     ctx.effect(() => harness.handle('save-money/status', async () => status(new Date())))
     ctx.effect(() => harness.handle('save-money/configure', async (args: any) => applyConfig(unwrap(args) || {})))
-    const ignoreUntilWindow = (w: TimeWindow, tz: string, baseWc: WallClock, dayOffset: number): number => {
+    // UTC instant of a window's resumeAt (handles midnight-crossing windows).
+    const endWindowUntilUTC = (w: TimeWindow, tz: string, baseWc: WallClock, dayOffset: number): number => {
       const p = parseHHMM(w.pauseAt)!, r = parseHHMM(w.resumeAt)!
       const off = dayOffset + (r < p ? 1 : 0)
       const base = new Date(Date.UTC(baseWc.y, baseWc.mo - 1, baseWc.d + off))
       return wallToUTC(tz, base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate(), r)
     }
-    const ignoreHandler = async (): Promise<any> => {
+    // "End this save mode" — one-shot, current window only:
+    //  - paused: immediately resumes frozen goals and clears the record
+    //  - pause upcoming (WARN): cancels the upcoming pause
+    //  - no active window: nothing happens (never touches later windows)
+    // The window is skipped until its resumeAt; the next window (today or
+    // later) still takes effect; the persistent `enabled` flag is untouched.
+    const endWindowHandler = async (): Promise<any> => {
       const now = new Date()
       const raw = computeRawState(now)
-      if (raw.window) {
-        const tz = raw.window.timezone || cfg.timezone
-        const wc = wallClock(tz, now)
-        ignoredUntil = ignoreUntilWindow(raw.window, tz, wc, 0)
-        ignoredWindowKey = windowKey(raw.window, tz)
-      } else {
-        let nearest: { delta: number; w: TimeWindow; tz: string; wc: WallClock; dayOffset: number } | null = null
-        for (const w of cfg.windows) {
-          const tz = w.timezone || cfg.timezone
-          const wc = wallClock(tz, now)
-          const np = nextPause(w, tz, wc)
-          if (!np) continue
-          const delta = np.dayOffset * 1440 + np.minutes - wc.minutes
-          if (delta <= 0) continue
-          if (nearest === null || delta < nearest.delta) nearest = { delta, w, tz, wc, dayOffset: np.dayOffset }
-        }
-        if (nearest !== null) {
-          ignoredUntil = ignoreUntilWindow(nearest.w, nearest.tz, nearest.wc, nearest.dayOffset)
-          ignoredWindowKey = windowKey(nearest.w, nearest.tz)
-        } else {
-          ignoredUntil = 0
-          ignoredWindowKey = null
-          console.log('[save-money] ignore: no upcoming window')
-          return { ok: false, message: 'no upcoming window to ignore', ...status(now) }
-        }
+      if (!raw.window) {
+        console.log('[save-money] end-window: no active window')
+        return { ok: false, message: 'no active pause window to end', ...status(now) }
       }
+      const tz = raw.window.timezone || cfg.timezone
+      const wc = wallClock(tz, now)
+      endWindowUntil = endWindowUntilUTC(raw.window, tz, wc, 0)
+      endWindowKey = windowKey(raw.window, tz)
       if (lastStateKey.split(':')[0] === 'PAUSED') {
         lastStateKey = 'NORMAL'
         unfreeze()
       }
-      wakeGateWaiters() // ignore guarantees the gate is open (ignoredUntil), release immediately
-      console.log('[save-money] ignored until ' + new Date(ignoredUntil).toISOString())
+      wakeGateWaiters() // the gate is now open (endWindowUntil), release immediately
+      console.log('[save-money] ended save mode for this window until ' + new Date(endWindowUntil).toISOString())
       return status(new Date())
     }
-    ctx.effect(() => harness.handle('save-money/ignore', async () => ignoreHandler()))
+    ctx.effect(() => harness.handle('save-money/end-window', async () => endWindowHandler()))
 
     // ---- Dynamic tools ----
     ctx.effect(() => harness.registerTool(ctx, harness.defineTool({
@@ -646,10 +676,10 @@ return {
       },
     })))
     ctx.effect(() => harness.registerTool(ctx, harness.defineTool({
-      name: 'save_money_ignore',
-      description: 'Ignore the upcoming pause of the current window: the window is skipped until its resumeAt (no pause, no record). If already paused, immediately restores and clears the record. When no window is active, only the next upcoming window is ignored. Next window still takes effect.',
+      name: 'save_money_end_window',
+      description: 'End save mode for the currently active pause window only (one-shot, in-memory, not persisted): if paused, immediately resumes frozen goals and releases the request gate; if a pause is upcoming, cancels it. The window is skipped until its resumeAt. The next window (today or later) still takes effect; the persistent enabled flag is untouched. Returns the new status.',
       parameters: { type: 'object', properties: {} },
-      execute: async () => ignoreHandler(),
+      execute: async () => endWindowHandler(),
       output: {
         schema: { type: 'object', properties: {}, additionalProperties: true },
         render: (_args: any, result: any) => [{ type: 'text', text: JSON.stringify(result) }],

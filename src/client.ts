@@ -47,11 +47,10 @@ interface Dict {
   bannerWarn: string
   bannerMinutes: string
   bannerMoment: string
-  stopSaveMode: string
+  endThisWindow: string
+  endWindowActive: string
   statusPrefix: string
   windowSuffix: string
-  resumeNow: string
-  ignorePause: string
   pausedNote: string
   deepseekPreset: string
   presetExists: string
@@ -89,12 +88,11 @@ const I18N: Record<Lang, Dict> = {
     bannerWarn: '⏳ 距离暂停还有 ',
     bannerMinutes: ' 分钟',
     bannerMoment: '片刻',
-    stopSaveMode: '停用省钱模式',
+    endThisWindow: '结束本次省钱模式',
+    endWindowActive: '✅ 您已结束本次省钱模式：窗口 {a}-{b} 已跳过，{c} 自动恢复省钱（重新关闭再勾选「启用」可重置）',
     statusPrefix: '状态：',
     windowSuffix: '（{a}-{b}）',
-    resumeNow: '立即恢复',
-    ignorePause: '忽略暂停',
-    pausedNote: '暂停窗口内所有模型请求在发出前被挂起（不产生费用），窗口结束自动继续，上下文不受影响；点「忽略」可跳过本窗口继续对话。',
+    pausedNote: '暂停窗口内所有模型请求在发出前被挂起（不产生费用），窗口结束自动继续，上下文不受影响；点「结束本次省钱模式」可立即恢复并跳过本窗口（只影响当前窗口，下一窗口照常生效）。',
     deepseekPreset: '一键 DeepSeek 分时计价省钱策略',
     presetExists: 'DeepSeek 预设两组窗口（含 2 分钟余量）已存在，未重复添加。勾选「启用」即可生效。',
     presetUpgraded: '已升级 {n} 组旧窗口为带余量窗口；',
@@ -129,12 +127,11 @@ const I18N: Record<Lang, Dict> = {
     bannerWarn: '⏳ Pause in ',
     bannerMinutes: ' min',
     bannerMoment: 'a moment',
-    stopSaveMode: 'Disable save mode',
+    endThisWindow: 'End this save mode',
+    endWindowActive: '✅ You ended this save mode: window {a}-{b} skipped, saving resumes at {c} (toggle Enable off/on to reset)',
     statusPrefix: 'Status: ',
     windowSuffix: ' ({a}-{b})',
-    resumeNow: 'Resume now',
-    ignorePause: 'Skip pause',
-    pausedNote: 'All model requests are suspended before being sent (no cost). They resume automatically when the window ends; context is unaffected. Click "Skip pause" to keep chatting.',
+    pausedNote: 'All model requests are suspended before being sent (no cost). They resume automatically when the window ends; context is unaffected. Click "End this save mode" to resume now and skip only this window (the next window still takes effect).',
     deepseekPreset: 'One-click DeepSeek peak/off-peak savings',
     presetExists: 'DeepSeek preset windows (2-min margin) already present; not re-added. Check "Enable" to activate.',
     presetUpgraded: 'Upgraded {n} window(s) to the margin version; ',
@@ -201,7 +198,7 @@ return {
       if (tz && typeof tz === 'string' && tz.length > 0) detectedTz = tz
     } catch (e) { /* fall back to Beijing time */ }
 
-    let snapshot: any = { enabled: false, state: 'NORMAL', reason: null, window: null, minutesToPause: null, ignoredUntil: null, pauseRecord: null, config: null }
+    let snapshot: any = { enabled: false, state: 'NORMAL', reason: null, window: null, minutesToPause: null, endWindowUntil: null, pauseRecord: null, config: null }
     const refresh = async () => {
       try {
         const s = await host.call('save-money/status')
@@ -234,8 +231,8 @@ return {
       doConfigure: async (patch: any) => {
         try { await host.call('save-money/configure', patch); await refresh(); setSt({ ...snapshot }) } catch (e) {}
       },
-      doIgnore: async () => {
-        try { await host.call('save-money/ignore'); await refresh(); setSt({ ...snapshot }) } catch (e) {}
+      doEndWindow: async () => {
+        try { await host.call('save-money/end-window'); await refresh(); setSt({ ...snapshot }) } catch (e) {}
       },
     })
 
@@ -251,10 +248,17 @@ return {
     const SettingsView = (props: any) => {
       const st = props.st
       const doConfigure = props.doConfigure
-      const doIgnore = props.doIgnore || (async () => {})
+      const doEndWindow = props.doEndWindow || (async () => {})
       const cfg = st.config || {}
       const [tz, setTz] = React.useState(cfg.timezone || detectedTz)
-      const [wins, setWins] = React.useState([{ pauseAt: '09:00', resumeAt: '12:00' }])
+      // Default windows shown when none are configured (fresh install / all
+      // windows deleted) — matches the one-click DeepSeek preset (2-minute
+      // boundary margin): 08:58–12:02, 13:58–18:02.
+      const DEFAULT_WINS = [
+        { pauseAt: '08:58', resumeAt: '12:02' },
+        { pauseAt: '13:58', resumeAt: '18:02' },
+      ]
+      const [wins, setWins] = React.useState(DEFAULT_WINS.map((w: any) => ({ ...w })))
       const [msg, setMsg] = React.useState('')
       const [langSel, setLangSel] = React.useState(cfg.lang || 'auto')
       const prevWinKey = React.useRef('')
@@ -279,7 +283,7 @@ return {
           prevWinKey.current = key
           setWins(ws.length > 0
             ? ws.map((w: any) => ({ pauseAt: w.pauseAt, resumeAt: w.resumeAt }))
-            : [{ pauseAt: '09:00', resumeAt: '12:00' }])
+            : DEFAULT_WINS.map((w: any) => ({ ...w })))
         }
       }, [st])
       const row = (label: string, children: any) => React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' } },
@@ -294,7 +298,7 @@ return {
       }, text)
       // Window add/remove/edit
       const setWin = (i: number, key: string, val: string) => setWins(wins.map((w: any, j: number) => (j === i ? { ...w, [key]: val } : w)))
-      const addWin = () => setWins([...wins, { pauseAt: '09:00', resumeAt: '12:00' }])
+      const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02' }])
       const delWin = (i: number) => setWins(wins.filter((_: any, j: number) => j !== i))
       // One-click apply = dedupe-append (does NOT auto-enable; the user checks
       // the Enable box themselves). The DeepSeek preset windows carry a 2-minute
@@ -313,20 +317,23 @@ return {
       ]
       const applyDeepSeekPreset = async () => {
         try {
-          const s = await host.call('save-money/status')
-          const cur = (s && s.config && Array.isArray(s.config.windows)) ? s.config.windows : []
-          const curTz = (s && s.config && s.config.timezone) || 'Asia/Shanghai'
+          // WYSIWYG: work from the window list the user currently SEES in the
+          // UI (wins), not from whatever was last persisted on the host — so
+          // edits made but not yet saved are respected.
+          const curTz = (st.config && st.config.timezone) || 'Asia/Shanghai'
           const key = (w: any) => String(w.pauseAt) + '|' + String(w.resumeAt) + '|' + (w.timezone || curTz)
           const legacyKeys = new Set(DEEPSEEK_LEGACY.map(key))
-          const cleaned = cur.filter((w: any) => !legacyKeys.has(key(w))) // upgrade legacy windows
+          const cleaned = wins.filter((w: any) => !legacyKeys.has(key(w))) // upgrade legacy windows
           const existing = new Set(cleaned.map(key))
           const add = DEEPSEEK_PRESET.filter((p: any) => !existing.has(key(p)))
           if (add.length === 0) {
             setMsg(t('presetExists'))
             return
           }
-          await doConfigure({ windows: cleaned.concat(add) }) // windows only, enabled untouched
-          const upgraded = cur.length - cleaned.length
+          const merged = cleaned.concat(add)
+          setWins(merged) // reflect the result in the UI immediately
+          await doConfigure({ windows: merged }) // windows only, enabled untouched
+          const upgraded = wins.length - cleaned.length
           setMsg((upgraded > 0 ? t('presetUpgraded', { n: upgraded }) : '') + t('presetAdded', { n: add.length }))
         } catch (e: any) {
           setMsg(t('applyFailed') + String((e && e.message) || e))
@@ -342,13 +349,21 @@ return {
       }
       const b = badgeInfo(st)
       return React.createElement('div', { style: { padding: '12px' } },
-        // Top: status text + ignore/resume-now button (kept near the top)
+        // Top: status text + end-this-window button (kept near the top; shown
+        // only when a window is active — WARN or PAUSED)
         React.createElement('div', { style: { margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
           React.createElement('span', { style: { fontSize: '13px', fontWeight: 600, color: b.color } },
             t('statusPrefix') + b.text + (st.state === 'PAUSED' && st.window ? t('windowSuffix', { a: st.window.pauseAt, b: st.window.resumeAt }) : '')),
-          btn(st.state === 'PAUSED' ? t('resumeNow') : t('ignorePause'), () => void doIgnore(), false),
+          (st.state === 'WARN' || st.state === 'PAUSED')
+            ? btn(t('endThisWindow'), () => void doEndWindow(), st.state === 'PAUSED')
+            : null,
           st.state === 'PAUSED' ? React.createElement('div', { style: { margin: '6px 0', fontSize: '12px', color: '#C62828' } }, t('pausedNote')) : null,
         ),
+        // Green status line while "end this save mode" is in effect for the
+        // current window (in-memory, one-shot): tells the user what happened
+        // and how to reset it.
+        st.endWindowUntil ? React.createElement('div', { style: { margin: '6px 0 10px', fontSize: '12px', color: '#2E7D32', fontWeight: 600 } },
+          t('endWindowActive', { a: st.window ? st.window.pauseAt : '', b: st.window ? st.window.resumeAt : '', c: st.window ? st.window.resumeAt : '' })) : null,
         btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true),
         msg ? React.createElement('div', { style: { margin: '8px 0', fontSize: '12px', color: '#555' } }, msg) : null,
         row(t('enable'), React.createElement('input', {
@@ -410,11 +425,12 @@ return {
 
     // ---------- Top floating banner (registered in the header slot,
     //            position:fixed) ----------
-    // The button is "Disable save mode" — clicking it sets enabled:false
-    // (disables the whole feature).
+    // The button is "End this save mode" — one-shot end for the current
+    // window only (in-memory, not persisted; the persistent enabled flag is
+    // untouched, so future windows keep saving money).
     const FloatingBanner = (props: any) => {
       const st = props.st
-      const doStop = props.doStop
+      const doEndWindow = props.doEndWindow
       const isWarn = st.state === 'WARN'
       const isPaused = st.state === 'PAUSED'
       if (!isWarn && !isPaused) return null
@@ -438,8 +454,8 @@ return {
             borderRadius: '999px', padding: '3px 12px', cursor: 'pointer', fontSize: '12px',
             pointerEvents: 'auto',
           },
-          onClick: () => void doStop(),
-        }, t('stopSaveMode')),
+          onClick: () => void doEndWindow(),
+        }, t('endThisWindow')),
       )
     }
     // ---- Main UI: session-header right-aligned area (status text + floating
@@ -482,14 +498,10 @@ return {
               React.createElement(SettingsView, { st, ...actions }),
             )
           : null
-        // Banner button = disable save mode (enabled:false)
-        const doStop = async () => {
-          try { await host.call('save-money/configure', { enabled: false }); await refresh(); setSt({ ...snapshot }) } catch (e) {}
-        }
         return React.createElement('div', { style: { display: 'contents' } },
           text,
           pop,
-          React.createElement(FloatingBanner, { st, doStop }),
+          React.createElement(FloatingBanner, { st, doEndWindow: actions.doEndWindow }),
         )
       }
     ))
