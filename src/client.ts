@@ -34,15 +34,22 @@
 declare const React: any
 declare const host: any
 declare const navigator: { language?: string } | undefined
+declare const window: any
 declare const fetch: any
-// Core helpers (src/core.ts) are inlined into this body at build time
-// (scripts/build.js), the declarations below keep this file type-checked.
+// ModuleLoader 注入的同步 require:可解析 __DSH_BOOT__ 图里的 client 模块,
+// 例如 DSH 系统按钮组件 @deepseek-ai/dsh-client-ui-primitives。
+declare const require: any
+// Core + balance helpers (src/core.ts, src/balance-client.ts) are inlined
+// into this body at build time (scripts/build.js); the declarations below keep
+// this file type-checked.
 declare function parseHHMM(s: string): number | null
 declare function formatHHMM(m: number): string
 declare function wallClock(tz: string, date: Date): { y: number; mo: number; d: number; weekday: number; minutes: number }
 declare function wallToUTC(tz: string, y: number, mo: number, d: number, hhmm: number): number
 declare function convertHHMM(tzFrom: string, tzTo: string, hhmm: number, ref?: Date): number
 declare function utcOffsetMinutes(tz: string, date: Date): number
+declare function renderBalanceElement(balance: any, React: any): any | null
+declare function balanceDetailLines(balance: any, labels?: { h1: string; m10: string; h24: string }): string[] | null
 
 // --- i18n dictionary (erased types at build time) ---
 type Lang = 'zh' | 'zh-TW' | 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'ja' | 'ko'
@@ -92,6 +99,10 @@ interface Dict {
   badgeLabel: string
   sectionLabel: string
   settingsHeading: string
+  showBalance: string
+  spendH1: string
+  spendM10: string
+  spendH24: string
 }
 
 const I18N: Record<Lang, Dict> = {
@@ -141,6 +152,10 @@ const I18N: Record<Lang, Dict> = {
     badgeLabel: '省钱 · {symbol} {text}',
     sectionLabel: '省钱插件',
     settingsHeading: 'save-money 省钱插件',
+    showBalance: '显示余额',
+    spendH1: '近1h消费',
+    spendM10: '近10m消费',
+    spendH24: '近24h消费',
   },
   en: {
     badgeDisabled: 'Disabled',
@@ -188,6 +203,10 @@ const I18N: Record<Lang, Dict> = {
     badgeLabel: 'Save · {symbol} {text}',
     sectionLabel: 'Save-money',
     settingsHeading: 'save-money plugin',
+    showBalance: 'Show balance',
+    spendH1: '1h spent',
+    spendM10: '10m spent',
+    spendH24: '24h spent',
   },
   de: {
     badgeDisabled: 'Deaktiviert',
@@ -235,6 +254,10 @@ const I18N: Record<Lang, Dict> = {
     badgeLabel: 'Sparen · {symbol} {text}',
     sectionLabel: 'Sparmodus',
     settingsHeading: 'save-money Sparmodus',
+    showBalance: 'Guthaben anzeigen',
+    spendH1: 'Verbrauch 1h',
+    spendM10: 'Verbrauch 10m',
+    spendH24: 'Verbrauch 24h',
   },
   fr: {
     badgeDisabled: 'Désactivé',
@@ -282,6 +305,10 @@ const I18N: Record<Lang, Dict> = {
     badgeLabel: 'Économie · {symbol} {text}',
     sectionLabel: 'Économie',
     settingsHeading: 'Extension save-money',
+    showBalance: 'Afficher le solde',
+    spendH1: 'dépensé 1h',
+    spendM10: 'dépensé 10m',
+    spendH24: 'dépensé 24h',
   },
   es: {
     badgeDisabled: 'Desactivado',
@@ -329,6 +356,10 @@ const I18N: Record<Lang, Dict> = {
     badgeLabel: 'Ahorro · {symbol} {text}',
     sectionLabel: 'Ahorro',
     settingsHeading: 'Extensión save-money',
+    showBalance: 'Mostrar saldo',
+    spendH1: 'gastado 1h',
+    spendM10: 'gastado 10m',
+    spendH24: 'gastado 24h',
   },
   it: {
     badgeDisabled: 'Disattivato',
@@ -376,6 +407,10 @@ const I18N: Record<Lang, Dict> = {
     badgeLabel: 'Risparmio · {symbol} {text}',
     sectionLabel: 'Risparmio',
     settingsHeading: 'Estensione save-money',
+    showBalance: 'Mostra saldo',
+    spendH1: 'speso 1h',
+    spendM10: 'speso 10m',
+    spendH24: 'speso 24h',
   },
   pt: {
     badgeDisabled: 'Desativado',
@@ -423,6 +458,10 @@ const I18N: Record<Lang, Dict> = {
     badgeLabel: 'Economia · {symbol} {text}',
     sectionLabel: 'Economia',
     settingsHeading: 'Extensão save-money',
+    showBalance: 'Mostrar saldo',
+    spendH1: 'gasto 1h',
+    spendM10: 'gasto 10m',
+    spendH24: 'gasto 24h',
   },
   ja: {
     badgeDisabled: '無効',
@@ -470,6 +509,10 @@ const I18N: Record<Lang, Dict> = {
     badgeLabel: '節約 · {symbol} {text}',
     sectionLabel: '節約プラグイン',
     settingsHeading: 'save-money 節約プラグイン',
+    showBalance: '残高を表示',
+    spendH1: '1h 消費',
+    spendM10: '10m 消費',
+    spendH24: '24h 消費',
   },
   ko: {
     badgeDisabled: '비활성화됨',
@@ -517,6 +560,10 @@ const I18N: Record<Lang, Dict> = {
     badgeLabel: '절약 · {symbol} {text}',
     sectionLabel: '절약 플러그인',
     settingsHeading: 'save-money 절약 플러그인',
+    showBalance: '잔액 표시',
+    spendH1: '1h 소비',
+    spendM10: '10m 소비',
+    spendH24: '24h 소비',
   },
   'zh-TW': {
     badgeDisabled: '未啟用',
@@ -564,6 +611,10 @@ const I18N: Record<Lang, Dict> = {
     badgeLabel: '省錢 · {symbol} {text}',
     sectionLabel: '省錢外掛',
     settingsHeading: 'save-money 省錢外掛',
+    showBalance: '顯示餘額',
+    spendH1: '近1小時消費',
+    spendM10: '近10分鐘消費',
+    spendH24: '近24小時消費',
   },
 }
 
@@ -646,6 +697,16 @@ return {
       return
     }
 
+    // DSH 系统按钮组件(ui-primitives):圆润胶囊、token 自动适配亮/暗主题。
+    // require 由 ModuleLoader 提供;同步 require 跳过异步加载分支,若该模块
+    // 的 script 尚未注册,require 会抛错——捕获后退回自绘按钮,UI 永不挂。
+    let DSHButton: any = undefined
+    try {
+      DSHButton = (require('@deepseek-ai/dsh-client-ui-primitives') || {}).Button
+    } catch (e) {
+      console.error('[save-money] ui-primitives unavailable, falling back to hand-drawn buttons: ' + String((e && (e as any).message) || e))
+    }
+
     // Unified Host call: the dynamic-plugin Client half talks to the host via
     // the harness RPC global (`host.call`); the official bundled Client half
     // (plugin/client.js, no harness global) talks to the same-origin
@@ -670,16 +731,71 @@ return {
       if (tz && typeof tz === 'string' && tz.length > 0) detectedTz = tz
     } catch (e) { /* fall back to Beijing time */ }
 
-    let snapshot: any = { enabled: false, state: 'NORMAL', reason: null, window: null, minutesToPause: null, endWindowUntil: null, pauseRecord: null, config: null }
+    let snapshot: any = { enabled: false, state: 'NORMAL', reason: null, window: null, minutesToPause: null, endWindowUntil: null, pauseRecord: null, config: null, balance: null }
+    // Last successful balance fetch (ms) — the balance is refreshed on user
+    // messages or every 10 minutes, not on every 30s poll.
+    let lastBalanceAt = 0
+    // Backoff gate (ms epoch): after a balance failure/timeout we wait this
+    // long before trying again, so a failing upstream is never hammered every
+    // 30s (and a hung host call can never wedge the refresh loop).
+    let nextBalanceAttemptAt = 0
+    const BALANCE_RETRY_MS = 5 * 60 * 1000
+    // Browser-side hard timeout for one balance call, driven by the cordis
+    // timer service (the sandbox has no setTimeout global). A stuck host
+    // balance handler must fail this side quickly instead of wedging refresh.
+    const balanceWithTimeout = (p: Promise<any>, ms: number, message: string): Promise<any> => {
+      const timeoutP = timer.timeout(ms).then(() => { throw new Error(message) })
+      return Promise.race([p, timeoutP])
+    }
     const refresh = async () => {
+      let dirty = false
       try {
         const s = await callHost('save-money/status')
         if (s && typeof s === 'object') {
+          const prevBalance = snapshot.balance // keep the last shown balance across polls
           snapshot = s
+          snapshot.balance = prevBalance
+          dirty = s.balanceDirty === true
           // Keep the UI language in sync with the persisted config choice
           if (s.config && typeof s.config.lang === 'string') currentLang = resolveLang(s.config.lang)
         }
-      } catch (e) {}
+      } catch (e: any) {
+        console.error('[save-money] status poll failed: ' + String((e && e.message) || e))
+      }
+      // Balance updates: on user messages (host sets balanceDirty when a
+      // llm/stream request arrives) or every 10 minutes — not on every poll.
+      // The host also gates the endpoint when the display is off.
+      // 余额刷新:用户发消息(host 置 balanceDirty)立即更新一次;否则每 5 分钟
+      // 自动更新一次(定时刷新,不是每次 30s 轮询都打接口)。
+      const BALANCE_MS = 5 * 60 * 1000
+      const nowMs = Date.now()
+      const due = (!lastBalanceAt || nowMs - lastBalanceAt > BALANCE_MS) && nowMs >= nextBalanceAttemptAt
+      if (snapshot.config && snapshot.config.showBalance === true && (dirty || due)) {
+        try {
+          const b = await balanceWithTimeout(callHost('save-money/balance'), 4000, 'balance call timeout')
+          // Only a successful response counts as "fetched": a failure keeps the
+          // previous value (or null) and leaves lastBalanceAt stale, so the next
+          // poll retries instead of waiting 10 minutes for the next refresh.
+          if (b && typeof b === 'object' && b.ok === true) {
+            snapshot.balance = b
+            lastBalanceAt = Date.now()
+          } else {
+            // Non-ok or unreachable: back off so a failing upstream is not
+            // retried every 30s poll.
+            nextBalanceAttemptAt = Date.now() + BALANCE_RETRY_MS
+          }
+        } catch (e: any) {
+          console.error('[save-money] balance fetch failed: ' + String((e && (e as any).message) || e))
+          nextBalanceAttemptAt = Date.now() + BALANCE_RETRY_MS
+        }
+      } else if (!(snapshot.config && snapshot.config.showBalance === true)) {
+        snapshot.balance = null
+        // Re-enabling the display must fetch immediately, not wait for the next
+        // 10-minute or message-driven refresh: reset the staleness marker here,
+        // otherwise `due` stays false and the balance never reappears.
+        lastBalanceAt = 0
+        nextBalanceAttemptAt = 0
+      }
     }
     void refresh()
     ctx.effect(() => timer.interval(() => { void refresh() }, 30000))
@@ -698,13 +814,29 @@ return {
       return [st, setSt]
     }
 
-    // Per-registration actions: doConfigure = RPC + immediate refresh
+    // Per-registration actions: doConfigure = RPC + immediate refresh.
+    // A failed configure (e.g. the harness restarted and the RPC is gone) must
+    // not leave the UI frozen on stale state: we still refresh + re-render so
+    // the checkbox reflects what the host actually persisted, and log the error
+    // instead of silently swallowing it.
     const makeActions = (setSt: any) => ({
       doConfigure: async (patch: any) => {
-        try { await callHost('save-money/configure', patch); await refresh(); setSt({ ...snapshot }) } catch (e) {}
+        try {
+          await callHost('save-money/configure', patch)
+        } catch (e: any) {
+          console.error('[save-money] configure failed: ' + String((e && e.message) || e))
+        }
+        try { await refresh() } catch (e) {}
+        setSt({ ...snapshot })
       },
       doEndWindow: async () => {
-        try { await callHost('save-money/end-window'); await refresh(); setSt({ ...snapshot }) } catch (e) {}
+        try {
+          await callHost('save-money/end-window')
+        } catch (e: any) {
+          console.error('[save-money] end-window failed: ' + String((e && e.message) || e))
+        }
+        try { await refresh() } catch (e) {}
+        setSt({ ...snapshot })
       },
     })
 
@@ -762,12 +894,28 @@ return {
         React.createElement('span', { style: { minWidth: '80px', fontSize: '13px' } }, label), children)
       const input = (value: string, setter: any, width?: string) => React.createElement('input', {
         value, onChange: (e: any) => setter(e.target.value),
-        style: { width: width || '72px', padding: '3px 6px', fontSize: '13px' },
+        style: {
+          width: width || '72px', padding: '3px 6px', fontSize: '13px',
+          background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+          border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
+        },
       })
-      const btn = (text: string, fn: any, primary: boolean) => React.createElement('button', {
-        onClick: fn,
-        style: { padding: '6px 14px', cursor: 'pointer', fontSize: '13px', background: primary ? '#1565C0' : '#eee', color: primary ? '#fff' : '#333', border: 'none', borderRadius: '6px' },
-      }, text)
+      const btn = (text: string, fn: any, primary: boolean) => DSHButton
+        ? React.createElement(DSHButton, {
+            variant: 'outline',
+            size: 'sm',
+            onClick: fn,
+          }, text)
+        : React.createElement('button', {
+            onClick: fn,
+            style: {
+              padding: '6px 14px', cursor: 'pointer', fontSize: '13px',
+              background: primary ? 'var(--dsw-alias-button-primary-fill)' : 'var(--dsw-alias-bg-layer-2)',
+              color: primary ? 'var(--dsw-alias-label-primary-foreground)' : 'var(--dsw-alias-label-primary)',
+              border: primary ? 'none' : '1px solid var(--dsw-alias-border-l1)',
+              borderRadius: '6px',
+            },
+          }, text)
       // Window add/remove/edit
       const setWin = (i: number, key: string, val: string) => setWins(wins.map((w: any, j: number) => (j === i ? { ...w, [key]: val } : w)))
       const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02' }])
@@ -829,18 +977,24 @@ return {
           (st.state === 'WARN' || st.state === 'PAUSED')
             ? btn(t('endThisWindow'), () => void doEndWindow(), st.state === 'PAUSED')
             : null,
-          st.state === 'PAUSED' ? React.createElement('div', { style: { margin: '6px 0', fontSize: '12px', color: '#C62828' } }, t('pausedNote')) : null,
+          st.state === 'PAUSED' ? React.createElement('div', { style: { margin: '6px 0', fontSize: '12px', color: 'var(--dsw-alias-state-error-primary)' } }, t('pausedNote')) : null,
         ),
         // Green status line while "end this save mode" is in effect for the
         // current window (in-memory, one-shot): tells the user what happened
         // and how to reset it.
-        st.endWindowUntil ? React.createElement('div', { style: { margin: '6px 0 10px', fontSize: '12px', color: '#2E7D32', fontWeight: 600 } },
+        st.endWindowUntil ? React.createElement('div', { style: { margin: '6px 0 10px', fontSize: '12px', color: 'var(--dsw-alias-state-success-primary)', fontWeight: 600 } },
           t('endWindowActive', { a: st.window ? st.window.pauseAt : '', b: st.window ? st.window.resumeAt : '', c: st.window ? st.window.resumeAt : '' })) : null,
         btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true),
-        msg ? React.createElement('div', { style: { margin: '8px 0', fontSize: '12px', color: '#555' } }, msg) : null,
+        msg ? React.createElement('div', { style: { margin: '8px 0', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, msg) : null,
         row(t('enable'), React.createElement('input', {
           type: 'checkbox', checked: !!st.enabled,
           onChange: (e: any) => void doConfigure({ enabled: e.target.checked }),
+          style: { accentColor: 'var(--dsw-alias-brand-primary)', width: 16, height: 16, cursor: 'pointer' },
+        })),
+        row(t('showBalance'), React.createElement('input', {
+          type: 'checkbox', checked: !!cfg.showBalance,
+          onChange: (e: any) => void doConfigure({ showBalance: e.target.checked }),
+          style: { accentColor: 'var(--dsw-alias-brand-primary)', width: 16, height: 16, cursor: 'pointer' },
         })),
         row(t('timezone'), React.createElement('select', {
           value: tz,
@@ -862,7 +1016,11 @@ return {
               }
             }))
           },
-          style: { padding: '3px 6px', fontSize: '13px', maxWidth: '240px' },
+          style: {
+            padding: '3px 6px', fontSize: '13px', maxWidth: '240px',
+            background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+            border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
+          },
         },
           // Current timezone first, then the full IANA list sorted by offset
           // (offset computed with today's rules, so DST zones move correctly).
@@ -884,7 +1042,11 @@ return {
             currentLang = resolveLang(v)
             void doConfigure({ lang: v })
           },
-          style: { padding: '3px 6px', fontSize: '13px' },
+          style: {
+            padding: '3px 6px', fontSize: '13px',
+            background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+            border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
+          },
         },
           React.createElement('option', { value: 'auto' }, t('langAuto')),
           React.createElement('option', { value: 'zh' }, t('langZh')),
@@ -901,14 +1063,14 @@ return {
         React.createElement('div', { style: { marginTop: '12px', fontSize: '13px', fontWeight: 600 } },
           t('windowsTitle', { tz, n: wins.length })),
         wins.map((w: any, i: number) => React.createElement('div', { key: i, style: { margin: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' } },
-          React.createElement('span', { style: { fontSize: '12px', color: '#888', width: '28px' } }, String(i + 1) + '.'),
+          React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'),
           React.createElement('span', { style: { fontSize: '12px' } }, t('pause')),
           input(w.pauseAt, (v: string) => setWin(i, 'pauseAt', v)),
           React.createElement('span', { style: { fontSize: '12px' } }, t('resume')),
           input(w.resumeAt, (v: string) => setWin(i, 'resumeAt', v)),
           React.createElement('button', {
             onClick: () => delWin(i),
-            style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: '#C62828', padding: '2px 4px' },
+            style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-state-error-primary)', padding: '2px 4px' },
             title: t('removeTitle'),
           }, '✕'),
         )),
@@ -936,11 +1098,12 @@ return {
       return React.createElement('div', {
         style: {
           position: 'fixed', top: '12px', left: '50%', transform: 'translateX(-50%)',
-          background: isPaused ? '#FFEBEE' : '#FFF8E1',
-          color: isPaused ? '#C62828' : '#B26A00',
+          background: 'var(--dsw-alias-bg-layer-2)',
+          color: isPaused ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)',
           padding: '8px 18px', borderRadius: '999px', fontSize: '13px', fontWeight: 600,
-          zIndex: 9999, boxShadow: '0 2px 10px rgba(0,0,0,0.18)',
+          zIndex: 9999, boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
           display: 'flex', alignItems: 'center', gap: '10px',
+          border: '1px solid var(--dsw-alias-border-l1)',
           pointerEvents: 'auto',
         },
       },
@@ -949,7 +1112,7 @@ return {
           : t('bannerWarn') + (st.minutesToPause != null ? st.minutesToPause + t('bannerMinutes') : t('bannerMoment'))),
         React.createElement('button', {
           style: {
-            border: 'none', background: isPaused ? '#C62828' : '#B26A00', color: '#fff',
+            border: 'none', background: isPaused ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)', color: '#fff',
             borderRadius: '999px', padding: '3px 12px', cursor: 'pointer', fontSize: '12px',
             pointerEvents: 'auto',
           },
@@ -977,13 +1140,57 @@ return {
           },
           title: t('headerTitle', { status: b.text }),
         }, t('badgeLabel', { symbol: b.symbol, text: b.text }))
+        // Account balance (DeepSeek /user/balance) next to the status text —
+        // hidden when unavailable (no credential / request failed / not the
+        // official DeepSeek API). Implemented in src/balance-client.ts.
+        // The full detail (balance + spend stats) is a custom hover card:
+        // native `title` tooltips get clipped at the viewport edge and cannot
+        // wrap, so the long text was invisible. The card follows the mouse and
+        // extends LEFT from the cursor (the balance sits at the right edge of
+        // the header), clamped so it never leaves the viewport.
+        const balTipInit: any = null
+        const [balTip, setBalTip] = React.useState(balTipInit)
+        const updateBalTip = (e: any) => {
+          const vw = typeof window !== 'undefined' && window && typeof window.innerWidth === 'number' ? window.innerWidth : 1024
+          const vh = typeof window !== 'undefined' && window && typeof window.innerHeight === 'number' ? window.innerHeight : 768
+          const x = typeof e.clientX === 'number' ? e.clientX : vw
+          const y = typeof e.clientY === 'number' ? e.clientY : 0
+          // 卡片右缘贴在鼠标左侧 12px 处、向左延伸;用 clamp 保证右缘不会
+          // 超出视口右缘,鼠标靠近屏幕左侧时也不会跑到屏幕外。
+          const right = Math.max(8, Math.min(vw - 8, vw - x + 12))
+          const top = Math.max(8, Math.min(y + 14, vh - 180))
+          setBalTip({ right, top })
+        }
+        const balanceEl = renderBalanceElement(st.balance, React)
+        const balCard = (() => {
+          if (!balTip || !balanceEl) return null
+          const lines = balanceDetailLines(st.balance, { h1: t('spendH1'), m10: t('spendM10'), h24: t('spendH24') })
+          if (!lines) return null
+          return React.createElement('div', {
+            style: {
+              position: 'fixed', right: balTip.right, top: balTip.top, zIndex: 10001,
+              background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+              borderRadius: '8px', border: '1px solid var(--dsw-alias-border-l1)',
+              boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
+              padding: '6px 10px', fontSize: '12px', lineHeight: '1.6',
+              maxWidth: 'min(340px, calc(100vw - 24px))',
+              whiteSpace: 'normal', overflowWrap: 'break-word',
+              pointerEvents: 'none',
+            },
+          }, lines.map((ln, i) => React.createElement('div', {
+            key: i,
+            style: i === 0 ? { fontWeight: 700 } : { color: 'var(--dsw-alias-label-secondary)' },
+          }, ln)))
+        })()
         const pop = open
           ? React.createElement('div', {
               style: {
                 position: 'fixed', right: '16px', top: '56px', width: '380px',
-                background: '#fff', color: '#222', borderRadius: '10px',
-                boxShadow: '0 6px 24px rgba(0,0,0,0.25)', padding: '4px 8px 8px',
-                zIndex: 10000, border: '1px solid rgba(0,0,0,0.12)', maxHeight: '70vh', overflowY: 'auto',
+                // bg-layer-2:亮色=纯白,暗色=协调深色,随主题自动切换
+                background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                borderRadius: '10px',
+                boxShadow: '0 6px 24px rgba(0,0,0,0.35)', padding: '4px 8px 8px',
+                zIndex: 10000, border: '1px solid var(--dsw-alias-border-l1)', maxHeight: '70vh', overflowY: 'auto',
                 pointerEvents: 'auto',
               },
             },
@@ -991,7 +1198,7 @@ return {
                 React.createElement('span', { style: { fontSize: '13px', fontWeight: 700 } }, t('settingsTitle')),
                 React.createElement('button', {
                   onClick: () => setOpen(false),
-                  style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: '#888', pointerEvents: 'auto' },
+                  style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-label-secondary)', pointerEvents: 'auto' },
                 }, '✕'),
               ),
               React.createElement(SettingsView, { st, ...actions }),
@@ -999,6 +1206,14 @@ return {
           : null
         return React.createElement('div', { style: { display: 'contents' } },
           text,
+          balanceEl
+            ? React.createElement('div', {
+                style: { display: 'contents' },
+                onMouseEnter: updateBalTip,
+                onMouseMove: updateBalTip,
+                onMouseLeave: () => setBalTip(null),
+              }, balanceEl, balCard)
+            : null,
           pop,
           React.createElement(FloatingBanner, { st, doEndWindow: actions.doEndWindow }),
         )

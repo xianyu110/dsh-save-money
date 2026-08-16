@@ -195,7 +195,7 @@ test('official client bundle: plugin/client.js is a __ModuleLoader__ factory exp
 
 test('official bundle manifest: package.json declares dsh.client + exports["./client"]', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'plugin', 'package.json'), 'utf8'))
-  assert.equal(pkg.version, '1.2.5')
+  assert.equal(pkg.version, '1.3.0')
   assert.equal(pkg.exports['./client'], './client.js')
   assert.equal(pkg.dsh.client.platform, 'web')
   assert.ok(pkg.files.includes('client.js'))
@@ -223,4 +223,60 @@ test('official client bundle parses (node --check equivalent)', () => {
   const bracesClose = (js.match(/\}/g) || []).length
   assert.equal(opens, closes, 'balanced parentheses')
   assert.equal(bracesOpen, bracesClose, 'balanced braces')
+})
+
+// ---- Balance endpoint (opt-in showBalance, default off) ----
+
+/** Apply once and return the /save-money HTTP handler. */
+async function applyForBalance() {
+  const { ctx, routes } = makeCtx()
+  await plugin.apply(ctx)
+  assert.equal(routes.length, 1)
+  return routes[0].handler
+}
+
+/** Drive a POST configure + GET balance pair against the handler. */
+async function configureAndGetBalance(handler, patch) {
+  const req = {
+    method: 'POST',
+    url: '/save-money/configure',
+    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(patch)) },
+  }
+  const res = {
+    writeHead(code, headers) { this.code = code; this.headers = headers },
+    end(body) { this._body = body },
+  }
+  await handler(req, res)
+  const res2 = {
+    writeHead(code, headers) { this.code = code; this.headers = headers },
+    end(body) { this._body = body },
+  }
+  await handler({ method: 'GET', url: '/save-money/balance' }, res2)
+  assert.equal(res2.code, 200)
+  return JSON.parse(res2._body)
+}
+
+test('official balance endpoint: hidden by default (opt-in showBalance=false)', async () => {
+  const handler = await applyForBalance()
+  const out = await configureAndGetBalance(handler, { showBalance: false })
+  assert.equal(out.ok, false)
+  assert.match(out.error, /disabled/)
+})
+
+test('official balance endpoint: enabling showBalance reveals the credential error (no credential in test ctx)', async () => {
+  const handler = await applyForBalance()
+  const out = await configureAndGetBalance(handler, { showBalance: true })
+  assert.equal(out.ok, false)
+  assert.match(out.error, /credential/)
+})
+
+test('official balance display switch: off by default, enable works, disable hides again', async () => {
+  const handler = await applyForBalance()
+  const off1 = await configureAndGetBalance(handler, { showBalance: false })
+  assert.match(off1.error, /disabled/)
+  const on = await configureAndGetBalance(handler, { showBalance: true })
+  assert.equal(on.ok, false)
+  assert.match(on.error, /credential/) // gated by the opt-in switch, not the guard
+  const off2 = await configureAndGetBalance(handler, { showBalance: false })
+  assert.match(off2.error, /disabled/)
 })

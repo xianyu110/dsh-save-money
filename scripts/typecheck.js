@@ -34,8 +34,11 @@ const options = {
 }
 
 const rootNames = []
-// src/core.ts is a regular ESM module — type-check it as-is.
+// src/core.ts, src/balance-host.ts and src/balance-client.ts are regular ESM
+// modules — type-check them as-is.
 rootNames.push(join(root, 'src', 'core.ts'))
+rootNames.push(join(root, 'src', 'balance-host.ts'))
+rootNames.push(join(root, 'src', 'balance-client.ts'))
 for (const name of ['host', 'client']) {
   const src = readFileSync(join(root, 'src', name + '.ts'), 'utf8')
   const marker = '\nreturn {'

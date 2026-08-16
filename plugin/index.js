@@ -201,6 +201,224 @@ function validateWindows(windows, defaultTz) {
     }
     return { ok: true };
 }
+/**
+ * dsh-save-money — Account balance query (DeepSeek API /user/balance), Host side.
+ * ...doc...
+ */
+/** Cache window; the header polls every 30s, so keep the upstream call rare. */
+const CACHE_MS = 60000;
+/** 余额采样周期:后端每 5 分钟记录一次余额。 */
+const SAMPLE_MS = 5 * 60 * 1000;
+/** 采样点上限:5min × 288 = 24 小时。 */
+const HISTORY_LEN = 288;
+/**
+ * 余额历史队列:每 5 分钟一个采样点,保留最近 24 小时。
+ * 用途:由余额变化计算「最近 1 小时 / 10 分钟 / 24 小时消费了多少钱」。
+ * 同一 5 分钟窗口内的再次 record 只更新最新值(不新增点),所以前端高频
+ * 查询不会撑爆队列,288 个点恰好覆盖 24 小时。
+ */
+function createBalanceHistory() {
+    const points = [];
+    return {
+        record(total, at = Date.now()) {
+            const last = points[points.length - 1];
+            if (last && at - last.at < SAMPLE_MS) {
+                last.total = total;
+                return;
+            }
+            points.push({ at, total });
+            if (points.length > HISTORY_LEN)
+                points.shift();
+        },
+        /** 最新一条余额,无采样时返回 null。 */
+        latest() {
+            return points.length > 0 ? points[points.length - 1].total : null;
+        },
+        /** now - ms 时刻的余额(取不晚于该时刻的最近采样);历史不足返回 null。 */
+        totalAgo(ms, now = Date.now()) {
+            const target = now - ms;
+            for (let i = points.length - 1; i >= 0; i--) {
+                if (points[i].at <= target)
+                    return points[i].total;
+            }
+            return null;
+        },
+        /** 最近 ms 的消费金额(正数 = 花掉;余额回升时为负);历史不足返回 null。 */
+        spend(ms, now = Date.now()) {
+            const cur = this.latest();
+            const prev = this.totalAgo(ms, now);
+            if (cur === null || prev === null)
+                return null;
+            return prev - cur;
+        },
+        /** 当前全部采样点(调试/展示)。 */
+        points() {
+            return points.slice();
+        },
+        clear() { points.length = 0; },
+    };
+}
+/** Hard ceiling for one upstream balance attempt (fetch or subprocess settle).
+ * The DeepSeek /user/balance call normally returns in ~1s; a 5s bound gives
+ * plenty of headroom while guaranteeing a hung child can never pin the plugin. */
+const UPSTREAM_TIMEOUT_MS = 5000;
+/**
+ * Race a promise against a timeout so a hung subprocess or service call can
+ * NEVER pin the balance service (and therefore the plugin) forever.
+ */
+function withTimeout(p, ms, message) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(message)), ms);
+        p.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
+    });
+}
+/**
+ * Create the balance service for one plugin instance.
+ * @param ctx - plugin context (ctx.get for credentials / settings / subprocess).
+ * @param opts.sandbox - true in the dynamic-plugin sandbox (no real fetch);
+ *   false in the official module form (Node fetch available).
+ */
+function createBalanceService(ctx, opts) {
+    let cache = null;
+    let inFlight = null;
+    return {
+        query() {
+            const now = Date.now();
+            if (cache && now - cache.at < CACHE_MS)
+                return Promise.resolve(cache.data);
+            if (inFlight)
+                return inFlight;
+            inFlight = (async () => {
+                let out;
+                try {
+                    const gate = await balanceAvailable(ctx);
+                    out = gate.ok
+                        ? await withTimeout(fetchBalance(ctx, opts.sandbox), UPSTREAM_TIMEOUT_MS, 'balance upstream timeout')
+                        : { ok: false, error: gate.reason || 'balance not available' };
+                }
+                catch (e) {
+                    out = { ok: false, error: String((e && e.message) || e) };
+                }
+                cache = { at: Date.now(), data: out };
+                return out;
+            })().finally(() => { inFlight = null; });
+            return inFlight;
+        },
+    };
+}
+/** Gate: only the official DeepSeek API offers /user/balance. */
+async function balanceAvailable(ctx) {
+    try {
+        const adm = ctx.get('agentDefaultModel');
+        const sel = adm && typeof adm.currentSelection === 'function' ? adm.currentSelection() : undefined;
+        if (sel && typeof sel === 'object' && sel.provider && sel.provider !== 'deepseek-official') {
+            return { ok: false, reason: 'current provider is ' + String(sel.provider) + ', not deepseek-official' };
+        }
+    }
+    catch (e) { /* agentDefaultModel unavailable — continue; the API call itself will fail if wrong */ }
+    try {
+        const settings = ctx.get('settings');
+        const sec = settings && typeof settings.get === 'function' ? settings.get('llm-deepseek') : undefined;
+        const base = sec && typeof sec === 'object' && typeof sec.baseURL === 'string' ? sec.baseURL : '';
+        if (base && !/^https?:\/\/api\.deepseek\.com\/?$/.test(String(base).trim())) {
+            return { ok: false, reason: 'llm-deepseek baseURL is not the official API: ' + String(base) };
+        }
+    }
+    catch (e) { /* settings unavailable — assume official default */ }
+    return { ok: true };
+}
+/** One balance request (no caching; see the service wrapper). */
+async function fetchBalance(ctx, sandbox) {
+    const creds = ctx.get('credentials');
+    const key = creds && typeof creds.resolve === 'function'
+        ? await creds.resolve('DEEPSEEK_API_KEY').then((r) => r && r.value).catch(() => undefined)
+        : undefined;
+    if (!key)
+        return { ok: false, error: 'no DEEPSEEK_API_KEY credential' };
+    const url = 'https://api.deepseek.com/user/balance';
+    try {
+        let status = 0;
+        let text = '';
+        if (!sandbox && typeof fetch === 'function') {
+            // Official module form runs in Node: real fetch is available.
+            const res = await fetch(url, {
+                headers: { authorization: 'Bearer ' + key, accept: 'application/json' },
+                signal: typeof AbortSignal !== 'undefined' && AbortSignal && typeof AbortSignal.timeout === 'function'
+                    ? AbortSignal.timeout(10000)
+                    : undefined,
+            });
+            status = res.status;
+            text = await res.text();
+        }
+        else {
+            // Dynamic sandbox: `fetch` exists but is a guard stub that throws on
+            // call — run curl via the subprocess service. Any shape mismatch fails
+            // closed (ok:false) and can never throw out of this function.
+            const sub = ctx.get('subprocess');
+            if (!sub || typeof sub.spawn !== 'function') {
+                return { ok: false, error: 'no fetch or subprocess available for balance' };
+            }
+            let done = null;
+            let raw = '';
+            try {
+                const handle = sub.spawn({
+                    argv: ['curl', '-sS', '-f', '-m', '10', '-H', 'Authorization: Bearer ' + key, url],
+                    cwd: '.',
+                    stdio: { stdin: 'ignore', stdout: { maxBytes: 65536 }, stderr: { maxBytes: 4096 } },
+                    graceMs: 12000,
+                });
+                // handle.done is the settle result (awaitable); some spawn flavors
+                // expose it as a function — support both shapes. A hard timeout keeps
+                // a hung curl from ever pinning the balance query: on timeout we try
+                // to kill the child (best-effort) and fail closed.
+                const settle = typeof handle.done === 'function'
+                    ? withTimeout(Promise.resolve(handle.done()), UPSTREAM_TIMEOUT_MS, 'balance curl timeout')
+                    : withTimeout(Promise.resolve(handle.done), UPSTREAM_TIMEOUT_MS, 'balance curl timeout');
+                done = await settle;
+                try {
+                    if (handle && typeof handle.kill === 'function')
+                        handle.kill();
+                }
+                catch (e) { /* best-effort */ }
+                const collected = handle.collected && handle.collected.stdout;
+                raw = collected && typeof collected.readFrom === 'function'
+                    ? collected.readFrom(0).text
+                    : '';
+            }
+            catch (e) {
+                return { ok: false, error: 'balance subprocess failed: ' + String((e && e.message) || e) };
+            }
+            // curl's exit code is NOT an HTTP status: with -f, exit 0 means the
+            // request succeeded (2xx), non-zero means an HTTP error or transport
+            // failure. Map exit 0 -> 200 so the ok check below works; anything else
+            // keeps the non-zero code and fails the ok check.
+            status = done && done.exitCode === 0 ? 200 : (done && typeof done.exitCode === 'number' ? done.exitCode : 0);
+            text = raw || '';
+        }
+        let data = null;
+        try {
+            data = JSON.parse(text);
+        }
+        catch (e) { /* non-JSON body */ }
+        if (data && typeof data === 'object' && Array.isArray(data.balance_infos)) {
+            return {
+                ok: status >= 200 && status < 300,
+                httpStatus: status,
+                available: data.is_available === true,
+                balance: data.balance_infos.map((b) => ({
+                    currency: b.currency,
+                    total: b.total_balance,
+                    granted: b.granted_balance,
+                    toppedUp: b.topped_up_balance,
+                })),
+            };
+        }
+        return { ok: false, httpStatus: status, error: 'unexpected response: ' + text.slice(0, 200) };
+    }
+    catch (e) {
+        return { ok: false, error: String((e && e.message) || e) };
+    }
+}
 
 export function apply(ctx) {
         const DEFAULTS = {
@@ -210,6 +428,7 @@ export function apply(ctx) {
             windows: [],
             reconcileOnStart: true,
             lang: 'auto',
+            showBalance: false,
         };
         let cfg = { ...DEFAULTS, windows: [] };
         let pauseRecord = null;
@@ -316,6 +535,8 @@ export function apply(ctx) {
                     next.warnMinutes = data.warnMinutes;
                 if (typeof data.reconcileOnStart === 'boolean')
                     next.reconcileOnStart = data.reconcileOnStart;
+                if (typeof data.showBalance === 'boolean')
+                    next.showBalance = data.showBalance;
                 if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'zh-TW' || data.lang === 'en' ||
                     data.lang === 'de' || data.lang === 'fr' || data.lang === 'es' || data.lang === 'it' ||
                     data.lang === 'pt' || data.lang === 'ja' || data.lang === 'ko')
@@ -349,6 +570,9 @@ export function apply(ctx) {
             if (next.warnMinutes !== undefined && (!Number.isFinite(next.warnMinutes) || next.warnMinutes < 0)) {
                 return { ok: false, error: 'warnMinutes must be >= 0' };
             }
+            if (next.showBalance !== undefined && typeof next.showBalance !== 'boolean') {
+                return { ok: false, error: 'showBalance must be a boolean' };
+            }
             const LANGS = ['auto', 'zh', 'zh-TW', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko'];
             if (next.lang !== undefined && !LANGS.includes(next.lang)) {
                 return { ok: false, error: 'lang must be one of auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko' };
@@ -379,6 +603,7 @@ export function apply(ctx) {
                 warnMinutes: cfg.warnMinutes,
                 reconcileOnStart: cfg.reconcileOnStart,
                 lang: cfg.lang,
+                showBalance: cfg.showBalance,
                 windows: cfg.windows.map((w) => ({ ...w })),
             };
         }
@@ -564,8 +789,21 @@ export function apply(ctx) {
         const wakeGateWaiters = () => {
             const waiters = gateWaiters;
             gateWaiters = [];
-            for (const resolve of waiters)
-                resolve();
+            for (const release of waiters) {
+                // Each waiter synchronously calls next() inside release(); if the
+                // waterfall chain (DSH's own llm/stream invariants run first) throws
+                // synchronously — e.g. the request context was torn down while the
+                // gate held it — the exception must NOT escape into the host callback
+                // that woke us (60s tick / applyConfig / unload). That would surface as
+                // an uncaughtException and crash the harness. We swallow it here; the
+                // pending request then rejects with the same error via the promise.
+                try {
+                    release();
+                }
+                catch (e) {
+                    console.error('[save-money] gate release failed: ' + String((e && e.message) || e));
+                }
+            }
         };
         const gateClosedAt = (now) => {
             if (!cfg.enabled)
@@ -577,26 +815,42 @@ export function apply(ctx) {
             return st.name === 'PAUSED';
         };
         const gateInstalled = typeof ctx.on === 'function';
+        // "User sent a message" signal for the balance display: every llm/stream
+        // request corresponds to fresh user activity, so mark the balance stale —
+        // the client refreshes it on the next poll (message-driven update; the
+        // 10-minute timer is the client-side fallback cadence).
+        let balanceDirty = false;
         if (typeof ctx.on === 'function') {
             ctx.effect(() => {
                 const dispose = ctx.on('llm/stream', (options, next) => {
+                    balanceDirty = true;
                     if (!gateClosedAt(new Date()))
                         return next();
                     const waitForOpen = () => new Promise((resolve) => {
                         const ready = () => gateDisposed || !gateClosedAt(new Date())
                             || !!(options && options.signal && options.signal.aborted);
-                        // On wake, resolve with next()'s result (the real stream); if next()
-                        // throws, the executor throws → promise rejects.
+                        // Release helper: call next() defensively. A synchronous throw from
+                        // the waterfall chain (request context torn down / invariant fail)
+                        // must surface as a rejected promise — never as an exception
+                        // escaping into the abort event dispatch or wakeGateWaiters.
+                        const release = () => {
+                            try {
+                                resolve(next());
+                            }
+                            catch (e) {
+                                resolve(Promise.reject(e));
+                            }
+                        };
                         if (ready())
-                            return resolve(next());
-                        const waiter = () => resolve(next());
+                            return release();
+                        const waiter = () => { release(); };
                         gateWaiters.push(waiter);
                         if (options && options.signal && typeof options.signal.addEventListener === 'function') {
                             options.signal.addEventListener('abort', () => {
                                 const i = gateWaiters.indexOf(waiter);
                                 if (i >= 0)
                                     gateWaiters.splice(i, 1);
-                                resolve(next());
+                                release();
                             }, { once: true });
                         }
                     });
@@ -633,7 +887,14 @@ export function apply(ctx) {
                         },
                     };
                 }, { global: true });
-                return () => { gateDisposed = true; wakeGateWaiters(); dispose(); };
+                return () => {
+                    gateDisposed = true;
+                    try {
+                        wakeGateWaiters();
+                    }
+                    catch (e) { /* unload must never throw */ }
+                    dispose();
+                };
             });
         }
         else {
@@ -668,28 +929,50 @@ export function apply(ctx) {
             }
             return { restored };
         }
-        ctx.timer.timeout(() => {
-            // Load the persisted config first, then run startup reconciliation
-            void loadConfig().then(() => {
-                if (cfg.reconcileOnStart) {
-                    const r = reconcile();
-                    if (r.restored > 0)
-                        console.log('[save-money] startup reconcile restored ' + r.restored + ' goal(s)');
+        // ---- Owned timers (explicitly disposed on unload) ----
+        // ctx.timer.timeout/interval are fiber effects and *should* be cleaned up
+        // automatically when the fiber disposes, but hot-updates (run/update) are
+        // the one path where we do NOT rely on implicit cleanup: save both
+        // disposers and call them explicitly in the unload effect, so a repeated
+        // update can never leak a 60s tick or a boot timeout.
+        ctx.effect(() => {
+            const boot = ctx.timer.timeout(() => {
+                // Load the persisted config first, then run startup reconciliation
+                void loadConfig().then(() => {
+                    if (cfg.reconcileOnStart) {
+                        const r = reconcile();
+                        if (r.restored > 0)
+                            console.log('[save-money] startup reconcile restored ' + r.restored + ' goal(s)');
+                    }
+                });
+            }, 100);
+            const tick = ctx.timer.interval(() => {
+                try {
+                    // Fallback release: whenever the gate is open (window ended / disabled /
+                    // end-window active) wake the waiters — this MUST run before the enabled
+                    // check, so disabling also releases waiters and suspended requests never
+                    // hang forever.
+                    if (!gateClosedAt(new Date()))
+                        wakeGateWaiters();
+                    if (!cfg.enabled)
+                        return;
+                    onTick(new Date());
                 }
-            });
-        }, 100);
-        // ---------- Tick ----------
-        ctx.timer.interval(() => {
-            // Fallback release: whenever the gate is open (window ended / disabled /
-            // end-window active) wake the waiters — this MUST run before the enabled
-            // check, so disabling also releases waiters and suspended requests never
-            // hang forever.
-            if (!gateClosedAt(new Date()))
-                wakeGateWaiters();
-            if (!cfg.enabled)
-                return;
-            onTick(new Date());
-        }, 60000);
+                catch (e) {
+                    // A timer callback is a host callback: an escaping exception would be
+                    // an uncaughtException and crash the harness. Log and continue.
+                    console.error('[save-money] tick failed: ' + String((e && e.message) || e));
+                }
+            }, 60000);
+            return () => {
+                for (const dispose of [boot, tick]) {
+                    try {
+                        dispose();
+                    }
+                    catch (e) { /* unload must never throw */ }
+                }
+            };
+        });
         // ---------- Status ----------
         function status(now) {
             const st = computeRawState(now);
@@ -710,6 +993,9 @@ export function apply(ctx) {
                 busy: col.ok ? (col.tasks.length > 0) : null,
                 activeGoals: col.ok ? col.tasks.filter((t) => t.phase === 'active').length : null,
             };
+            // Balance staleness signal: true when a user message arrived since the
+            // last balance query (the client refreshes on the next poll).
+            out.balanceDirty = balanceDirty;
             if (st.window) {
                 const tz = st.window.timezone || cfg.timezone;
                 const wc = wallClock(tz, now);
@@ -737,10 +1023,10 @@ export function apply(ctx) {
             return out;
         }
         // ---- Host RPC (dynamic-plugin form: registered on the harness sandbox)
-        // ---- + HTTP endpoints (official bundle form: the bundled Client half
+        // ---- + HTTP endpoints (official bundle form ONLY: the bundled Client half
         //      talks to the same-origin webServer; the dynamic Client half keeps
-        //      using the harness RPC below). Both are registered unconditionally
-        //      so a single Host body serves every deployment form.
+        //      using the harness RPC below and never registers routes on the host's
+        //      global webServer).
         const harnessApi = typeof harness !== 'undefined' ? harness : null;
         if (harnessApi) {
             ctx.effect(() => harnessApi.handle('save-money/status', async () => status(new Date())));
@@ -753,7 +1039,8 @@ export function apply(ctx) {
         // as soon as webServer is available (immediately when already present), so
         // the bundled Client half never sees 404s (e.g. the Enable checkbox would
         // silently fail to configure). The disposer returned by webServer.register
-        // is owned by the injected sub-context.
+        // is owned by the injected sub-context. Skipped entirely in the dynamic
+        // form (harnessApi present).
         const registerHttpEndpoints = (ws) => {
             if (!ws || typeof ws.register !== 'function')
                 return;
@@ -770,6 +1057,10 @@ export function apply(ctx) {
                         const path = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : rawPath;
                         if (path === '/save-money/status') {
                             sendJson(res, 200, status(new Date()));
+                            return;
+                        }
+                        if (path === '/save-money/balance') {
+                            sendJson(res, 200, await balanceQuery());
                             return;
                         }
                         if (req.method === 'POST' && path === '/save-money/configure') {
@@ -799,10 +1090,10 @@ export function apply(ctx) {
                 },
             });
         };
-        if (webServer && typeof webServer.register === 'function') {
+        if (!harnessApi && webServer && typeof webServer.register === 'function') {
             ctx.effect(() => registerHttpEndpoints(webServer));
         }
-        else if (typeof ctx.inject === 'function') {
+        else if (!harnessApi && typeof ctx.inject === 'function') {
             ctx.inject(['webServer'], (sub) => {
                 sub.effect(() => registerHttpEndpoints(sub.get('webServer')));
             });
@@ -842,6 +1133,64 @@ export function apply(ctx) {
         if (harnessApi) {
             ctx.effect(() => harnessApi.handle('save-money/end-window', async () => endWindowHandler()));
         }
+        // ---- Account balance (DeepSeek API /user/balance, shown in the header) ----
+        // Implemented in src/balance-host.ts (inlined at build time): host-side
+        // request, official-API guard, fetch/curl transport, 60s cache + in-flight
+        // dedupe. The balance display is opt-in (cfg.showBalance, persisted,
+        // default off): when off, the query reports unavailable so the UI hides
+        // the balance entirely. Every failure returns ok:false and never throws.
+        const balanceSvc = createBalanceService(ctx, { sandbox: !!harnessApi });
+        // 余额历史(5 分钟采样 × 288 = 24 小时):由余额变化计算
+        // 最近 1 小时 / 10 分钟 / 24 小时的消费金额。
+        const balanceHistory = createBalanceHistory();
+        /** 拉一次余额并写入历史采样点(5 分钟窗口内只更新不新增)。 */
+        const sampleBalance = async () => {
+            try {
+                const out = await balanceSvc.query();
+                if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
+                    const total = parseFloat(out.balance[0].total);
+                    if (Number.isFinite(total))
+                        balanceHistory.record(total);
+                }
+            }
+            catch (e) { /* the sampler must never throw */ }
+        };
+        // 后端 5 分钟采样定时器:仅「显示余额」开启时拉取并记录(关闭时跳过,不产生请求)。
+        ctx.effect(() => {
+            const dispose = ctx.timer.interval(() => {
+                if (cfg.showBalance)
+                    void sampleBalance();
+            }, 300000);
+            return () => {
+                try {
+                    dispose();
+                }
+                catch (e) { /* unload must never throw */ }
+            };
+        });
+        const balanceQuery = async () => {
+            if (!cfg.showBalance)
+                return { ok: false, error: 'balance display is disabled' };
+            const out = await balanceSvc.query();
+            balanceDirty = false; // a fresh balance was just fetched for the client
+            // 把本次余额记为最新采样点(窗口内去重),再附带消费统计。
+            if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
+                const total = parseFloat(out.balance[0].total);
+                if (Number.isFinite(total))
+                    balanceHistory.record(total);
+            }
+            return {
+                ...out,
+                spend: {
+                    m10: balanceHistory.spend(10 * 60 * 1000),
+                    h1: balanceHistory.spend(60 * 60 * 1000),
+                    h24: balanceHistory.spend(24 * 60 * 60 * 1000),
+                },
+            };
+        };
+        if (harnessApi) {
+            ctx.effect(() => harnessApi.handle('save-money/balance', async () => balanceQuery()));
+        }
         // ---- Dynamic tools ----
         // Registered through harness in the dynamic-plugin sandbox; through the
         // ctx.tools service in the official module (plugin/index.js) form.
@@ -854,7 +1203,7 @@ export function apply(ctx) {
             },
             {
                 name: 'save_money_configure',
-                description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+                description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -863,6 +1212,7 @@ export function apply(ctx) {
                         warnMinutes: { type: 'number' },
                         reconcileOnStart: { type: 'boolean' },
                         lang: { type: 'string' },
+                        showBalance: { type: 'boolean' },
                         windows: {
                             type: 'array',
                             items: {

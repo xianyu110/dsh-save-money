@@ -102,9 +102,10 @@ interface CtxLike {
   }
 }
 
-// --- Pure helpers inlined from src/core.ts at build time (scripts/build.js) ---
+// --- Pure helpers inlined from src/core.ts + src/balance-host.ts at build
+// time (scripts/build.js) ---
 // The declarations below keep this file type-checked; the real implementations
-// live in src/core.ts and are unit-tested there.
+// live in the modules and are unit-tested there.
 declare function wallClock(tz: string, date: Date): WallClock
 declare function parseHHMM(s: string): number | null
 declare function dowNum(wd: number): number
@@ -113,6 +114,15 @@ declare function nextPause(w: TimeWindow, tz: string, wc: WallClock): NextPause 
 declare function wallToUTC(tz: string, y: number, mo: number, d: number, hhmm: number): number
 declare function isValidTz(tz: string): boolean
 declare function validateWindows(windows: TimeWindow[], defaultTz: string): { ok: boolean; error?: string }
+declare function createBalanceService(ctx: any, opts: { sandbox: boolean }): { query(): Promise<any> }
+declare function createBalanceHistory(): {
+  record(total: number, at?: number): void
+  latest(): number | null
+  totalAgo(ms: number, now?: number): number | null
+  spend(ms: number, now?: number): number | null
+  points(): { at: number; total: number }[]
+  clear(): void
+}
 
 return {
   inject: ['timer'],
@@ -124,6 +134,7 @@ return {
       windows: [] as TimeWindow[],
       reconcileOnStart: true,
       lang: 'auto' as LangChoice,
+      showBalance: false,
     }
     let cfg = { ...DEFAULTS, windows: [] as TimeWindow[] }
     let pauseRecord: {
@@ -225,6 +236,7 @@ return {
         if (typeof data.timezone === 'string' && isValidTz(data.timezone)) next.timezone = data.timezone
         if (typeof data.warnMinutes === 'number' && data.warnMinutes >= 0) next.warnMinutes = data.warnMinutes
         if (typeof data.reconcileOnStart === 'boolean') next.reconcileOnStart = data.reconcileOnStart
+        if (typeof data.showBalance === 'boolean') next.showBalance = data.showBalance
         if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'zh-TW' || data.lang === 'en' ||
             data.lang === 'de' || data.lang === 'fr' || data.lang === 'es' || data.lang === 'it' ||
             data.lang === 'pt' || data.lang === 'ja' || data.lang === 'ko') next.lang = data.lang
@@ -253,6 +265,9 @@ return {
       }
       if (next.warnMinutes !== undefined && (!Number.isFinite(next.warnMinutes) || next.warnMinutes < 0)) {
         return { ok: false, error: 'warnMinutes must be >= 0' }
+      }
+      if (next.showBalance !== undefined && typeof next.showBalance !== 'boolean') {
+        return { ok: false, error: 'showBalance must be a boolean' }
       }
       const LANGS = ['auto', 'zh', 'zh-TW', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko']
       if (next.lang !== undefined && !LANGS.includes(next.lang)) {
@@ -283,6 +298,7 @@ return {
         warnMinutes: cfg.warnMinutes,
         reconcileOnStart: cfg.reconcileOnStart,
         lang: cfg.lang,
+        showBalance: cfg.showBalance,
         windows: cfg.windows.map((w) => ({ ...w })),
       }
     }
@@ -451,7 +467,18 @@ return {
     const wakeGateWaiters = () => {
       const waiters = gateWaiters
       gateWaiters = []
-      for (const resolve of waiters) resolve()
+      for (const release of waiters) {
+        // Each waiter synchronously calls next() inside release(); if the
+        // waterfall chain (DSH's own llm/stream invariants run first) throws
+        // synchronously — e.g. the request context was torn down while the
+        // gate held it — the exception must NOT escape into the host callback
+        // that woke us (60s tick / applyConfig / unload). That would surface as
+        // an uncaughtException and crash the harness. We swallow it here; the
+        // pending request then rejects with the same error via the promise.
+        try { release() } catch (e: any) {
+          console.error('[save-money] gate release failed: ' + String((e && e.message) || e))
+        }
+      }
     }
     const gateClosedAt = (now: Date): boolean => {
       if (!cfg.enabled) return false
@@ -462,23 +489,36 @@ return {
       return st.name === 'PAUSED'
     }
     const gateInstalled = typeof ctx.on === 'function'
+    // "User sent a message" signal for the balance display: every llm/stream
+    // request corresponds to fresh user activity, so mark the balance stale —
+    // the client refreshes it on the next poll (message-driven update; the
+    // 10-minute timer is the client-side fallback cadence).
+    let balanceDirty = false
     if (typeof ctx.on === 'function') {
       ctx.effect(() => {
         const dispose = ctx.on('llm/stream', (options: any, next: any) => {
+          balanceDirty = true
           if (!gateClosedAt(new Date())) return next()
           const waitForOpen = () => new Promise((resolve) => {
             const ready = () => gateDisposed || !gateClosedAt(new Date())
               || !!(options && options.signal && options.signal.aborted)
-            // On wake, resolve with next()'s result (the real stream); if next()
-            // throws, the executor throws → promise rejects.
-            if (ready()) return resolve(next())
-            const waiter = () => resolve(next())
+            // Release helper: call next() defensively. A synchronous throw from
+            // the waterfall chain (request context torn down / invariant fail)
+            // must surface as a rejected promise — never as an exception
+            // escaping into the abort event dispatch or wakeGateWaiters.
+            const release = () => {
+              try { resolve(next()) } catch (e) {
+                resolve(Promise.reject(e))
+              }
+            }
+            if (ready()) return release()
+            const waiter = () => { release() }
             gateWaiters.push(waiter)
             if (options && options.signal && typeof options.signal.addEventListener === 'function') {
               options.signal.addEventListener('abort', () => {
                 const i = gateWaiters.indexOf(waiter)
                 if (i >= 0) gateWaiters.splice(i, 1)
-                resolve(next())
+                release()
               }, { once: true })
             }
           })
@@ -512,7 +552,11 @@ return {
             },
           }
         }, { global: true })
-        return () => { gateDisposed = true; wakeGateWaiters(); dispose() }
+        return () => {
+          gateDisposed = true
+          try { wakeGateWaiters() } catch (e) { /* unload must never throw */ }
+          dispose()
+        }
       })
     } else {
       console.error('[save-money] ctx.on unavailable; llm/stream gate not installed')
@@ -540,26 +584,43 @@ return {
       }
       return { restored }
     }
-    ctx.timer.timeout(() => {
-      // Load the persisted config first, then run startup reconciliation
-      void loadConfig().then(() => {
-        if (cfg.reconcileOnStart) {
-          const r = reconcile()
-          if (r.restored > 0) console.log('[save-money] startup reconcile restored ' + r.restored + ' goal(s)')
+    // ---- Owned timers (explicitly disposed on unload) ----
+    // ctx.timer.timeout/interval are fiber effects and *should* be cleaned up
+    // automatically when the fiber disposes, but hot-updates (run/update) are
+    // the one path where we do NOT rely on implicit cleanup: save both
+    // disposers and call them explicitly in the unload effect, so a repeated
+    // update can never leak a 60s tick or a boot timeout.
+    ctx.effect(() => {
+      const boot = ctx.timer.timeout(() => {
+        // Load the persisted config first, then run startup reconciliation
+        void loadConfig().then(() => {
+          if (cfg.reconcileOnStart) {
+            const r = reconcile()
+            if (r.restored > 0) console.log('[save-money] startup reconcile restored ' + r.restored + ' goal(s)')
+          }
+        })
+      }, 100)
+      const tick = ctx.timer.interval(() => {
+        try {
+          // Fallback release: whenever the gate is open (window ended / disabled /
+          // end-window active) wake the waiters — this MUST run before the enabled
+          // check, so disabling also releases waiters and suspended requests never
+          // hang forever.
+          if (!gateClosedAt(new Date())) wakeGateWaiters()
+          if (!cfg.enabled) return
+          onTick(new Date())
+        } catch (e: any) {
+          // A timer callback is a host callback: an escaping exception would be
+          // an uncaughtException and crash the harness. Log and continue.
+          console.error('[save-money] tick failed: ' + String((e && e.message) || e))
         }
-      })
-    }, 100)
-
-    // ---------- Tick ----------
-    ctx.timer.interval(() => {
-      // Fallback release: whenever the gate is open (window ended / disabled /
-      // end-window active) wake the waiters — this MUST run before the enabled
-      // check, so disabling also releases waiters and suspended requests never
-      // hang forever.
-      if (!gateClosedAt(new Date())) wakeGateWaiters()
-      if (!cfg.enabled) return
-      onTick(new Date())
-    }, 60000)
+      }, 60000)
+      return () => {
+        for (const dispose of [boot, tick]) {
+          try { dispose() } catch (e) { /* unload must never throw */ }
+        }
+      }
+    })
 
     // ---------- Status ----------
     function status(now: Date) {
@@ -581,6 +642,9 @@ return {
         busy: col.ok ? (col.tasks.length > 0) : null,
         activeGoals: col.ok ? col.tasks.filter((t) => t.phase === 'active').length : null,
       }
+      // Balance staleness signal: true when a user message arrived since the
+      // last balance query (the client refreshes on the next poll).
+      out.balanceDirty = balanceDirty
       if (st.window) {
         const tz = st.window.timezone || cfg.timezone
         const wc = wallClock(tz, now)
@@ -607,10 +671,10 @@ return {
     }
 
     // ---- Host RPC (dynamic-plugin form: registered on the harness sandbox)
-    // ---- + HTTP endpoints (official bundle form: the bundled Client half
+    // ---- + HTTP endpoints (official bundle form ONLY: the bundled Client half
     //      talks to the same-origin webServer; the dynamic Client half keeps
-    //      using the harness RPC below). Both are registered unconditionally
-    //      so a single Host body serves every deployment form.
+    //      using the harness RPC below and never registers routes on the host's
+    //      global webServer).
     const harnessApi = typeof harness !== 'undefined' ? harness : null
     if (harnessApi) {
       ctx.effect(() => harnessApi.handle('save-money/status', async () => status(new Date())))
@@ -623,7 +687,8 @@ return {
     // as soon as webServer is available (immediately when already present), so
     // the bundled Client half never sees 404s (e.g. the Enable checkbox would
     // silently fail to configure). The disposer returned by webServer.register
-    // is owned by the injected sub-context.
+    // is owned by the injected sub-context. Skipped entirely in the dynamic
+    // form (harnessApi present).
     const registerHttpEndpoints = (ws: any): (() => void) | void => {
       if (!ws || typeof ws.register !== 'function') return
       const sendJson = (res: any, code: number, obj: any) => {
@@ -639,6 +704,10 @@ return {
             const path = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : rawPath
             if (path === '/save-money/status') {
               sendJson(res, 200, status(new Date()))
+              return
+            }
+            if (path === '/save-money/balance') {
+              sendJson(res, 200, await balanceQuery())
               return
             }
             if (req.method === 'POST' && path === '/save-money/configure') {
@@ -661,9 +730,9 @@ return {
         },
       })
     }
-    if (webServer && typeof webServer.register === 'function') {
+    if (!harnessApi && webServer && typeof webServer.register === 'function') {
       ctx.effect(() => registerHttpEndpoints(webServer) as any)
-    } else if (typeof ctx.inject === 'function') {
+    } else if (!harnessApi && typeof ctx.inject === 'function') {
       ctx.inject(['webServer'], (sub: any) => {
         sub.effect(() => registerHttpEndpoints(sub.get('webServer')) as any)
       })
@@ -704,6 +773,57 @@ return {
       ctx.effect(() => harnessApi.handle('save-money/end-window', async () => endWindowHandler()))
     }
 
+    // ---- Account balance (DeepSeek API /user/balance, shown in the header) ----
+    // Implemented in src/balance-host.ts (inlined at build time): host-side
+    // request, official-API guard, fetch/curl transport, 60s cache + in-flight
+    // dedupe. The balance display is opt-in (cfg.showBalance, persisted,
+    // default off): when off, the query reports unavailable so the UI hides
+    // the balance entirely. Every failure returns ok:false and never throws.
+    const balanceSvc = createBalanceService(ctx, { sandbox: !!harnessApi })
+    // 余额历史(5 分钟采样 × 288 = 24 小时):由余额变化计算
+    // 最近 1 小时 / 10 分钟 / 24 小时的消费金额。
+    const balanceHistory = createBalanceHistory()
+    /** 拉一次余额并写入历史采样点(5 分钟窗口内只更新不新增)。 */
+    const sampleBalance = async (): Promise<void> => {
+      try {
+        const out = await balanceSvc.query()
+        if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
+          const total = parseFloat(out.balance[0].total)
+          if (Number.isFinite(total)) balanceHistory.record(total)
+        }
+      } catch (e) { /* the sampler must never throw */ }
+    }
+    // 后端 5 分钟采样定时器:仅「显示余额」开启时拉取并记录(关闭时跳过,不产生请求)。
+    ctx.effect(() => {
+      const dispose = ctx.timer.interval(() => {
+        if (cfg.showBalance) void sampleBalance()
+      }, 300000)
+      return () => {
+        try { dispose() } catch (e) { /* unload must never throw */ }
+      }
+    })
+    const balanceQuery = async (): Promise<any> => {
+      if (!cfg.showBalance) return { ok: false, error: 'balance display is disabled' }
+      const out = await balanceSvc.query()
+      balanceDirty = false // a fresh balance was just fetched for the client
+      // 把本次余额记为最新采样点(窗口内去重),再附带消费统计。
+      if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
+        const total = parseFloat(out.balance[0].total)
+        if (Number.isFinite(total)) balanceHistory.record(total)
+      }
+      return {
+        ...out,
+        spend: {
+          m10: balanceHistory.spend(10 * 60 * 1000),
+          h1: balanceHistory.spend(60 * 60 * 1000),
+          h24: balanceHistory.spend(24 * 60 * 60 * 1000),
+        },
+      }
+    }
+    if (harnessApi) {
+      ctx.effect(() => harnessApi.handle('save-money/balance', async () => balanceQuery()))
+    }
+
     // ---- Dynamic tools ----
     // Registered through harness in the dynamic-plugin sandbox; through the
     // ctx.tools service in the official module (plugin/index.js) form.
@@ -716,7 +836,7 @@ return {
       },
       {
         name: 'save_money_configure',
-        description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+        description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
         parameters: {
           type: 'object',
           properties: {
@@ -725,6 +845,7 @@ return {
             warnMinutes: { type: 'number' },
             reconcileOnStart: { type: 'boolean' },
             lang: { type: 'string' },
+            showBalance: { type: 'boolean' },
             windows: {
               type: 'array',
               items: {

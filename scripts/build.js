@@ -3,14 +3,16 @@
  *
  * Dynamic Cordis plugins only accept plain JavaScript function bodies
  * (no TypeScript, no imports, no bundling). Sources:
- *   - src/core.ts   → dist/core.js   (ESM module; unit-tested via node:test)
- *   - src/host.ts   → dist/host.js   (plugin body; core helpers inlined)
- *   - src/client.ts → dist/client.js (plugin body)
+ *   - src/core.ts         → dist/core.js         (ESM module; unit-tested)
+ *   - src/balance-host.ts → dist/balance-host.js (ESM module; unit-tested)
+ *   - src/balance-client.ts → dist/balance-client.js (ESM module; unit-tested)
+ *   - src/host.ts         → dist/host.js   (plugin body; core + balance-host inlined)
+ *   - src/client.ts       → dist/client.js (plugin body; core + balance-client inlined)
  *
- * Inlining: core.ts is transpiled first, its `export` statements are stripped,
- * and the resulting function declarations are injected into the host body
- * before the top-level `return {` — so the dynamic plugin stays a single
- * import-free file while the logic lives in one testable module.
+ * Inlining: the helper modules are transpiled first, their `export` statements
+ * are stripped, and the resulting declarations are injected into the plugin
+ * body before the top-level `return {` — so the dynamic plugin stays a single
+ * import-free file while the logic lives in testable modules.
  *
  * Usage: node scripts/build.js
  */
@@ -52,7 +54,7 @@ function transpile(name) {
   return result.outputText
 }
 
-/** Strip ESM export syntax from a transpiled core body. */
+/** Strip ESM export syntax from a transpiled helper body. */
 function stripExports(js) {
   return js
     .replace(/^export \{\s*[\s\S]*?\}\s*;\s*$/m, '') // trailing `export { ... };`
@@ -63,12 +65,18 @@ function stripExports(js) {
 
 mkdirSync(distDir, { recursive: true })
 
-// dist/core.js — ESM module used by the unit tests
-const coreJs = transpile('core')
-writeFileSync(join(distDir, 'core.js'), coreJs, 'utf8')
-console.log('[build] core.ts -> dist/core.js (' + coreJs.length + ' bytes)')
+// dist/*.js — ESM modules used by the unit tests (transpile once, reuse below)
+const core = transpile('core')
+const balanceHost = transpile('balance-host')
+const balanceClient = transpile('balance-client')
+writeFileSync(join(distDir, 'core.js'), core, 'utf8')
+writeFileSync(join(distDir, 'balance-host.js'), balanceHost, 'utf8')
+writeFileSync(join(distDir, 'balance-client.js'), balanceClient, 'utf8')
+console.log('[build] core.ts -> dist/core.js (' + core.length + ' bytes)')
+console.log('[build] balance-host.ts -> dist/balance-host.js (' + balanceHost.length + ' bytes)')
+console.log('[build] balance-client.ts -> dist/balance-client.js (' + balanceClient.length + ' bytes)')
 
-// dist/host.js — plugin body with the core helpers inlined
+// dist/host.js — plugin body with core + balance-host helpers inlined
 const hostJs = transpile('host')
 const inlineMarker = '\nreturn {'
 const idx = hostJs.indexOf(inlineMarker)
@@ -76,17 +84,17 @@ if (idx < 0) {
   console.error('[build] host.ts: no top-level "return {" found')
   process.exit(1)
 }
-const hostWithCore = hostJs.slice(0, idx) + '\n' + stripExports(coreJs) + hostJs.slice(idx)
+const hostWithCore = hostJs.slice(0, idx) + '\n' + stripExports(core) + stripExports(balanceHost) + hostJs.slice(idx)
 writeFileSync(join(distDir, 'host.js'), hostWithCore, 'utf8')
-console.log('[build] host.ts -> dist/host.js (core inlined, ' + hostWithCore.length + ' bytes)')
+console.log('[build] host.ts -> dist/host.js (core + balance-host inlined, ' + hostWithCore.length + ' bytes)')
 
-// dist/client.js — plugin body (i18n UI) with the core helpers inlined
+// dist/client.js — plugin body with core + balance-client helpers inlined
 const clientJs = transpile('client')
 const clientIdx = clientJs.indexOf(inlineMarker)
 if (clientIdx < 0) {
   console.error('[build] client.ts: no top-level "return {" found')
   process.exit(1)
 }
-const clientWithCore = clientJs.slice(0, clientIdx) + '\n' + stripExports(coreJs) + clientJs.slice(clientIdx)
+const clientWithCore = clientJs.slice(0, clientIdx) + '\n' + stripExports(core) + stripExports(balanceClient) + clientJs.slice(clientIdx)
 writeFileSync(join(distDir, 'client.js'), clientWithCore, 'utf8')
-console.log('[build] client.ts -> dist/client.js (core inlined, ' + clientWithCore.length + ' bytes)')
+console.log('[build] client.ts -> dist/client.js (core + balance-client inlined, ' + clientWithCore.length + ' bytes)')
