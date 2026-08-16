@@ -57,6 +57,34 @@ stateDiagram-v2
 
 The official DSH plugin form is a **module exporting `apply` + cordis.yml mounting** (see the [DSH official tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)). This repository offers three install options: two official paths (`--patch` quick try, distributable bundle) plus a development workflow (link + HMR hot reload). The official forms include the **full plugin**: Host logic (scheduling, gate, goal freeze, tools, HTTP endpoints) **and** the browser UI (status text, banner, settings page), which loads automatically — no AI-assisted setup needed.
 
+### Quick install (copy-paste)
+
+Using `~/app/` as an example directory (each step assumes the previous one succeeded):
+
+```sh
+cd ~/app/
+
+git clone https://github.com/zhu168/dsh-save-money.git
+
+cd dsh-save-money
+npm install
+
+cd plugin
+npm pack                    # runs the build automatically; produces the plugin tarball
+
+ls                          # check the tarball name, e.g. dsh-save-money-1.3.0.tgz
+
+cd ~/app/deepseek-harness   # change to your harness directory (clone it first if missing — see "0." below)
+
+pnpm dsh plugin --profile web remove dsh-save-money   # only if you installed it before; skip if you haven't
+
+pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.3.0.tgz   # use the name from `ls` above
+
+pnpm dsh --profile web      # starts DeepSeek Harness — the plugin appears top-right in the session header
+```
+
+> Two notes: ① the tarball name on the `add` line must match what `ls` printed (`1.3.0` is just an example); ② if your harness runs via npx, replace every `pnpm dsh` above with `npx @deepseek-ai/dsh` (install commands too).
+
 ### 0. Run DSH itself first
 
 The plugin runs inside DSH, so DSH must run before anything below. Two ways:

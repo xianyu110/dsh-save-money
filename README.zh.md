@@ -61,6 +61,34 @@ stateDiagram-v2
 
 DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml 挂载**（见 [DSH 官方教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)）。本仓库提供三种安装方式：两种官方安装路径（`--patch` 快速试用、bundle 打包分发）+ 一种开发调试形态（link + HMR 热重载）。官方形态安装的是**完整插件**：Host 半边（调度、闸门、目标冻结、工具、HTTP 端点）**和**浏览器界面（状态文字、横幅、设置页）都在，界面自动加载，**不需要 AI 辅助安装**。
 
+### 安装速览（照抄即可）
+
+以目录是 `~/app/` 为例（每一步都假设上一步已成功）：
+
+```sh
+cd ~/app/
+
+git clone https://github.com/zhu168/dsh-save-money.git
+
+cd dsh-save-money
+npm install
+
+cd plugin
+npm pack                    # 自动执行构建；产出插件包
+
+ls                          # 查看插件打包文件名，比如 dsh-save-money-1.3.0.tgz
+
+cd ~/app/deepseek-harness   # 这里改成你的 harness 目录（没有就先 clone，见下方「第 0 步」）
+
+pnpm dsh plugin --profile web remove dsh-save-money   # 如果之前安装过，这一步是卸载；没安装过可以跳过
+
+pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.3.0.tgz   # 文件名按上面 ls 的实际输出
+
+pnpm dsh --profile web      # 启动 DeepSeek Harness，可以看到本插件在右上角了
+```
+
+> 两处注意：① 第 6 行的 tgz 文件名以 `ls` 的实际输出为准（`1.3.0` 只是示例）；② 若你的 harness 是用 npx 启动的，把上面所有 `pnpm dsh` 换成 `npx @deepseek-ai/dsh`（安装命令同理）。
+
 ### 第 0 步：先让 DSH 跑起来
 
 插件运行在 DSH 里面，所以下面的操作都以 DSH 能运行为前提。两种方式：
