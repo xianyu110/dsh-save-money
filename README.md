@@ -98,7 +98,7 @@ The official DSH plugin form is a **module exporting `apply` + cordis.yml mounti
 2. Install into a profile (first run initializes with `@deepseek-ai/dsh-base`):
 
    ```sh
-   dsh plugin --profile web add ./dsh-save-money-1.2.0.tgz
+   dsh plugin --profile web add ./dsh-save-money-1.2.1.tgz
    ```
 
    Git install also works: `dsh plugin --profile web add github:you/dsh-save-money#<sha>` (git install requires `prepare` builds and `allowBuilds`, see the [DSH publish tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)).

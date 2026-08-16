@@ -81,17 +81,61 @@ export function nextPause(w: TimeWindow, tz: string, wc: WallClock): NextPause |
   return null
 }
 
-/** Convert a wall-clock HH:mm on a given date to an epoch-ms UTC instant. */
+/**
+ * Convert a wall-clock HH:mm on a given date to an epoch-ms UTC instant.
+ * Robust for any real offset (incl. ±12/±13h like Pacific/Auckland): first
+ * align the wall-clock DATE (full-day steps), then align the minutes within
+ * that day — forward-only stepping would cross days for large offsets.
+ */
 export function wallToUTC(tz: string, y: number, mo: number, d: number, hhmm: number): number {
   let ms = Date.UTC(y, mo - 1, d, Math.floor(hhmm / 60), hhmm % 60)
-  for (let i = 0; i < 6; i++) {
+  const targetDay = Date.UTC(y, mo - 1, d)
+  for (let i = 0; i < 8; i++) {
     const w = wallClock(tz, new Date(ms))
     if (w.y === y && w.mo === mo && w.d === d && w.minutes === hhmm) return ms
-    let diff = ((hhmm - w.minutes) % 1440 + 1440) % 1440
-    if (diff > 720) diff -= 1440
-    ms += diff * 60000
+    const curDay = Date.UTC(w.y, w.mo - 1, w.d)
+    const dayDiff = Math.round((curDay - targetDay) / 86400000)
+    if (dayDiff !== 0) {
+      ms -= dayDiff * 86400000
+      continue
+    }
+    ms += (hhmm - w.minutes) * 60000
   }
   return ms
+}
+
+/** Format minutes-of-day as "HH:mm" (zero-padded). */
+export function formatHHMM(m: number): string {
+  const h = Math.floor(m / 60)
+  const mi = m % 60
+  return String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0')
+}
+
+/**
+ * Convert a wall-clock HH:mm from one IANA timezone to another, using the
+ * given reference date (default: now) so real timezone rules apply
+ * (daylight-saving aware). The result keeps the same absolute instant:
+ * Beijing 08:58 on a summer day becomes London 01:58, on a winter day 00:58.
+ */
+export function convertHHMM(tzFrom: string, tzTo: string, hhmm: number, ref?: Date): number {
+  const date = ref || new Date()
+  const wc = wallClock(tzFrom, date)
+  const ms = wallToUTC(tzFrom, wc.y, wc.mo, wc.d, hhmm)
+  return wallClock(tzTo, new Date(ms)).minutes
+}
+
+/**
+ * UTC offset of a timezone at the given instant, in minutes (DST-aware).
+ * Correct at minute precision: interpret the timezone's wall-clock minute as
+ * if it were UTC, and subtract the real UTC instant that wall-clock minute
+ * maps to. E.g. Asia/Shanghai -> 480, Europe/London -> 60 in summer / 0 in
+ * winter, America/New_York -> -240 in summer / -300 in winter.
+ */
+export function utcOffsetMinutes(tz: string, date: Date): number {
+  const wc = wallClock(tz, date)
+  const tzMs = wallToUTC(tz, wc.y, wc.mo, wc.d, wc.minutes)
+  const utcMs = Date.UTC(wc.y, wc.mo - 1, wc.d, Math.floor(wc.minutes / 60), wc.minutes % 60)
+  return Math.round((utcMs - tzMs) / 60000)
 }
 
 /** True when the string is a valid IANA timezone name. */

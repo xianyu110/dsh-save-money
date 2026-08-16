@@ -80,7 +80,13 @@ const hostWithCore = hostJs.slice(0, idx) + '\n' + stripExports(coreJs) + hostJs
 writeFileSync(join(distDir, 'host.js'), hostWithCore, 'utf8')
 console.log('[build] host.ts -> dist/host.js (core inlined, ' + hostWithCore.length + ' bytes)')
 
-// dist/client.js — plugin body (i18n UI)
+// dist/client.js — plugin body (i18n UI) with the core helpers inlined
 const clientJs = transpile('client')
-writeFileSync(join(distDir, 'client.js'), clientJs, 'utf8')
-console.log('[build] client.ts -> dist/client.js (' + clientJs.length + ' bytes)')
+const clientIdx = clientJs.indexOf(inlineMarker)
+if (clientIdx < 0) {
+  console.error('[build] client.ts: no top-level "return {" found')
+  process.exit(1)
+}
+const clientWithCore = clientJs.slice(0, clientIdx) + '\n' + stripExports(coreJs) + clientJs.slice(clientIdx)
+writeFileSync(join(distDir, 'client.js'), clientWithCore, 'utf8')
+console.log('[build] client.ts -> dist/client.js (core inlined, ' + clientWithCore.length + ' bytes)')

@@ -79,19 +79,59 @@ function nextPause(w, tz, wc) {
     }
     return null;
 }
-/** Convert a wall-clock HH:mm on a given date to an epoch-ms UTC instant. */
+/**
+ * Convert a wall-clock HH:mm on a given date to an epoch-ms UTC instant.
+ * Robust for any real offset (incl. ±12/±13h like Pacific/Auckland): first
+ * align the wall-clock DATE (full-day steps), then align the minutes within
+ * that day — forward-only stepping would cross days for large offsets.
+ */
 function wallToUTC(tz, y, mo, d, hhmm) {
     let ms = Date.UTC(y, mo - 1, d, Math.floor(hhmm / 60), hhmm % 60);
-    for (let i = 0; i < 6; i++) {
+    const targetDay = Date.UTC(y, mo - 1, d);
+    for (let i = 0; i < 8; i++) {
         const w = wallClock(tz, new Date(ms));
         if (w.y === y && w.mo === mo && w.d === d && w.minutes === hhmm)
             return ms;
-        let diff = ((hhmm - w.minutes) % 1440 + 1440) % 1440;
-        if (diff > 720)
-            diff -= 1440;
-        ms += diff * 60000;
+        const curDay = Date.UTC(w.y, w.mo - 1, w.d);
+        const dayDiff = Math.round((curDay - targetDay) / 86400000);
+        if (dayDiff !== 0) {
+            ms -= dayDiff * 86400000;
+            continue;
+        }
+        ms += (hhmm - w.minutes) * 60000;
     }
     return ms;
+}
+/** Format minutes-of-day as "HH:mm" (zero-padded). */
+function formatHHMM(m) {
+    const h = Math.floor(m / 60);
+    const mi = m % 60;
+    return String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0');
+}
+/**
+ * Convert a wall-clock HH:mm from one IANA timezone to another, using the
+ * given reference date (default: now) so real timezone rules apply
+ * (daylight-saving aware). The result keeps the same absolute instant:
+ * Beijing 08:58 on a summer day becomes London 01:58, on a winter day 00:58.
+ */
+function convertHHMM(tzFrom, tzTo, hhmm, ref) {
+    const date = ref || new Date();
+    const wc = wallClock(tzFrom, date);
+    const ms = wallToUTC(tzFrom, wc.y, wc.mo, wc.d, hhmm);
+    return wallClock(tzTo, new Date(ms)).minutes;
+}
+/**
+ * UTC offset of a timezone at the given instant, in minutes (DST-aware).
+ * Correct at minute precision: interpret the timezone's wall-clock minute as
+ * if it were UTC, and subtract the real UTC instant that wall-clock minute
+ * maps to. E.g. Asia/Shanghai -> 480, Europe/London -> 60 in summer / 0 in
+ * winter, America/New_York -> -240 in summer / -300 in winter.
+ */
+function utcOffsetMinutes(tz, date) {
+    const wc = wallClock(tz, date);
+    const tzMs = wallToUTC(tz, wc.y, wc.mo, wc.d, wc.minutes);
+    const utcMs = Date.UTC(wc.y, wc.mo - 1, wc.d, Math.floor(wc.minutes / 60), wc.minutes % 60);
+    return Math.round((utcMs - tzMs) / 60000);
 }
 /** True when the string is a valid IANA timezone name. */
 function isValidTz(tz) {
@@ -277,7 +317,9 @@ export function apply(ctx) {
                     next.warnMinutes = data.warnMinutes;
                 if (typeof data.reconcileOnStart === 'boolean')
                     next.reconcileOnStart = data.reconcileOnStart;
-                if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'en')
+                if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'zh-TW' || data.lang === 'en' ||
+                    data.lang === 'de' || data.lang === 'fr' || data.lang === 'es' || data.lang === 'it' ||
+                    data.lang === 'pt' || data.lang === 'ja' || data.lang === 'ko')
                     next.lang = data.lang;
                 if (Array.isArray(data.windows)) {
                     const v = validateWindows(data.windows, next.timezone);
@@ -308,8 +350,9 @@ export function apply(ctx) {
             if (next.warnMinutes !== undefined && (!Number.isFinite(next.warnMinutes) || next.warnMinutes < 0)) {
                 return { ok: false, error: 'warnMinutes must be >= 0' };
             }
-            if (next.lang !== undefined && next.lang !== 'auto' && next.lang !== 'zh' && next.lang !== 'en') {
-                return { ok: false, error: 'lang must be one of auto/zh/en' };
+            const LANGS = ['auto', 'zh', 'zh-TW', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko'];
+            if (next.lang !== undefined && !LANGS.includes(next.lang)) {
+                return { ok: false, error: 'lang must be one of auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko' };
             }
             // Re-activation resets the one-shot "end this save mode" state: when
             // `enabled` goes false -> true, clear endWindowUntil/endWindowKey so

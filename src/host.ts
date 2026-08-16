@@ -218,7 +218,9 @@ return {
         if (typeof data.timezone === 'string' && isValidTz(data.timezone)) next.timezone = data.timezone
         if (typeof data.warnMinutes === 'number' && data.warnMinutes >= 0) next.warnMinutes = data.warnMinutes
         if (typeof data.reconcileOnStart === 'boolean') next.reconcileOnStart = data.reconcileOnStart
-        if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'en') next.lang = data.lang
+        if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'zh-TW' || data.lang === 'en' ||
+            data.lang === 'de' || data.lang === 'fr' || data.lang === 'es' || data.lang === 'it' ||
+            data.lang === 'pt' || data.lang === 'ja' || data.lang === 'ko') next.lang = data.lang
         if (Array.isArray(data.windows)) {
           const v = validateWindows(data.windows, next.timezone)
           if (v.ok) next.windows = data.windows.map((w: TimeWindow) => ({ ...w }))
@@ -245,8 +247,9 @@ return {
       if (next.warnMinutes !== undefined && (!Number.isFinite(next.warnMinutes) || next.warnMinutes < 0)) {
         return { ok: false, error: 'warnMinutes must be >= 0' }
       }
-      if (next.lang !== undefined && next.lang !== 'auto' && next.lang !== 'zh' && next.lang !== 'en') {
-        return { ok: false, error: 'lang must be one of auto/zh/en' }
+      const LANGS = ['auto', 'zh', 'zh-TW', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko']
+      if (next.lang !== undefined && !LANGS.includes(next.lang)) {
+        return { ok: false, error: 'lang must be one of auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko' }
       }
       // Re-activation resets the one-shot "end this save mode" state: when
       // `enabled` goes false -> true, clear endWindowUntil/endWindowKey so

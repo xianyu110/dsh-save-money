@@ -34,9 +34,17 @@
 declare const React: any
 declare const host: any
 declare const navigator: { language?: string } | undefined
+// Core helpers (src/core.ts) are inlined into this body at build time
+// (scripts/build.js), the declarations below keep this file type-checked.
+declare function parseHHMM(s: string): number | null
+declare function formatHHMM(m: number): string
+declare function wallClock(tz: string, date: Date): { y: number; mo: number; d: number; weekday: number; minutes: number }
+declare function wallToUTC(tz: string, y: number, mo: number, d: number, hhmm: number): number
+declare function convertHHMM(tzFrom: string, tzTo: string, hhmm: number, ref?: Date): number
+declare function utcOffsetMinutes(tz: string, date: Date): number
 
 // --- i18n dictionary (erased types at build time) ---
-type Lang = 'zh' | 'en'
+type Lang = 'zh' | 'zh-TW' | 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'ja' | 'ko'
 interface Dict {
   badgeDisabled: string
   badgePaused: string
@@ -63,7 +71,15 @@ interface Dict {
   language: string
   langAuto: string
   langZh: string
+  langZhTw: string
   langEn: string
+  langDe: string
+  langFr: string
+  langEs: string
+  langIt: string
+  langPt: string
+  langJa: string
+  langKo: string
   windowsTitle: string
   pause: string
   resume: string
@@ -104,7 +120,15 @@ const I18N: Record<Lang, Dict> = {
     language: '语言',
     langAuto: '自动（跟随浏览器）',
     langZh: '中文',
+    langZhTw: '中文（繁體）',
     langEn: 'English',
+    langDe: 'Deutsch',
+    langFr: 'Français',
+    langEs: 'Español',
+    langIt: 'Italiano',
+    langPt: 'Português',
+    langJa: '日本語',
+    langKo: '한국어',
     windowsTitle: '暂停窗口（{tz} 墙上时间，共 {n} 组）',
     pause: '暂停',
     resume: '继续',
@@ -143,7 +167,15 @@ const I18N: Record<Lang, Dict> = {
     language: 'Language',
     langAuto: 'Auto (browser)',
     langZh: '中文',
+    langZhTw: '中文（繁體）',
     langEn: 'English',
+    langDe: 'Deutsch',
+    langFr: 'Français',
+    langEs: 'Español',
+    langIt: 'Italiano',
+    langPt: 'Português',
+    langJa: '日本語',
+    langKo: '한국어',
     windowsTitle: 'Pause windows ({tz} wall-clock, {n} total)',
     pause: 'Pause',
     resume: 'Resume',
@@ -156,21 +188,413 @@ const I18N: Record<Lang, Dict> = {
     sectionLabel: 'Save-money',
     settingsHeading: 'save-money plugin',
   },
+  de: {
+    badgeDisabled: 'Deaktiviert',
+    badgePaused: 'Pausiert',
+    badgeWarn: 'Bald pausiert',
+    badgeWorking: 'Aktiv',
+    bannerPaused: '⛔ Pausiert: Modellanfragen werden angehalten, keine Kosten.',
+    bannerAutoResume: ' setzt automatisch fort',
+    bannerWarn: '⏳ Pause in ',
+    bannerMinutes: ' Min.',
+    bannerMoment: 'einem Moment',
+    endThisWindow: 'Diese Sparphase beenden',
+    endWindowActive: '✅ Sie haben diese Sparphase beendet: Fenster {a}-{b} übersprungen, Sparmodus setzt um {c} automatisch fort (Ein/Aus schalten setzt zurück).',
+    statusPrefix: 'Status: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'Alle Modellanfragen werden im Pausefenster vor dem Senden angehalten (keine Kosten). Sie werden automatisch fortgesetzt, wenn das Fenster endet; der Kontext bleibt unverändert. Klicken Sie auf „Diese Sparphase beenden“, um sofort fortzufahren und nur dieses Fenster zu überspringen.',
+    deepseekPreset: 'DeepSeek-Spartarif mit einem Klick',
+    presetExists: 'Die beiden DeepSeek-Fenster (mit 2 Min. Rand) sind bereits vorhanden und wurden nicht erneut hinzugefügt. Aktivieren Sie „Aktiviert“.',
+    presetUpgraded: '{n} alte Fenster wurden auf die Version mit Rand aktualisiert; ',
+    presetAdded: '{n} DeepSeek-Fenster hinzugefügt (nicht aktiviert – bitte „Aktiviert“ ankreuzen).',
+    applyFailed: 'Ein-Klick fehlgeschlagen: ',
+    savedMsg: '{n} Fenster gespeichert.',
+    enable: 'Aktiviert',
+    timezone: 'Zeitzone',
+    language: 'Sprache',
+    langAuto: 'Automatisch (Browser)',
+    langZh: 'Chinesisch (vereinfacht)',
+    langZhTw: 'Chinesisch (traditionell)',
+    langEn: 'Englisch',
+    langDe: 'Deutsch',
+    langFr: 'Französisch',
+    langEs: 'Spanisch',
+    langIt: 'Italienisch',
+    langPt: 'Portugiesisch',
+    langJa: 'Japanisch',
+    langKo: 'Koreanisch',
+    windowsTitle: 'Pausefenster ({tz} Ortszeit, {n} gesamt)',
+    pause: 'Pause',
+    resume: 'Fortsetzen',
+    removeTitle: 'Fenster entfernen',
+    addWindow: '+ Fenster hinzufügen',
+    save: 'Speichern',
+    settingsTitle: 'Sparmodus-Einstellungen',
+    headerTitle: 'save-money: {status} (klicken für Einstellungen)',
+    badgeLabel: 'Sparen · {symbol} {text}',
+    sectionLabel: 'Sparmodus',
+    settingsHeading: 'save-money Sparmodus',
+  },
+  fr: {
+    badgeDisabled: 'Désactivé',
+    badgePaused: 'En pause',
+    badgeWarn: 'Pause imminente',
+    badgeWorking: 'En cours',
+    bannerPaused: '⛔ En pause : requêtes modèle suspendues, aucun coût.',
+    bannerAutoResume: ' reprend automatiquement',
+    bannerWarn: '⏳ Pause dans ',
+    bannerMinutes: ' min',
+    bannerMoment: 'un instant',
+    endThisWindow: 'Terminer cette économie',
+    endWindowActive: '✅ Vous avez terminé cette économie : fenêtre {a}-{b} ignorée, reprise automatique à {c} (désactivez puis réactivez « Activer » pour réinitialiser).',
+    statusPrefix: 'État : ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'Toutes les requêtes modèle sont suspendues avant envoi dans la fenêtre de pause (aucun coût) et reprennent automatiquement à la fin de la fenêtre ; le contexte est préservé. Cliquez sur « Terminer cette économie » pour reprendre immédiatement en ignorant uniquement cette fenêtre.',
+    deepseekPreset: 'Économies DeepSeek en un clic',
+    presetExists: 'Les deux fenêtres DeepSeek (marge de 2 min) existent déjà, rien n\u2019a été ajouté. Cochez « Activer ».',
+    presetUpgraded: '{n} ancienne(s) fenêtre(s) mise(s) à niveau avec marge ; ',
+    presetAdded: '{n} fenêtre(s) DeepSeek ajoutée(s) (non activée(s) – cochez « Activer »).',
+    applyFailed: 'Échec de l\u2019application : ',
+    savedMsg: '{n} fenêtre(s) enregistrée(s).',
+    enable: 'Activer',
+    timezone: 'Fuseau horaire',
+    language: 'Langue',
+    langAuto: 'Automatique (navigateur)',
+    langZh: 'Chinois (simplifié)',
+    langZhTw: 'Chinois (traditionnel)',
+    langEn: 'Anglais',
+    langDe: 'Allemand',
+    langFr: 'Français',
+    langEs: 'Espagnol',
+    langIt: 'Italien',
+    langPt: 'Portugais',
+    langJa: 'Japonais',
+    langKo: 'Coréen',
+    windowsTitle: 'Fenêtres de pause ({tz} heure locale, {n} au total)',
+    pause: 'Pause',
+    resume: 'Reprendre',
+    removeTitle: 'Supprimer cette fenêtre',
+    addWindow: '+ Ajouter une fenêtre',
+    save: 'Enregistrer',
+    settingsTitle: 'Paramètres de l\u2019économie',
+    headerTitle: 'save-money : {status} (cliquer pour les paramètres)',
+    badgeLabel: 'Économie · {symbol} {text}',
+    sectionLabel: 'Économie',
+    settingsHeading: 'Extension save-money',
+  },
+  es: {
+    badgeDisabled: 'Desactivado',
+    badgePaused: 'En pausa',
+    badgeWarn: 'Pausa próxima',
+    badgeWorking: 'En funcionamiento',
+    bannerPaused: '⛔ En pausa: solicitudes al modelo suspendidas, sin coste.',
+    bannerAutoResume: ' se reanuda automáticamente',
+    bannerWarn: '⏳ Pausa en ',
+    bannerMinutes: ' min',
+    bannerMoment: 'un momento',
+    endThisWindow: 'Terminar este ahorro',
+    endWindowActive: '✅ Ha terminado este ahorro: ventana {a}-{b} omitida, se reanuda a las {c} (desactive y vuelva a activar «Activar» para restablecer).',
+    statusPrefix: 'Estado: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'Todas las solicitudes al modelo se suspenden antes de enviarse durante la ventana de pausa (sin coste) y se reanudan automáticamente al terminar; el contexto no se ve afectado. Pulse « Terminar este ahorro » para reanudar de inmediato omitiendo solo esta ventana.',
+    deepseekPreset: 'Ahorro DeepSeek con un clic',
+    presetExists: 'Las dos ventanas DeepSeek (margen de 2 min) ya existen; no se añadieron de nuevo. Marque « Activar ».',
+    presetUpgraded: '{n} ventana(s) antigua(s) actualizada(s) con margen; ',
+    presetAdded: '{n} ventana(s) DeepSeek añadida(s) (sin activar – marque « Activar »).',
+    applyFailed: 'Error al aplicar: ',
+    savedMsg: '{n} ventana(s) guardada(s).',
+    enable: 'Activar',
+    timezone: 'Zona horaria',
+    language: 'Idioma',
+    langAuto: 'Automático (navegador)',
+    langZh: 'Chino (simplificado)',
+    langZhTw: 'Chino (tradicional)',
+    langEn: 'Inglés',
+    langDe: 'Alemán',
+    langFr: 'Francés',
+    langEs: 'Español',
+    langIt: 'Italiano',
+    langPt: 'Portugués',
+    langJa: 'Japonés',
+    langKo: 'Coreano',
+    windowsTitle: 'Ventanas de pausa ({tz} hora local, {n} en total)',
+    pause: 'Pausa',
+    resume: 'Reanudar',
+    removeTitle: 'Eliminar esta ventana',
+    addWindow: '+ Añadir ventana',
+    save: 'Guardar',
+    settingsTitle: 'Ajustes del ahorro',
+    headerTitle: 'save-money: {status} (clic para ajustes)',
+    badgeLabel: 'Ahorro · {symbol} {text}',
+    sectionLabel: 'Ahorro',
+    settingsHeading: 'Extensión save-money',
+  },
+  it: {
+    badgeDisabled: 'Disattivato',
+    badgePaused: 'In pausa',
+    badgeWarn: 'Pausa imminente',
+    badgeWorking: 'In funzione',
+    bannerPaused: '⛔ In pausa: richieste al modello sospese, nessun costo.',
+    bannerAutoResume: ' riprende automaticamente',
+    bannerWarn: '⏳ Pausa tra ',
+    bannerMinutes: ' min',
+    bannerMoment: 'un attimo',
+    endThisWindow: 'Termina questa modalità di risparmio',
+    endWindowActive: '✅ Hai terminato questa modalità di risparmio: finestra {a}-{b} saltata, riprende alle {c} (disattiva e riattiva «Attiva» per azzerare).',
+    statusPrefix: 'Stato: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'Tutte le richieste al modello vengono sospese prima dell\u2019invio nella finestra di pausa (nessun costo) e riprendono automaticamente alla fine; il contesto resta invariato. Clicca su « Termina questa modalità di risparmio » per riprendere subito saltando solo questa finestra.',
+    deepseekPreset: 'Risparmio DeepSeek con un clic',
+    presetExists: 'Le due finestre DeepSeek (margine 2 min) esistono già; non aggiunte di nuovo. Spunta « Attiva ».',
+    presetUpgraded: '{n} vecchia/e finestra/e aggiornata/e con margine; ',
+    presetAdded: '{n} finestra/e DeepSeek aggiunta/e (non attiva/e – spunta « Attiva »).',
+    applyFailed: 'Applicazione fallita: ',
+    savedMsg: '{n} finestra/e salvata/e.',
+    enable: 'Attiva',
+    timezone: 'Fuso orario',
+    language: 'Lingua',
+    langAuto: 'Automatico (browser)',
+    langZh: 'Cinese (semplificato)',
+    langZhTw: 'Cinese (tradizionale)',
+    langEn: 'Inglese',
+    langDe: 'Tedesco',
+    langFr: 'Francese',
+    langEs: 'Spagnolo',
+    langIt: 'Italiano',
+    langPt: 'Portoghese',
+    langJa: 'Giapponese',
+    langKo: 'Coreano',
+    windowsTitle: 'Finestre di pausa ({tz} ora locale, {n} in totale)',
+    pause: 'Pausa',
+    resume: 'Riprendi',
+    removeTitle: 'Rimuovi questa finestra',
+    addWindow: '+ Aggiungi finestra',
+    save: 'Salva',
+    settingsTitle: 'Impostazioni risparmio',
+    headerTitle: 'save-money: {status} (clic per impostazioni)',
+    badgeLabel: 'Risparmio · {symbol} {text}',
+    sectionLabel: 'Risparmio',
+    settingsHeading: 'Estensione save-money',
+  },
+  pt: {
+    badgeDisabled: 'Desativado',
+    badgePaused: 'Em pausa',
+    badgeWarn: 'Pausa em breve',
+    badgeWorking: 'Em funcionamento',
+    bannerPaused: '⛔ Em pausa: solicitações ao modelo suspensas, sem custo.',
+    bannerAutoResume: ' retoma automaticamente',
+    bannerWarn: '⏳ Pausa em ',
+    bannerMinutes: ' min',
+    bannerMoment: 'um momento',
+    endThisWindow: 'Terminar este modo de economia',
+    endWindowActive: '✅ Você terminou este modo de economia: janela {a}-{b} ignorada, retoma às {c} (desative e reative «Ativar» para redefinir).',
+    statusPrefix: 'Estado: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'Todas as solicitações ao modelo são suspensas antes do envio na janela de pausa (sem custo) e retomam automaticamente no fim; o contexto é preservado. Clique em « Terminar este modo de economia » para retomar imediatamente ignorando apenas esta janela.',
+    deepseekPreset: 'Economia DeepSeek com um clique',
+    presetExists: 'As duas janelas DeepSeek (margem de 2 min) já existem; não foram adicionadas de novo. Marque « Ativar ».',
+    presetUpgraded: '{n} janela(s) antiga(s) atualizada(s) com margem; ',
+    presetAdded: '{n} janela(s) DeepSeek adicionada(s) (sem ativar – marque « Ativar »).',
+    applyFailed: 'Falha ao aplicar: ',
+    savedMsg: '{n} janela(s) salva(s).',
+    enable: 'Ativar',
+    timezone: 'Fuso horário',
+    language: 'Idioma',
+    langAuto: 'Automático (navegador)',
+    langZh: 'Chinês (simplificado)',
+    langZhTw: 'Chinês (tradicional)',
+    langEn: 'Inglês',
+    langDe: 'Alemão',
+    langFr: 'Francês',
+    langEs: 'Espanhol',
+    langIt: 'Italiano',
+    langPt: 'Português',
+    langJa: 'Japonês',
+    langKo: 'Coreano',
+    windowsTitle: 'Janelas de pausa ({tz} hora local, {n} no total)',
+    pause: 'Pausa',
+    resume: 'Retomar',
+    removeTitle: 'Remover esta janela',
+    addWindow: '+ Adicionar janela',
+    save: 'Salvar',
+    settingsTitle: 'Configurações da economia',
+    headerTitle: 'save-money: {status} (clique para configurações)',
+    badgeLabel: 'Economia · {symbol} {text}',
+    sectionLabel: 'Economia',
+    settingsHeading: 'Extensão save-money',
+  },
+  ja: {
+    badgeDisabled: '無効',
+    badgePaused: '一時停止中',
+    badgeWarn: 'まもなく一時停止',
+    badgeWorking: '稼働中',
+    bannerPaused: '⛔ 一時停止中:モデルへのリクエストを保留中、費用は発生しません。',
+    bannerAutoResume: ' 自動で再開',
+    bannerWarn: '⏳ 一時停止まであと ',
+    bannerMinutes: ' 分',
+    bannerMoment: 'もうすぐ',
+    endThisWindow: '今回の節約モードを終了',
+    endWindowActive: '✅ 今回の節約モードを終了しました:ウィンドウ {a}-{b} をスキップ、{c} に自動再開（「有効」をオフ→オンでリセット）。',
+    statusPrefix: '状態: ',
+    windowSuffix: ' （{a}-{b}）',
+    pausedNote: '一時停止ウィンドウ中は、すべてのモデルリクエストが送信前に保留されます（費用は発生しません）。ウィンドウ終了時に自動で再開され、コンテキストは影響を受けません。「今回の節約モードを終了」をクリックすると、このウィンドウだけをスキップしてすぐに再開します。',
+    deepseekPreset: 'ワンクリック DeepSeek 分時料金節約',
+    presetExists: 'DeepSeek プリセットの 2 ウィンドウ（2 分の余裕込み）は既に存在します。重複追加はしません。「有効」にチェックしてください。',
+    presetUpgraded: '旧ウィンドウ {n} 件を余裕付きにアップグレードしました。',
+    presetAdded: 'DeepSeek プリセットウィンドウを {n} 件追加しました（未有効。ご自身で「有効」にチェックしてください）。',
+    applyFailed: '適用に失敗しました:',
+    savedMsg: '{n} 個のウィンドウを保存しました。',
+    enable: '有効',
+    timezone: 'タイムゾーン',
+    language: '言語',
+    langAuto: '自動（ブラウザに従う）',
+    langZh: '中国語（簡体字）',
+    langZhTw: '中国語（繁体字）',
+    langEn: '英語',
+    langDe: 'ドイツ語',
+    langFr: 'フランス語',
+    langEs: 'スペイン語',
+    langIt: 'イタリア語',
+    langPt: 'ポルトガル語',
+    langJa: '日本語',
+    langKo: '韓国語',
+    windowsTitle: '一時停止ウィンドウ（{tz} 現地時間、全 {n} 件）',
+    pause: '一時停止',
+    resume: '再開',
+    removeTitle: 'このウィンドウを削除',
+    addWindow: '+ ウィンドウを追加',
+    save: '保存',
+    settingsTitle: '節約プラグイン設定',
+    headerTitle: 'save-money：{status}（クリックで設定）',
+    badgeLabel: '節約 · {symbol} {text}',
+    sectionLabel: '節約プラグイン',
+    settingsHeading: 'save-money 節約プラグイン',
+  },
+  ko: {
+    badgeDisabled: '비활성화됨',
+    badgePaused: '일시중지됨',
+    badgeWarn: '곧 일시중지',
+    badgeWorking: '작동 중',
+    bannerPaused: '⛔ 일시중지됨: 모델 요청이 보류되어 비용이 발생하지 않습니다.',
+    bannerAutoResume: ' 자동 재개',
+    bannerWarn: '⏳ 일시중지까지 ',
+    bannerMinutes: ' 분',
+    bannerMoment: '곧',
+    endThisWindow: '이번 절약 모드 종료',
+    endWindowActive: '✅ 이번 절약 모드를 종료했습니다: 창 {a}-{b} 건너뜀, {c}에 자동 재개（「활성화」를 껐다 켜면 초기화）.',
+    statusPrefix: '상태: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: '일시중지 창 동안 모든 모델 요청은 전송 전에 보류됩니다(비용 없음). 창이 끝나면 자동으로 재개되며 컨텍스트는 영향을 받지 않습니다. 「이번 절약 모드 종료」를 클릭하면 이 창만 건너뛰고 즉시 재개합니다.',
+    deepseekPreset: '원클릭 DeepSeek 시간대별 절약',
+    presetExists: 'DeepSeek 프리셋 창 2개(2분 여유 포함)가 이미 있습니다. 중복 추가하지 않았습니다. 「활성화」를 체크하세요.',
+    presetUpgraded: '이전 창 {n}개를 여유 포함 버전으로 업그레이드했습니다. ',
+    presetAdded: 'DeepSeek 프리셋 창 {n}개를 추가했습니다(비활성화 상태. 「활성화」를 직접 체크하세요).',
+    applyFailed: '적용 실패:',
+    savedMsg: '창 {n}개를 저장했습니다.',
+    enable: '활성화',
+    timezone: '시간대',
+    language: '언어',
+    langAuto: '자동(브라우저 따름)',
+    langZh: '중국어(간체)',
+    langZhTw: '중국어(번체)',
+    langEn: '영어',
+    langDe: '독일어',
+    langFr: '프랑스어',
+    langEs: '스페인어',
+    langIt: '이탈리아어',
+    langPt: '포르투갈어',
+    langJa: '일본어',
+    langKo: '한국어',
+    windowsTitle: '일시중지 창({tz} 현지 시간, 총 {n}개)',
+    pause: '일시중지',
+    resume: '재개',
+    removeTitle: '이 창 삭제',
+    addWindow: '+ 창 추가',
+    save: '저장',
+    settingsTitle: '절약 플러그인 설정',
+    headerTitle: 'save-money: {status}(클릭하여 설정)',
+    badgeLabel: '절약 · {symbol} {text}',
+    sectionLabel: '절약 플러그인',
+    settingsHeading: 'save-money 절약 플러그인',
+  },
+  'zh-TW': {
+    badgeDisabled: '未啟用',
+    badgePaused: '已暫停',
+    badgeWarn: '即將暫停',
+    badgeWorking: '運作中',
+    bannerPaused: '⛔ 已暫停：模型請求已掛起，不產生費用。',
+    bannerAutoResume: ' 自動繼續',
+    bannerWarn: '⏳ 距離暫停還有 ',
+    bannerMinutes: ' 分鐘',
+    bannerMoment: '片刻',
+    endThisWindow: '結束本次省錢模式',
+    endWindowActive: '✅ 您已結束本次省錢模式：視窗 {a}-{b} 已跳過，{c} 自動恢復省錢（重新關閉再勾選「啟用」可重設）。',
+    statusPrefix: '狀態：',
+    windowSuffix: '（{a}-{b}）',
+    pausedNote: '暫停視窗內所有模型請求在發出前被掛起（不產生費用），視窗結束自動繼續，上下文不受影響；點「結束本次省錢模式」可立即恢復並跳過本視窗（只影響目前視窗，下一視窗照常生效）。',
+    deepseekPreset: '一鍵 DeepSeek 分時計價省錢策略',
+    presetExists: 'DeepSeek 預設兩組視窗（含 2 分鐘餘量）已存在，未重複新增。勾選「啟用」即可生效。',
+    presetUpgraded: '已升級 {n} 組舊視窗為帶餘量視窗；',
+    presetAdded: '已新增 {n} 組 DeepSeek 預設視窗（未啟用，請自行勾選「啟用」）。',
+    applyFailed: '一鍵套用失敗：',
+    savedMsg: '已儲存 {n} 組視窗。',
+    enable: '啟用',
+    timezone: '時區',
+    language: '語言',
+    langAuto: '自動（跟隨瀏覽器）',
+    langZh: '中文（簡體）',
+    langZhTw: '中文（繁體）',
+    langEn: '英文',
+    langDe: '德文',
+    langFr: '法文',
+    langEs: '西班牙文',
+    langIt: '義大利文',
+    langPt: '葡萄牙文',
+    langJa: '日文',
+    langKo: '韓文',
+    windowsTitle: '暫停視窗（{tz} 牆上時間，共 {n} 組）',
+    pause: '暫停',
+    resume: '繼續',
+    removeTitle: '刪除該組',
+    addWindow: '+ 新增視窗',
+    save: '儲存',
+    settingsTitle: '省錢外掛設定',
+    headerTitle: 'save-money：{status}（點擊進入設定）',
+    badgeLabel: '省錢 · {symbol} {text}',
+    sectionLabel: '省錢外掛',
+    settingsHeading: 'save-money 省錢外掛',
+  },
 }
 
 function detectLang(): Lang {
   try {
     const l = (typeof navigator !== 'undefined' && navigator && navigator.language) || ''
-    if (/^zh/i.test(l)) return 'zh'
+    const tag = l.toLowerCase().replace(/_/g, '-')
+    if (/^zh/.test(tag)) {
+      // Traditional Chinese: zh-TW / zh-HK / zh-MO / zh-Hant* ; simplified otherwise
+      if (/zh-(tw|hk|mo|hant)/.test(tag)) return 'zh-TW'
+      return 'zh'
+    }
+    if (/^de/.test(tag)) return 'de'
+    if (/^fr/.test(tag)) return 'fr'
+    if (/^es/.test(tag)) return 'es'
+    if (/^it/.test(tag)) return 'it'
+    if (/^pt/.test(tag)) return 'pt'
+    if (/^ja/.test(tag)) return 'ja'
+    if (/^ko/.test(tag)) return 'ko'
   } catch (e) { /* fall through to en */ }
   return 'en'
 }
 // Language is reactive: currentLang starts from browser detection and is
-// overridden by the persisted config choice ('zh'/'en') or kept on 'auto'
-// (follow the browser) — see refresh() below and the settings dropdown.
+// overridden by the persisted config choice ('zh'/'zh-TW'/'en'/...) or kept on
+// 'auto' (follow the browser) — see refresh() below and the settings dropdown.
 let currentLang: Lang = detectLang()
 const resolveLang = (cfgLang: string | undefined | null): Lang => {
-  if (cfgLang === 'zh' || cfgLang === 'en') return cfgLang
+  if (cfgLang === 'zh' || cfgLang === 'zh-TW' || cfgLang === 'de' || cfgLang === 'fr' ||
+      cfgLang === 'es' || cfgLang === 'it' || cfgLang === 'pt' || cfgLang === 'ja' || cfgLang === 'ko') {
+    return cfgLang as Lang
+  }
+  if (cfgLang === 'en') return 'en'
   return detectLang()
 }
 const t = (key: string, vars?: Record<string, string | number>): string => {
@@ -179,6 +603,36 @@ const t = (key: string, vars?: Record<string, string | number>): string => {
     for (const k of Object.keys(vars)) s = s.split('{' + k + '}').join(String(vars[k]))
   }
   return s
+}
+
+// ---- 24 fixed whole-hour timezones (real timezone rules, DST-aware) ----
+// One representative per integer UTC offset (UTC-11 … UTC+12), fixed order.
+// The (UTC+X) label is computed live, so DST zones show their current offset
+// (e.g. Europe/London (UTC+1) in summer) while the picker stays stable.
+interface TzEntry { name: string; off: number }
+const ALL_TIMEZONES: TzEntry[] = (() => {
+  const ZONES = [
+    'Pacific/Pago_Pago', 'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles',
+    'America/Denver', 'America/Chicago', 'America/New_York', 'America/Halifax',
+    'America/Sao_Paulo', 'Atlantic/South_Georgia', 'Atlantic/Azores', 'UTC',
+    'Europe/London', 'Europe/Paris', 'Europe/Athens', 'Europe/Moscow',
+    'Asia/Dubai', 'Asia/Karachi', 'Asia/Dhaka', 'Asia/Bangkok',
+    'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Brisbane', 'Pacific/Auckland',
+  ]
+  const now = new Date()
+  return ZONES.map((n) => {
+    try { return { name: n, off: utcOffsetMinutes(n, now) * 60000 } }
+    catch (e) { return { name: n, off: NaN } }
+  })
+})()
+const TZ_OFF = new Map(ALL_TIMEZONES.map((x) => [x.name, x.off] as [string, number]))
+const fmtOff = (ms: number): string => {
+  const m = ms / 60000
+  const sign = m >= 0 ? '+' : '-'
+  const a = Math.abs(m)
+  const h = Math.floor(a / 60)
+  const mm = a % 60
+  return 'UTC' + sign + h + (mm > 0 ? ':' + String(mm).padStart(2, '0') : '')
 }
 
 return {
@@ -372,15 +826,34 @@ return {
         })),
         row(t('timezone'), React.createElement('select', {
           value: tz,
-          onChange: (e: any) => { setTz(e.target.value); void doConfigure({ timezone: e.target.value }) },
-          style: { padding: '3px 6px', fontSize: '13px' },
+          onChange: (e: any) => {
+            const v = e.target.value
+            if (!v || v === tz) return
+            const oldTz = tz
+            setTz(v)
+            // WYSIWYG: convert every window from the old timezone to the new
+            // one (real timezone rules, DST-aware; e.g. Beijing 08:58 ->
+            // London 01:58 in summer, 00:58 in winter). NOT saved yet — the
+            // bottom Save button persists timezone + converted times together.
+            setWins(wins.map((w: any) => {
+              const p = parseHHMM(String(w.pauseAt))
+              const r = parseHHMM(String(w.resumeAt))
+              return {
+                pauseAt: p === null ? String(w.pauseAt || '') : formatHHMM(convertHHMM(oldTz, v, p)),
+                resumeAt: r === null ? String(w.resumeAt || '') : formatHHMM(convertHHMM(oldTz, v, r)),
+              }
+            }))
+          },
+          style: { padding: '3px 6px', fontSize: '13px', maxWidth: '240px' },
         },
-          React.createElement('option', { value: 'Asia/Shanghai' }, 'Asia/Shanghai (UTC+8)'),
-          React.createElement('option', { value: 'UTC' }, 'UTC (+0)'),
-          React.createElement('option', { value: 'Asia/Tokyo' }, 'Asia/Tokyo (UTC+9)'),
-          React.createElement('option', { value: 'Europe/London' }, 'Europe/London'),
-          React.createElement('option', { value: 'America/New_York' }, 'America/New_York'),
-          React.createElement('option', { value: 'America/Los_Angeles' }, 'America/Los_Angeles'),
+          // Current timezone first, then the full IANA list sorted by offset
+          // (offset computed with today's rules, so DST zones move correctly).
+          [tz].concat(ALL_TIMEZONES.filter((x: TzEntry) => x.name !== tz).map((x: TzEntry) => x.name))
+            .map((n: string) => {
+              const off = TZ_OFF.get(n)
+              return React.createElement('option', { key: n, value: n },
+                n + (off !== undefined && !Number.isNaN(off) ? ' (' + fmtOff(off) + ')' : ''))
+            }),
         )),
         // Language: auto (follow the browser) by default; manual zh/en choice is
         // persisted into the host config (save-money.config.json, `lang` field)
@@ -397,7 +870,15 @@ return {
         },
           React.createElement('option', { value: 'auto' }, t('langAuto')),
           React.createElement('option', { value: 'zh' }, t('langZh')),
+          React.createElement('option', { value: 'zh-TW' }, t('langZhTw')),
           React.createElement('option', { value: 'en' }, t('langEn')),
+          React.createElement('option', { value: 'de' }, t('langDe')),
+          React.createElement('option', { value: 'fr' }, t('langFr')),
+          React.createElement('option', { value: 'es' }, t('langEs')),
+          React.createElement('option', { value: 'it' }, t('langIt')),
+          React.createElement('option', { value: 'pt' }, t('langPt')),
+          React.createElement('option', { value: 'ja' }, t('langJa')),
+          React.createElement('option', { value: 'ko' }, t('langKo')),
         )),
         React.createElement('div', { style: { marginTop: '12px', fontSize: '13px', fontWeight: 600 } },
           t('windowsTitle', { tz, n: wins.length })),

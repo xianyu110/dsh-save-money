@@ -4,7 +4,19 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — 1.2.0
+## [Unreleased] — 1.2.1
+
+### Added
+
+- **Timezone switching converts your windows**: change the timezone dropdown and every window time converts automatically (real timezone rules, daylight-saving aware; Beijing 08:58 becomes London 01:58 in summer / 00:58 in winter). It is saved together with the Save button.
+- **24 whole-hour timezones** in the dropdown (UTC-11 … UTC+12), one representative per offset, each showing its current UTC offset — no more 400-entry list.
+- **10 languages**: 简体中文, 繁體中文, English, Deutsch, Français, Español, Italiano, Português, 日本語, 한국어 — detected from your browser automatically, or chosen manually in settings.
+
+### Fixed
+
+- Corrected timezone offset math, including the ±12/13-hour boundary (e.g. New Zealand), so every timezone shows and converts accurately.
+
+## [1.2.0] — 2026-08-16
 
 ### Added
 
