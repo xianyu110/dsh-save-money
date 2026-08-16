@@ -1,12 +1,13 @@
 {
   "name": "dsh-save-money",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "DSH save-money plugin — time-window auto pause/resume for peak/off-peak API pricing (no requests sent while paused).",
   "type": "module",
   "main": "index.js",
   "files": [
     "index.js",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "client.js"
   ],
   "scripts": {
     "build": "node ../scripts/build.js && node ../scripts/make-plugin.js",
@@ -15,7 +16,14 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
     }
   },
-  "license": "MIT"
+  "license": "MIT",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js"
+  }
 }

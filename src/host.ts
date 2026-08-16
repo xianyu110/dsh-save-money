@@ -605,12 +605,52 @@ return {
       return out
     }
 
-    // ---- Host RPC (dynamic-plugin form only: the official module has no
-    //      Client half, so it registers tools via ctx.tools instead) ----
+    // ---- Host RPC (dynamic-plugin form: registered on the harness sandbox)
+    // ---- + HTTP endpoints (official bundle form: the bundled Client half
+    //      talks to the same-origin webServer; the dynamic Client half keeps
+    //      using the harness RPC below). Both are registered unconditionally
+    //      so a single Host body serves every deployment form.
     const harnessApi = typeof harness !== 'undefined' ? harness : null
     if (harnessApi) {
       ctx.effect(() => harnessApi.handle('save-money/status', async () => status(new Date())))
       ctx.effect(() => harnessApi.handle('save-money/configure', async (args: any) => applyConfig(unwrap(args) || {})))
+    }
+    const webServer = ctx.get('webServer')
+    if (webServer && typeof webServer.register === 'function') {
+      const sendJson = (res: any, code: number, obj: any) => {
+        res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify(obj))
+      }
+      ctx.effect(() => webServer.register({
+        kind: 'prefix',
+        path: '/save-money',
+        handler: async (req: any, res: any) => {
+          try {
+            const rawPath = String(req.url || '/').split('?')[0]
+            const path = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : rawPath
+            if (path === '/save-money/status') {
+              sendJson(res, 200, status(new Date()))
+              return
+            }
+            if (req.method === 'POST' && path === '/save-money/configure') {
+              let raw = ''
+              for await (const chunk of req) raw += chunk
+              let patch: any = {}
+              try { patch = JSON.parse(raw || '{}') } catch (e) { patch = {} }
+              sendJson(res, 200, applyConfig(patch))
+              return
+            }
+            if (req.method === 'POST' && path === '/save-money/end-window') {
+              for await (const _ of req) { /* drain */ }
+              sendJson(res, 200, await endWindowHandler())
+              return
+            }
+            sendJson(res, 404, { ok: false, message: 'not found: ' + path })
+          } catch (e: any) {
+            sendJson(res, 500, { ok: false, message: String((e && e.message) || e) })
+          }
+        },
+      }))
     }
     // UTC instant of a window's resumeAt (handles midnight-crossing windows).
     const endWindowUntilUTC = (w: TimeWindow, tz: string, baseWc: WallClock, dayOffset: number): number => {

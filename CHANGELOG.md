@@ -4,6 +4,12 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — 1.2.3
+
+### Added
+
+- **The official install form now includes the full interface** (status text, floating banner, settings page) right in the installation package: the browser loads the plugin UI automatically on startup, so installing with `dsh plugin add` (or `--patch`) gives you the complete plugin — no dynamic-plugin step or AI-assisted setup needed anymore. The dynamic-plugin form keeps working exactly as before.
+
 ## [Unreleased] — 1.2.2
 
 ### Fixed

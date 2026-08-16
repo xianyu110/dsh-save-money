@@ -81,7 +81,7 @@ The official DSH plugin form is a **module exporting `apply` + cordis.yml mounti
    # from source: pnpm dsh web --patch ./cordis.patch.yml
    ```
 
-   The plugin loads with the Web startup. **This form has no settings UI** — configure through the `save_money_configure` tool in a conversation (see [Dynamic tools](#dynamic-tools-host)), or edit `save-money.config.json` directly.
+   The plugin loads with the Web startup, interface included — the browser mounts the settings UI (status text, banner, settings page) automatically. Configure through the UI, the `save_money_configure` tool in a conversation, or by editing `save-money.config.json`.
 
 ### Path 2: bundle + `dsh plugin add` (official, distributable)
 
@@ -93,12 +93,12 @@ The official DSH plugin form is a **module exporting `apply` + cordis.yml mounti
    npm pack             # auto-builds the TS and produces dsh-save-money-*.tgz
    ```
 
-   `plugin/` is the standard bundle layout: `package.json` declares `dsh.bundle.patch`, `cordis.patch.yml` inserts the plugin row, `index.js` is the plugin module.
+   `plugin/` is the standard bundle layout: `package.json` declares `dsh.bundle.patch` + `dsh.client`, `cordis.patch.yml` inserts the plugin row, `index.js` is the Host module and `client.js` the browser UI bundle.
 
 2. Install into a profile (first run initializes with `@deepseek-ai/dsh-base`):
 
    ```sh
-   dsh plugin --profile web add ./dsh-save-money-1.2.2.tgz
+   dsh plugin --profile web add ./dsh-save-money-1.2.3.tgz
    ```
 
    Git install also works: `dsh plugin --profile web add github:you/dsh-save-money#<sha>` (git install requires `prepare` builds and `allowBuilds`, see the [DSH publish tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)).
@@ -110,7 +110,7 @@ The official DSH plugin form is a **module exporting `apply` + cordis.yml mounti
    dsh --profile web
    ```
 
-   In a conversation, ask the AI to run `save_money_status` to confirm the plugin is live (this form has no UI).
+   In a conversation, ask the AI to run `save_money_status` to confirm the plugin is live.
 
    Uninstall: `dsh plugin --profile web remove dsh-save-money`.
 
@@ -128,24 +128,24 @@ cordis_define(
 cordis_run(...)   # the Client half needs one-time approval
 ```
 
-> Note: the `--patch` and bundle forms mount the **Host half** (scheduling, gate, goal freeze, tools registered with the tool registry, persistence — fully functional). They have **no settings UI and no RPC**: the session-header status text, banner and settings popover, and the `harness` RPC bridge, exist only in the dynamic-plugin form (Path 3). In the official forms, manage settings through the tools in a conversation or by editing the config file. Bundling the Client half officially is future work.
+> Note: both the `--patch` and bundle forms mount the **full plugin** — the Host half (scheduling, gate, goal freeze, tools registered with the tool registry, HTTP endpoints) **and the Client half** (session-header status text, banner, settings popover), which the browser loads automatically from the package's `dsh.client` declaration. The dynamic-plugin form (Path 3) behaves the same and also provides the `harness` RPC bridge.
 
 ### Config persistence (all forms)
 
-The plugin writes its settings to **the workspace root** `save-money.config.json` (excluded by `.gitignore`, never committed): loaded automatically at startup, persisted immediately on every change. A browser refresh only affects the Client UI in the dynamic-plugin form (re-run `cordis_run` to restore); in the `--patch` / bundle forms the plugin lives with the process, so config and scheduling are unaffected by refreshes.
+The plugin writes its settings to **the workspace root** `save-money.config.json` (excluded by `.gitignore`, never committed): loaded automatically at startup, persisted immediately on every change. The UI is mounted by the browser on page load in every form, so a refresh keeps the plugin and its settings working; the dynamic-plugin form additionally survives until the process restarts (re-run `cordis_run` to restore).
 
 ### Troubleshooting
 
 | Symptom | Cause & fix |
 | --- | --- |
 | Plugin fails to load with `ReferenceError: harness is not defined` | You are running a build older than **v1.2.2** — the official form was fixed in v1.2.2. Rebuild (`npm run prepare`), re-pack, reinstall, and restart. |
-| No status text / banner / settings page after install | Expected: the official forms (`--patch` / bundle) have no Client UI. Use the tools in a conversation (`save_money_configure`, `save_money_status`) or edit `save-money.config.json`. |
+| Installed but no status text / banner / settings page | Restart the browser page after installing (the Client half is discovered on startup). If it still does not appear, you are running a build older than **v1.2.3** — upgrade. |
 
 ---
 
 ## Quick start
 
-> The steps below assume the dynamic-plugin form (Path 3) with the settings UI. In the official forms (`--patch` / bundle) there is no UI: ask the AI in a conversation to run `save_money_configure`, or edit `save-money.config.json` (manual edits are read at startup — restart DSH to apply).
+> The steps below apply to every install form — the official forms (`--patch` / bundle) include the same settings UI as the dynamic-plugin form (Path 3). You can also configure through the tools in a conversation (`save_money_configure`, `save_money_status`).
 
 1. After install and activation, click the **"Save · 🟢 Working"** status text in the top-right of the session header (next to the Session log) to open settings (the single persistent entry); or use the **system settings page** (sidebar → Settings → **Save-money**);
 2. Click **One-click DeepSeek peak/off-peak savings** → the peak windows are added automatically (**08:58–12:02, 13:58–18:02** Beijing time, with the 2-minute boundary margin);
@@ -173,6 +173,6 @@ The plugin writes its settings to **the workspace root** `save-money.config.json
 
 ## Docs & License
 
-- **Repository layout**: `src/core.ts` (pure logic, unit-tested) / `src/host.ts` / `src/client.ts` (TypeScript plugin sources, single source of truth), `tests/` (unit tests, `npm test`), `scripts/build.js` (TS → JS plugin bodies), `scripts/typecheck.js` (type check), `scripts/make-plugin.js` (official-module generator), `plugin/` (bundle: `package.json` + `cordis.patch.yml` + `index.js`), `cordis.patch.yml` (quick-try overlay), `package.json` / `tsconfig.json` (build & type config), `dist/` (build output, gitignored), `save-money.config.json` (runtime config, gitignored)
+- **Repository layout**: `src/core.ts` (pure logic, unit-tested) / `src/host.ts` / `src/client.ts` (TypeScript plugin sources, single source of truth), `tests/` (unit tests, `npm test`), `scripts/build.js` (TS → JS plugin bodies), `scripts/typecheck.js` (type check), `scripts/make-plugin.js` (official bundle generator), `plugin/` (bundle: `package.json` + `cordis.patch.yml` + `index.js` + `client.js`), `cordis.patch.yml` (quick-try overlay), `package.json` / `tsconfig.json` (build & type config), `dist/` (build output, gitignored), `save-money.config.json` (runtime config, gitignored)
 - **i18n**: UI strings are in the `I18N` dictionary in `src/client.ts` (10 languages: zh, zh-TW, en, de, fr, es, it, pt, ja, ko); language is auto-detected from the browser locale, manually selectable (Auto + 10), and the choice persists in the config
 - **License**: MIT (see [`LICENSE`](./LICENSE))

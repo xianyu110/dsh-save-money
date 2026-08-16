@@ -34,6 +34,7 @@
 declare const React: any
 declare const host: any
 declare const navigator: { language?: string } | undefined
+declare const fetch: any
 // Core helpers (src/core.ts) are inlined into this body at build time
 // (scripts/build.js), the declarations below keep this file type-checked.
 declare function parseHHMM(s: string): number | null
@@ -640,9 +641,26 @@ return {
   async apply(ctx: any) {
     const slots = ctx.get('slots')
     const timer = ctx.timer
-    if (!React || !host || !slots || !timer) {
+    if (!React || !slots || !timer) {
       console.error('[save-money] client apply aborted')
       return
+    }
+
+    // Unified Host call: the dynamic-plugin Client half talks to the host via
+    // the harness RPC global (`host.call`); the official bundled Client half
+    // (plugin/client.js, no harness global) talks to the same-origin
+    // webServer HTTP endpoints registered by the Host half (/save-money/*).
+    const callHost = async (method: string, args?: any): Promise<any> => {
+      if (typeof host !== 'undefined' && host && typeof host.call === 'function') {
+        return host.call(method, args)
+      }
+      const res = await fetch('/' + method, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: args === undefined ? undefined : JSON.stringify(args),
+      })
+      if (!res.ok) throw new Error('save-money http ' + res.status)
+      return res.json()
     }
 
     // Detect the browser timezone, fall back to Beijing time
@@ -655,7 +673,7 @@ return {
     let snapshot: any = { enabled: false, state: 'NORMAL', reason: null, window: null, minutesToPause: null, endWindowUntil: null, pauseRecord: null, config: null }
     const refresh = async () => {
       try {
-        const s = await host.call('save-money/status')
+        const s = await callHost('save-money/status')
         if (s && typeof s === 'object') {
           snapshot = s
           // Keep the UI language in sync with the persisted config choice
@@ -683,10 +701,10 @@ return {
     // Per-registration actions: doConfigure = RPC + immediate refresh
     const makeActions = (setSt: any) => ({
       doConfigure: async (patch: any) => {
-        try { await host.call('save-money/configure', patch); await refresh(); setSt({ ...snapshot }) } catch (e) {}
+        try { await callHost('save-money/configure', patch); await refresh(); setSt({ ...snapshot }) } catch (e) {}
       },
       doEndWindow: async () => {
-        try { await host.call('save-money/end-window'); await refresh(); setSt({ ...snapshot }) } catch (e) {}
+        try { await callHost('save-money/end-window'); await refresh(); setSt({ ...snapshot }) } catch (e) {}
       },
     })
 
