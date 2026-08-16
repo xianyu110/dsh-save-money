@@ -53,17 +53,39 @@ stateDiagram-v2
 
 ## Install
 
-The official DSH plugin form is a **module exporting `apply` + cordis.yml mounting** (see the [DSH official tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)). This repository follows that form and offers two install paths (recommended), plus one dynamic-plugin debug form.
+The official DSH plugin form is a **module exporting `apply` + cordis.yml mounting** (see the [DSH official tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)). This repository follows that form and offers two official install paths plus one dynamic-plugin debug form. The official forms include the **full plugin**: Host logic (scheduling, gate, goal freeze, tools, HTTP endpoints) **and** the browser UI (status text, banner, settings page), which loads automatically — no AI-assisted setup needed.
 
-> Prerequisite: `dsh` CLI installed (or check out the [deepseek-harness source](https://github.com/deepseek-ai/deepseek-harness) and run with `pnpm dsh`). The repo ships a prebuilt `plugin/index.js` — installable without building; to use the latest code, run `npm install` first and rebuild.
+### 0. Run DSH itself first
+
+The plugin runs inside DSH, so DSH must run before anything below. Two ways:
+
+**A. Installed CLI** (easiest, needs Node.js):
+
+```sh
+npx @deepseek-ai/dsh web        # starts the Web UI at http://127.0.0.1:3080
+```
+
+**B. From source** (e.g. on a Raspberry Pi; `dsh` is NOT a global command — you must run `pnpm dsh` **inside** the checked-out `deepseek-harness` directory):
+
+```sh
+git clone https://github.com/deepseek-ai/deepseek-harness.git
+cd deepseek-harness
+pnpm install
+pnpm run build
+pnpm dsh web                    # inside this directory only
+```
+
+> In source mode, never type bare `dsh ...` — it is not on PATH (`command not found: dsh`). Use `pnpm dsh ...` from the `deepseek-harness` directory, or `./node_modules/.bin/dsh ...`.
 
 ### Path 1: `--patch` quick try (official, loads local source)
+
+Good for trying the plugin on the same machine where you keep this repository.
 
 1. (Optional) Rebuild the latest plugin module — a fresh clone needs the build deps first:
 
    ```sh
    npm install          # first clone: installs typescript and friends
-   npm run prepare      # one step: src/*.ts -> dist/*.js -> plugin/index.js
+   npm run prepare      # one step: src/*.ts -> dist/*.js -> plugin/index.js + plugin/client.js
    ```
 
 2. Edit `cordis.patch.yml`, replacing `<REPO_ROOT>` with the repository's absolute path:
@@ -81,38 +103,67 @@ The official DSH plugin form is a **module exporting `apply` + cordis.yml mounti
    # from source: pnpm dsh web --patch ./cordis.patch.yml
    ```
 
-   The plugin loads with the Web startup, interface included — the browser mounts the settings UI (status text, banner, settings page) automatically. Configure through the UI, the `save_money_configure` tool in a conversation, or by editing `save-money.config.json`.
+4. Open the browser at the printed URL (default http://127.0.0.1:3080) — the "Save" status text appears in the session header top-right. No extra step needed.
 
-### Path 2: bundle + `dsh plugin add` (official, distributable)
+### Path 2: bundle + `dsh plugin add` (official, distributable — recommended for another machine / the Pi)
 
-1. Pack a bundle (`npm pack` inside `plugin/` runs its `prepare` build automatically):
+The bundle is a small `.tgz` that you build once and install anywhere. **You do not clone this repository on the target machine** — DSH installs the plugin into its own profile (`~/.dsh/profiles/web/node_modules/`).
 
-   ```sh
-   npm install          # first clone
-   cd plugin
-   npm pack             # auto-builds the TS and produces dsh-save-money-*.tgz
-   ```
+**Step 1 — build & pack the bundle** (on any machine with this repository):
 
-   `plugin/` is the standard bundle layout: `package.json` declares `dsh.bundle.patch` + `dsh.client`, `cordis.patch.yml` inserts the plugin row, `index.js` is the Host module and `client.js` the browser UI bundle.
+```sh
+cd dsh-save-money
+npm install             # first clone only (typescript dev dependency)
+cd plugin
+npm pack                # runs the prepare build automatically; produces dsh-save-money-1.2.5.tgz
+```
 
-2. Install into a profile (first run initializes with `@deepseek-ai/dsh-base`):
+`plugin/` is the standard bundle layout: `package.json` declares `dsh.bundle.patch` + `dsh.client`, `cordis.patch.yml` inserts the plugin row, `index.js` is the Host module and `client.js` the browser UI bundle.
 
-   ```sh
-   dsh plugin --profile web add ./dsh-save-money-1.2.5.tgz
-   ```
+**Step 2 — copy the tgz to the target machine** (scp / USB stick / however you move files):
 
-   Git install also works: `dsh plugin --profile web add github:you/dsh-save-money#<sha>` (git install requires `prepare` builds and `allowBuilds`, see the [DSH publish tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)).
+```sh
+scp dsh-save-money/plugin/dsh-save-money-1.2.5.tgz pi@<pi-ip>:~/
+```
 
-3. Verify the layer mounted, then start:
+**Step 3 — install into a profile** (from the `deepseek-harness` directory on the target; first run initializes the profile with `@deepseek-ai/dsh-base`):
 
-   ```sh
-   dsh --profile web --dump-config   # should show the "# == dsh-save-money" layer
-   dsh --profile web
-   ```
+```sh
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.2.5.tgz
+# installed CLI form: dsh plugin --profile web add ./dsh-save-money-1.2.5.tgz
+```
 
-   In a conversation, ask the AI to run `save_money_status` to confirm the plugin is live.
+Git install also works: `dsh plugin --profile web add github:you/dsh-save-money#<sha>` (git install requires `prepare` builds and `allowBuilds`, see the [DSH publish tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)).
 
-   Uninstall: `dsh plugin --profile web remove dsh-save-money`.
+**Step 4 — verify the layer mounted, then start** (fully restart DSH, don't just refresh the page):
+
+```sh
+pnpm dsh --profile web --dump-config   # should show a "# == dsh-save-money" layer at the end
+pnpm dsh --profile web                 # Ctrl+C to stop an already-running instance first
+```
+
+**Step 5 — open the browser** at http://127.0.0.1:3080 and **hard-refresh** (Ctrl+Shift+R). The "Save" status text appears in the session header; click it for the settings. You can also confirm the plugin is live from a conversation (`save_money_status`).
+
+**Upgrading to a newer version** (e.g. 1.2.4 → 1.2.5):
+
+```sh
+# on the build machine:
+cd dsh-save-money && git pull && cd plugin && npm pack    # fresh dsh-save-money-<new>.tgz
+scp dsh-save-money/plugin/dsh-save-money-1.2.5.tgz pi@<pi-ip>:~/
+
+# on the target:
+pnpm dsh plugin --profile web remove dsh-save-money
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.2.5.tgz
+pnpm dsh --profile web                # restart, then hard-refresh the browser
+```
+
+Your settings survive upgrades (they live in `save-money.config.json`, untouched by remove/re-add).
+
+**Uninstalling:**
+
+```sh
+pnpm dsh plugin --profile web remove dsh-save-money
+```
 
 ### Path 3: dynamic Cordis plugin (dev / debug form, not officially recommended)
 
@@ -128,8 +179,6 @@ cordis_define(
 cordis_run(...)   # the Client half needs one-time approval
 ```
 
-> Note: both the `--patch` and bundle forms mount the **full plugin** — the Host half (scheduling, gate, goal freeze, tools registered with the tool registry, HTTP endpoints) **and the Client half** (session-header status text, banner, settings popover), which the browser loads automatically from the package's `dsh.client` declaration. The dynamic-plugin form (Path 3) behaves the same and also provides the `harness` RPC bridge.
-
 ### Config persistence (all forms)
 
 The plugin writes its settings to **the workspace root** `save-money.config.json` (excluded by `.gitignore`, never committed): loaded automatically at startup, persisted immediately on every change. The UI is mounted by the browser on page load in every form, so a refresh keeps the plugin and its settings working; the dynamic-plugin form additionally survives until the process restarts (re-run `cordis_run` to restore).
@@ -138,8 +187,11 @@ The plugin writes its settings to **the workspace root** `save-money.config.json
 
 | Symptom | Cause & fix |
 | --- | --- |
+| `zsh: command not found: dsh` / `dsh: command not found` | You are running DSH from source — `dsh` is only available inside the `deepseek-harness` directory as `pnpm dsh ...` (or `./node_modules/.bin/dsh`). Never use bare `dsh` outside it. |
 | Plugin fails to load with `ReferenceError: harness is not defined` | You are running a build older than **v1.2.2** — the official form was fixed in v1.2.2. Rebuild (`npm run prepare`), re-pack, reinstall, and restart. |
-| Installed but no status text / banner / settings page | Restart the browser page after installing (the Client half is discovered on startup). If it still does not appear, you are running a build older than **v1.2.4** — upgrade. |
+| Installed but no status text / banner / settings page | Fully restart DSH (Ctrl+C, start again) and **hard-refresh** the browser (Ctrl+Shift+R) — the Client half is discovered at startup. If it still does not appear, you are running a build older than **v1.2.4** — upgrade. |
+| UI shows but the **Enable checkbox (and other settings) do nothing** | You are running a build older than **v1.2.5** — the plugin used to start before the Web server was ready, so UI requests could not reach it. Upgrade to ≥ v1.2.5 and restart. |
+| Where is my config file? | `save-money.config.json` in the workspace root (the directory DSH was started from, or the session workspace). Deleting it resets all settings. |
 
 ---
 

@@ -57,17 +57,39 @@ stateDiagram-v2
 
 ## 安装
 
-DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml 挂载**（见 [DSH 官方教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)）。本仓库按该形态提供两种安装路径（推荐），另保留一种动态插件调试形态。
+DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml 挂载**（见 [DSH 官方教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)）。本仓库按该形态提供两种安装路径（推荐），另保留一种动态插件调试形态。官方形态安装的是**完整插件**：Host 半边（调度、闸门、目标冻结、工具、HTTP 端点）**和**浏览器界面（状态文字、横幅、设置页）都在，界面自动加载，**不需要 AI 辅助安装**。
 
-> 前置：已安装 `dsh` CLI（或从 [deepseek-harness 源码](https://github.com/deepseek-ai/deepseek-harness) 检出并用 `pnpm dsh` 运行）。仓库已附带编译产物 `plugin/index.js`，**免构建即可安装**；要用最新代码则先 `npm install` 再重新构建。
+### 第 0 步：先让 DSH 跑起来
+
+插件运行在 DSH 里面，所以下面的操作都以 DSH 能运行为前提。两种方式：
+
+**方式 A：安装版 CLI**（最简单，需要 Node.js）：
+
+```sh
+npx @deepseek-ai/dsh web        # 启动 Web 界面，默认 http://127.0.0.1:3080
+```
+
+**方式 B：源码编译**（例如树莓派；注意 `dsh` 不是全局命令，必须**在 deepseek-harness 目录里面**用 `pnpm dsh`）：
+
+```sh
+git clone https://github.com/deepseek-ai/deepseek-harness.git
+cd deepseek-harness
+pnpm install
+pnpm run build
+pnpm dsh web                    # 只能在当前目录里用
+```
+
+> 源码方式下，**不要**在目录外直接敲 `dsh ...`——它不在 PATH 里（会报 `command not found: dsh`）。一律在 `deepseek-harness` 目录内用 `pnpm dsh ...`（或 `./node_modules/.bin/dsh ...`）。
 
 ### 方式一：`--patch` 快速试用（官方推荐，本地源码加载）
+
+适合在本仓库所在机器上直接试用。
 
 1. （可选）重新构建最新版插件模块——首次克隆需先安装构建依赖：
 
    ```sh
    npm install          # 首次克隆需要（typescript 等构建依赖）
-   npm run prepare      # 一步完成：src/*.ts → dist/*.js → plugin/index.js
+   npm run prepare      # 一步完成：src/*.ts → dist/*.js → plugin/index.js + plugin/client.js
    ```
 
 2. 编辑 `cordis.patch.yml`，把 `<REPO_ROOT>` 替换为仓库绝对路径：
@@ -85,38 +107,67 @@ DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml
    # 源码运行：pnpm dsh web --patch ./cordis.patch.yml
    ```
 
-   插件随 Web 启动加载,界面完整可用——浏览器会自动挂载设置界面(状态文字、横幅、设置页)。可通过界面、对话中的 `save_money_configure` 工具或直接编辑 `save-money.config.json` 进行配置。
+4. 打开浏览器访问打印出的地址（默认 http://127.0.0.1:3080），会话头部右上角即出现"省钱"状态文字。无需其他步骤。
 
-### 方式二：bundle 打包 + `dsh plugin add` 正式安装（官方推荐，可分发）
+### 方式二：bundle 打包 + `dsh plugin add` 正式安装（官方推荐，可分发，适合另一台机器 / 树莓派）
 
-1. 打包成 bundle（`cd plugin` 后 `npm pack` 会自动执行其 `prepare` 构建）：
+bundle 是一个很小的 `.tgz`，在一台机器上打出来，装到任何机器上。**目标机器不需要克隆本仓库**——DSH 会把插件装进它自己的 profile（`~/.dsh/profiles/web/node_modules/`）。
 
-   ```sh
-   npm install          # 首次克隆需要
-   cd plugin
-   npm pack             # 自动构建 TS 并产出 dsh-save-money-*.tgz
-   ```
+**第 1 步——编译并打包**（在任意有本仓库的机器上）：
 
-   `plugin/` 目录就是标准 bundle 结构：`package.json` 声明 `dsh.bundle.patch` 与 `dsh.client`，`cordis.patch.yml` 插入插件行，`index.js` 为 Host 模块，`client.js` 为浏览器界面 bundle。
+```sh
+cd dsh-save-money
+npm install             # 仅首次克隆需要（typescript 开发依赖）
+cd plugin
+npm pack                # 自动执行 prepare 构建；产出 dsh-save-money-1.2.5.tgz
+```
 
-2. 安装进 profile（首次会以 `@deepseek-ai/dsh-base` 初始化）：
+`plugin/` 目录就是标准 bundle 结构：`package.json` 声明 `dsh.bundle.patch` 与 `dsh.client`，`cordis.patch.yml` 插入插件行，`index.js` 为 Host 模块，`client.js` 为浏览器界面 bundle。
 
-   ```sh
-   dsh plugin --profile web add ./dsh-save-money-1.2.5.tgz
-   ```
+**第 2 步——把 tgz 拷到目标机器**（scp / U 盘 / 任意方式）：
 
-   也可从 git 安装：`dsh plugin --profile web add github:you/dsh-save-money#<sha>`（git 安装需要 `prepare` 构建与 `allowBuilds` 放行，见 [DSH 发布教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)）。
+```sh
+scp dsh-save-money/plugin/dsh-save-money-1.2.5.tgz pi@<树莓派IP>:~/
+```
 
-3. 验证层已挂载后启动：
+**第 3 步——安装进 profile**（在目标机器的 `deepseek-harness` 目录内执行；首次运行会以 `@deepseek-ai/dsh-base` 初始化 profile）：
 
-   ```sh
-   dsh --profile web --dump-config   # 应出现 "# == dsh-save-money" 层
-   dsh --profile web
-   ```
+```sh
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.2.5.tgz
+# 安装版 CLI：dsh plugin --profile web add ./dsh-save-money-1.2.5.tgz
+```
 
-   在对话中让 AI 执行 `save_money_status` 可确认插件已加载。
+也可从 git 安装：`dsh plugin --profile web add github:you/dsh-save-money#<sha>`（git 安装需要 `prepare` 构建与 `allowBuilds` 放行，见 [DSH 发布教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)）。
 
-   卸载：`dsh plugin --profile web remove dsh-save-money`。
+**第 4 步——验证层已挂载，然后启动**（**必须完全重启 DSH**，不是刷新页面）：
+
+```sh
+pnpm dsh --profile web --dump-config   # 末尾应出现 "# == dsh-save-money" 层
+pnpm dsh --profile web                 # 若已有实例在跑，先 Ctrl+C 停掉
+```
+
+**第 5 步——打开浏览器**访问 http://127.0.0.1:3080 并**强制刷新**（Ctrl+Shift+R）。会话头部出现"省钱"状态文字，点击进入设置；也可在对话中让 AI 执行 `save_money_status` 确认插件已加载。
+
+**升级到新版本**（例如 1.2.4 → 1.2.5）：
+
+```sh
+# 在打包机上：
+cd dsh-save-money && git pull && cd plugin && npm pack    # 产出新的 dsh-save-money-<新版本>.tgz
+scp dsh-save-money/plugin/dsh-save-money-1.2.5.tgz pi@<树莓派IP>:~/
+
+# 在目标机器上：
+pnpm dsh plugin --profile web remove dsh-save-money
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.2.5.tgz
+pnpm dsh --profile web                # 重启，然后强制刷新浏览器
+```
+
+你的设置会保留（存在 `save-money.config.json` 里，卸载/重装不会动它）。
+
+**卸载：**
+
+```sh
+pnpm dsh plugin --profile web remove dsh-save-money
+```
 
 ### 方式三：动态 Cordis 插件（开发 / 调试形态，非官方推荐）
 
@@ -132,8 +183,6 @@ cordis_define(
 cordis_run(...)   # Client 半边需要一次授权
 ```
 
-> 说明：`--patch` 与 bundle 形态挂载的是**完整插件**——Host 半边（调度、闸门、目标冻结、经工具注册表注册的工具、HTTP 端点）**和 Client 半边**（会话头部状态文字、横幅、设置浮层）都在：浏览器根据包的 `dsh.client` 声明自动加载界面。动态插件形态（方式三）行为相同，并额外提供 `harness` RPC 桥。
-
 ### 配置持久化（所有形态通用）
 
 插件把设置写入**工作区根目录**的 `save-money.config.json`（已被 `.gitignore` 排除，不入库）：启动时自动加载，每次配置变更立即落盘。所有安装形态下界面都在页面加载时由浏览器挂载，刷新后插件与设置保持正常；动态插件形态额外随进程存在（重启后重新 `cordis_run` 即恢复）。
@@ -142,8 +191,11 @@ cordis_run(...)   # Client 半边需要一次授权
 
 | 现象 | 原因与解决 |
 | --- | --- |
+| `zsh: command not found: dsh` / `dsh: command not found` | 你用的是源码方式运行 DSH——`dsh` 只在 `deepseek-harness` 目录内可用（`pnpm dsh ...` 或 `./node_modules/.bin/dsh`），不要在目录外使用裸 `dsh`。 |
 | 插件加载失败，报 `ReferenceError: harness is not defined` | 使用的是 **v1.2.2 之前**的构建（官方形态在 v1.2.2 修复）。重新构建（`npm run prepare`）、重新打包安装后重启。 |
-| 安装后没有状态文字 / 横幅 / 设置页 | 安装完成后刷新浏览器页面（Client 半边在启动时发现）。若仍不出现,说明是 **v1.2.4 之前**的构建——请升级。 |
+| 安装后没有状态文字 / 横幅 / 设置页 | **完全重启 DSH**（Ctrl+C 停掉再启动）并**强制刷新浏览器**（Ctrl+Shift+R）——界面在启动时发现。若仍不出现，说明是 **v1.2.4 之前**的构建——请升级。 |
+| 界面显示了，但**「启用」勾选不上 / 设置点不动** | 使用的是 **v1.2.5 之前**的构建——旧版插件可能早于 Web 服务就绪，界面请求到达不了插件。升级到 v1.2.5 及以上并重启。 |
+| 配置文件在哪？ | 工作区根目录的 `save-money.config.json`（DSH 启动目录或会话工作区）。删除它即恢复默认设置。 |
 
 ---
 
