@@ -4,6 +4,15 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-08-17
+
+### Added
+
+- **Account balance display** (official DeepSeek API): your current balance appears next to the status text in the header, with automatic currency symbol (¥ / $ / €…) and theme-adaptive color. Off by default — tick "Show balance" in settings to enable.
+- **Balance auto-refresh**: refreshed immediately every time you send a message, and automatically every 5 minutes.
+- **Spend statistics**: the backend samples the balance every 5 minutes (288 points covering the last 24 hours); hovering the balance shows how much was spent in the last 1 hour / 10 minutes / 24 hours; balance increases (e.g. top-ups, refunds) show as "+amount".
+- **Custom hover card**: balance details and spend statistics are now a multi-line card that follows the mouse, extends left from the cursor and never leaves the viewport (replacing the native browser tooltip, which got clipped at the screen edge).
+
 ## [Unreleased] — 1.2.5
 
 ### Fixed

@@ -24,6 +24,8 @@ DSH（DeepSeek Harness）**省钱插件** —— 自定义"暂停 / 继续"时�
 - **时区支持**：IANA 时区下拉，浏览器自动探测、失败回退北京时间（+8）；UTC 等价投影校对（北京 09:00 == UTC 01:00）；
 - **一键 DeepSeek 策略**：去重追加高峰窗口（**08:58–12:02、13:58–18:02**，暂停提前 2 分钟、继续延后 2 分钟的边界余量），不自动启用，由你决定；旧版无余量窗口一键时自动升级；
 - **配置持久化**：所有设置自动落盘到工作区文件 `save-money.config.json`（已 gitignore），浏览器刷新、插件停用再激活后配置依然保留，启动时自动加载并（可选）对账恢复暂停中的目标；
+- **账户余额显示（可选）**：勾选设置里的「显示余额」后，头部状态文字旁显示 DeepSeek 官方账户余额（货币符号自动识别、颜色随亮暗主题自适应）。默认关闭；只在当前模型指向 DeepSeek 官方 API 时显示；
+- **消费统计**：开启余额显示后，后端每 5 分钟采样一次余额（288 个点覆盖最近 24 小时）。把鼠标悬停在余额上，即可看到**最近 1 小时 / 10 分钟 / 24 小时消费了多少钱**（充值、退款导致的余额回升显示为「+金额」）；
 - **辅助定位**：不锁屏、不遮挡、不阻止任何用户操作——只暂停目标的自动续跑，手动交互始终放行。
 
 ## 工作原理
@@ -57,7 +59,7 @@ stateDiagram-v2
 
 ## 安装
 
-DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml 挂载**（见 [DSH 官方教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)）。本仓库按该形态提供两种安装路径（推荐），另保留一种动态插件调试形态。官方形态安装的是**完整插件**：Host 半边（调度、闸门、目标冻结、工具、HTTP 端点）**和**浏览器界面（状态文字、横幅、设置页）都在，界面自动加载，**不需要 AI 辅助安装**。
+DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml 挂载**（见 [DSH 官方教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)）。本仓库提供三种安装方式：两种官方安装路径（`--patch` 快速试用、bundle 打包分发）+ 一种开发调试形态（link + HMR 热重载）。官方形态安装的是**完整插件**：Host 半边（调度、闸门、目标冻结、工具、HTTP 端点）**和**浏览器界面（状态文字、横幅、设置页）都在，界面自动加载，**不需要 AI 辅助安装**。
 
 ### 第 0 步：先让 DSH 跑起来
 
@@ -92,7 +94,7 @@ pnpm dsh web                    # 只能在当前目录里用
    npm run prepare      # 一步完成：src/*.ts → dist/*.js → plugin/index.js + plugin/client.js
    ```
 
-2. 编辑 `cordis.patch.yml`，把 `<REPO_ROOT>` 替换为仓库绝对路径：
+2. 编辑 `cordis.patch.yml`，把 `<REPO_ROOT>` 替换为仓库绝对路径（整个文件只有这一处，用编辑器的「全部替换」最快）：
 
    ```yaml
    - insert:
@@ -100,10 +102,15 @@ pnpm dsh web                    # 只能在当前目录里用
          name: '<REPO_ROOT>/plugin/index.js'
    ```
 
+   示例——Windows：`name: 'D:/git/github/dsh-save-money/plugin/index.js'`；Linux / macOS / 树莓派：`name: '/home/pi/dsh-save-money/plugin/index.js'`。
+
+   > 若你的 profile 已经通过 bundle / link 方式装过本插件，请跳过方式一（叠加 `--patch` 会重复注册插件）。
+
 3. 带 overlay 启动：
 
    ```sh
-   dsh web --patch ./cordis.patch.yml
+   dsh web --patch ./cordis.patch.yml               # 已全局安装 dsh
+   npx @deepseek-ai/dsh web --patch ./cordis.patch.yml  # npx 启动（第 0 步-方式 A）
    # 源码运行：pnpm dsh web --patch ./cordis.patch.yml
    ```
 
@@ -119,45 +126,51 @@ bundle 是一个很小的 `.tgz`，在一台机器上打出来，装到任何机
 cd dsh-save-money
 npm install             # 仅首次克隆需要（typescript 开发依赖）
 cd plugin
-npm pack                # 自动执行 prepare 构建；产出 dsh-save-money-1.2.5.tgz
+npm pack                # 自动执行 prepare 构建；产出 dsh-save-money-1.3.0.tgz
 ```
 
 `plugin/` 目录就是标准 bundle 结构：`package.json` 声明 `dsh.bundle.patch` 与 `dsh.client`，`cordis.patch.yml` 插入插件行，`index.js` 为 Host 模块，`client.js` 为浏览器界面 bundle。
 
-**第 2 步——把 tgz 拷到目标机器**（scp / U 盘 / 任意方式）：
+**第 2 步——把 tgz 拷到目标机器**（scp / U 盘 / 任意方式；下面命令在打包机上、仓库目录的**上一级**执行，路径按实际调整）：
 
 ```sh
-scp dsh-save-money/plugin/dsh-save-money-1.2.5.tgz pi@<树莓派IP>:~/
+scp dsh-save-money/plugin/dsh-save-money-1.3.0.tgz pi@<树莓派IP>:~/
 ```
 
-**第 3 步——安装进 profile**（在目标机器的 `deepseek-harness` 目录内执行；首次运行会以 `@deepseek-ai/dsh-base` 初始化 profile）：
+**第 3 步——安装进 profile**（在目标机器上执行；首次运行会自动以 `@deepseek-ai/dsh-base` 初始化 profile）：
 
 ```sh
-pnpm dsh plugin --profile web add ~/dsh-save-money-1.2.5.tgz
-# 安装版 CLI：dsh plugin --profile web add ./dsh-save-money-1.2.5.tgz
+# 源码运行 DSH（在 deepseek-harness 目录内）：
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.3.0.tgz
+# npx 启动（README「第 0 步-方式 A」）或已全局安装 dsh：任意目录都可执行
+npx @deepseek-ai/dsh plugin --profile web add ~/dsh-save-money-1.3.0.tgz
 ```
+
+> 两种命令效果一样，都是把 tgz 装进 `~/.dsh/profiles/web/node_modules/`。选你启动 DSH 用的那一种即可。
 
 也可从 git 安装：`dsh plugin --profile web add github:you/dsh-save-money#<sha>`（git 安装需要 `prepare` 构建与 `allowBuilds` 放行，见 [DSH 发布教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md)）。
 
 **第 4 步——验证层已挂载，然后启动**（**必须完全重启 DSH**，不是刷新页面）：
 
 ```sh
-pnpm dsh --profile web --dump-config   # 末尾应出现 "# == dsh-save-money" 层
+pnpm dsh --profile web --dump-config   # 输出中应能看到 dsh-save-money 的层（插件行）
 pnpm dsh --profile web                 # 若已有实例在跑，先 Ctrl+C 停掉
 ```
 
 **第 5 步——打开浏览器**访问 http://127.0.0.1:3080 并**强制刷新**（Ctrl+Shift+R）。会话头部出现"省钱"状态文字，点击进入设置；也可在对话中让 AI 执行 `save_money_status` 确认插件已加载。
 
-**升级到新版本**（例如 1.2.4 → 1.2.5）：
+**升级到新版本**（例如 1.2.5 → 1.3.0）：
+
+> 下面用 `pnpm dsh` 写的命令，npx 启动的用户把 `pnpm dsh` 换成 `npx @deepseek-ai/dsh` 即可。
 
 ```sh
 # 在打包机上：
 cd dsh-save-money && git pull && cd plugin && npm pack    # 产出新的 dsh-save-money-<新版本>.tgz
-scp dsh-save-money/plugin/dsh-save-money-1.2.5.tgz pi@<树莓派IP>:~/
+scp dsh-save-money/plugin/dsh-save-money-1.3.0.tgz pi@<树莓派IP>:~/
 
 # 在目标机器上：
 pnpm dsh plugin --profile web remove dsh-save-money
-pnpm dsh plugin --profile web add ~/dsh-save-money-1.2.5.tgz
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.3.0.tgz
 pnpm dsh --profile web                # 重启，然后强制刷新浏览器
 ```
 
@@ -169,23 +182,48 @@ pnpm dsh --profile web                # 重启，然后强制刷新浏览器
 pnpm dsh plugin --profile web remove dsh-save-money
 ```
 
-### 方式三：动态 Cordis 插件（开发 / 调试形态，非官方推荐）
+### 方式三：开发调试（本仓库开发时实际使用：link 安装 + HMR 热重载）
 
-仅用于在单会话内快速迭代（进程重启后消失，配置仍持久化在工作区）：
+改完代码立刻生效、**不需要重启 DSH**、也不用打包 tgz——这是本插件开发时用的形态：`dsh plugin add link:` 把 `plugin/` 目录直接链接进 profile，再配一个 `cordis-plugin-hmr` 热重载插件监听构建产物。保存源码 → `npm run prepare` → 运行中的 DSH 自动换上新插件，浏览器强制刷新看界面。
 
-```text
-cordis_define(
-  plugin: { kind: "new", idPrefix: "savem" },
-  code:   { host: <dist/host.js 内容>, client: <dist/client.js 内容> },
-  name:   "save-money",
-  purpose: "分时窗口暂停/恢复省钱插件",
-)
-cordis_run(...)   # Client 半边需要一次授权
+**一次性准备（在开发机上）：**
+
+1. 构建并链接安装：
+
+   ```sh
+   cd dsh-save-money
+   npm run prepare                          # src/*.ts → plugin/index.js + plugin/client.js
+   pnpm dsh plugin --profile web add link:D:/git/github/dsh-save-money/plugin   # 换成你的仓库绝对路径
+   ```
+
+2. 配置热重载：编辑 `~/.dsh/profiles/web/cordis.patch.yml`（没有就新建），把下面的 `root` 换成你的仓库 `plugin` 目录绝对路径：
+
+   ```yaml
+   - insert:
+       - id: save-money-hmr
+         name: '@deepseek-ai/cordis-plugin-hmr'
+         config:
+           root: ['D:/git/github/dsh-save-money/plugin']
+           ignored: ['**/node_modules', '**/.*']
+           debounce: 100
+   ```
+
+3. 启动 DSH（`pnpm dsh web` / `npx @deepseek-ai/dsh web`）并打开浏览器（默认 http://127.0.0.1:3080）。
+
+**日常开发循环：**
+
+```sh
+# 改完 src/*.ts 后执行一次：
+npm run prepare        # 重新构建 → 写入 plugin/index.js + client.js
 ```
+
+DSH 会在约 0.1 秒内自动热替换插件（终端出现 `[hmr]` 日志），**不用重启**；**浏览器界面需要强制刷新（Ctrl+Shift+R）**才能看到 client 侧改动。
+
+> 注意：`link:` 与方式二的 bundle 安装互斥——之前用 bundle 装过的话，先 `pnpm dsh plugin --profile web remove dsh-save-money` 再 `add link:`。
 
 ### 配置持久化（所有形态通用）
 
-插件把设置写入**工作区根目录**的 `save-money.config.json`（已被 `.gitignore` 排除，不入库）：启动时自动加载，每次配置变更立即落盘。所有安装形态下界面都在页面加载时由浏览器挂载，刷新后插件与设置保持正常；动态插件形态额外随进程存在（重启后重新 `cordis_run` 即恢复）。
+插件把设置写入**工作区根目录**的 `save-money.config.json`（已被 `.gitignore` 排除，不入库）：启动时自动加载，每次配置变更立即落盘。所有安装形态下界面都在页面加载时由浏览器挂载，刷新后插件与设置保持正常；开发调试形态（方式三）与正式安装一样持久，重启 DSH 后自动加载。
 
 ### 故障排查
 
@@ -201,7 +239,7 @@ cordis_run(...)   # Client 半边需要一次授权
 
 ## 快速上手
 
-> 以下步骤适用于所有安装方式——官方形态（`--patch` / bundle）与动态插件形态（方式三）一样自带设置界面。也可在对话中通过工具（`save_money_configure`、`save_money_status`）配置。
+> 以下步骤适用于所有安装方式——方式一 / 方式二 / 方式三都一样自带设置界面。也可在对话中通过工具（`save_money_configure`、`save_money_status`）配置。
 
 1. 安装并激活后，点击**会话头部右上角**（Session log 旁）的"省钱 · 🟢 工作中"状态文字进入设置（唯一常驻入口）；或从**系统设置页**（侧栏 → 设置 → **省钱插件**）进入；
 2. 点击【一键 DeepSeek 分时计价省钱策略】→ 自动补上高峰窗口（**08:58–12:02、13:58–18:02** 北京时间，暂停提前 2 分钟、继续延后 2 分钟留余量）；
