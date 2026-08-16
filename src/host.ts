@@ -95,6 +95,7 @@ interface CtxLike {
   get(name: string): any
   on(event: string, listener: (...args: any[]) => any, opts?: any): () => void
   effect(fn: () => void | (() => void)): void
+  inject?(deps: string[], callback: (ctx: any) => void): any
   timer: {
     timeout(fn: () => void, ms: number): any
     interval(fn: () => void, ms: number): any
@@ -616,12 +617,20 @@ return {
       ctx.effect(() => harnessApi.handle('save-money/configure', async (args: any) => applyConfig(unwrap(args) || {})))
     }
     const webServer = ctx.get('webServer')
-    if (webServer && typeof webServer.register === 'function') {
+    // The plugin row only injects timer, so in the official bundle form apply()
+    // can run BEFORE the webServer service is registered. Register the HTTP
+    // endpoints via Cordis' inject() dependency waiting — it runs the callback
+    // as soon as webServer is available (immediately when already present), so
+    // the bundled Client half never sees 404s (e.g. the Enable checkbox would
+    // silently fail to configure). The disposer returned by webServer.register
+    // is owned by the injected sub-context.
+    const registerHttpEndpoints = (ws: any): (() => void) | void => {
+      if (!ws || typeof ws.register !== 'function') return
       const sendJson = (res: any, code: number, obj: any) => {
         res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify(obj))
       }
-      ctx.effect(() => webServer.register({
+      return ws.register({
         kind: 'prefix',
         path: '/save-money',
         handler: async (req: any, res: any) => {
@@ -650,7 +659,14 @@ return {
             sendJson(res, 500, { ok: false, message: String((e && e.message) || e) })
           }
         },
-      }))
+      })
+    }
+    if (webServer && typeof webServer.register === 'function') {
+      ctx.effect(() => registerHttpEndpoints(webServer) as any)
+    } else if (typeof ctx.inject === 'function') {
+      ctx.inject(['webServer'], (sub: any) => {
+        sub.effect(() => registerHttpEndpoints(sub.get('webServer')) as any)
+      })
     }
     // UTC instant of a window's resumeAt (handles midnight-crossing windows).
     const endWindowUntilUTC = (w: TimeWindow, tz: string, baseWc: WallClock, dayOffset: number): number => {

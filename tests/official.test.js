@@ -53,12 +53,57 @@ function makeCtx(overrides = {}) {
       const r = fn()
       if (typeof r === 'function') this._disposers.push(r)
     },
+    inject(deps, callback) {
+      this._injected.push({ deps, callback })
+    },
     _disposers: [],
+    _injected: [],
     timer: timerSvc,
     ...overrides.ctx,
   }
   return { ctx, tools, routes, timers }
 }
+
+/**
+ * Official bundle timing regression (v1.2.4 -> v1.2.5): the plugin row only
+ * injects timer, so in the official form apply() can run BEFORE webServer is
+ * registered. The Host must wait via ctx.inject(['webServer']) and register
+ * the /save-money routes as soon as the service appears — otherwise the
+ * bundled Client half gets 404s and the Enable checkbox silently fails.
+ */
+test('official apply: registers HTTP routes via ctx.inject when webServer arrives late', async () => {
+  const { ctx, routes } = makeCtx()
+  // First apply with webServer ABSENT (get returns undefined; inject captured)
+  let lateWebServer
+  ctx.get = (name) => {
+    if (name === 'webServer') return lateWebServer
+    return undefined
+  }
+  await plugin.apply(ctx)
+  assert.equal(routes.length, 0, 'no routes before webServer exists')
+  assert.equal(ctx._injected.length, 1)
+  assert.deepEqual(ctx._injected[0].deps, ['webServer'])
+  // Now the webServer service appears (late activation) — run the inject callback
+  const registered = []
+  lateWebServer = {
+    register(route) {
+      registered.push(route)
+      return () => {}
+    },
+  }
+  const sub = {
+    get: (name) => (name === 'webServer' ? lateWebServer : undefined),
+    effect(fn) {
+      const r = fn()
+      if (typeof r === 'function') this._disposers.push(r)
+    },
+    _disposers: [],
+  }
+  ctx._injected[0].callback(sub)
+  assert.equal(registered.length, 1)
+  assert.equal(registered[0].kind, 'prefix')
+  assert.equal(registered[0].path, '/save-money')
+})
 
 test('official module exports name / inject / apply', () => {
   assert.equal(plugin.name, 'dsh-save-money')
@@ -150,7 +195,7 @@ test('official client bundle: plugin/client.js is a __ModuleLoader__ factory exp
 
 test('official bundle manifest: package.json declares dsh.client + exports["./client"]', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'plugin', 'package.json'), 'utf8'))
-  assert.equal(pkg.version, '1.2.4')
+  assert.equal(pkg.version, '1.2.5')
   assert.equal(pkg.exports['./client'], './client.js')
   assert.equal(pkg.dsh.client.platform, 'web')
   assert.ok(pkg.files.includes('client.js'))

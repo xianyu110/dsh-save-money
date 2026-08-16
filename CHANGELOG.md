@@ -4,6 +4,12 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — 1.2.5
+
+### Fixed
+
+- **The Enable checkbox (and every other setting) now works in the official install form**: on some deployments the plugin started before the Web server service was ready, so the interface's requests could not reach it and clicks appeared to do nothing. The plugin now waits for the Web server to be available before registering its endpoints — same behaviour as the dynamic-plugin form.
+
 ## [Unreleased] — 1.2.4
 
 ### Fixed
