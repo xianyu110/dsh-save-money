@@ -247,7 +247,16 @@ DSH hot-replaces the plugin within ~0.1s (look for `[hmr]` logs in the terminal)
 
 ### Config persistence (all forms)
 
-The plugin writes its settings to **the workspace root** `save-money.config.json` (excluded by `.gitignore`, never committed): loaded automatically at startup, persisted immediately on every change. The UI is mounted by the browser on page load in every form, so a refresh keeps the plugin and its settings working; the development form (Path 3) is just as persistent as a formal install and loads automatically on DSH restart.
+The plugin writes its settings to `save-money.config.json` (excluded by `.gitignore`, never committed): loaded automatically at startup, persisted immediately on every change. The config file location is resolved at runtime by walking a candidate list — **the first directory that actually contains a config file wins**:
+
+1. the directory recorded by the pointer file `~/.dsh/save-money-config-path.json` (the last real location, so a restart resolves the same file even when no session matches);
+2. the current session's workspace directory;
+3. every session workspace whose path ends in `dsh-save-money` (the newest one wins when several exist);
+4. the DSH startup directory itself (`process.cwd()`, official install form);
+5. a `dsh-save-money` directory **sibling** to the DSH startup directory (the README quick-install layout: `~/app/deepseek-harness` next to `~/app/dsh-save-money`);
+6. final fallback: `sandboxPolicy.workspaceRoot` (the DSH install dir).
+
+On a fresh install (no config anywhere) the plugin prefers to write the config into the **repo directory** (the `dsh-save-money` dir matched by step 4/5) instead of polluting the DSH install dir, and records a pointer in `~/.dsh/` so every later restart loads the same file. Deleting the config file resets all settings.
 
 ### Troubleshooting
 
@@ -257,7 +266,7 @@ The plugin writes its settings to **the workspace root** `save-money.config.json
 | Plugin fails to load with `ReferenceError: harness is not defined` | You are running a build older than **v1.2.2** — the official form was fixed in v1.2.2. Rebuild (`npm run prepare`), re-pack, reinstall, and restart. |
 | Installed but no status text / banner / settings page | Fully restart DSH (Ctrl+C, start again) and **hard-refresh** the browser (Ctrl+Shift+R) — the Client half is discovered at startup. If it still does not appear, you are running a build older than **v1.2.4** — upgrade. |
 | UI shows but the **Enable checkbox (and other settings) do nothing** | You are running a build older than **v1.2.5** — the plugin used to start before the Web server was ready, so UI requests could not reach it. Upgrade to ≥ v1.2.5 and restart. |
-| Where is my config file? | `save-money.config.json` in the workspace root (the directory DSH was started from, or the session workspace). Deleting it resets all settings. |
+| Where is my config file? | Resolved automatically from the 6-step candidate list above (session workspace / repo dir preferred; `~/.dsh/save-money-config-path.json` records the last location). Deleting it resets all settings. |
 
 ---
 

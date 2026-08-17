@@ -4,6 +4,13 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] — 2026-08-17
+
+### Fixed
+
+- **Config file location resolution is now robust**: no longer relies on a session whose workspace happens to point at this repo. The plugin walks a candidate list (pointer file → current session workspace → repo-named session workspaces → DSH startup dir → a `dsh-save-money` dir sibling to the startup dir → final fallback) and **the first directory that actually contains a config file wins**; after writing it records a pointer in `~/.dsh/` so a restart loads the same file.
+- **A fresh install no longer writes the config into the DSH install dir**: when no config exists anywhere, the plugin prefers the repo directory (the README quick-install `~/app/` side-by-side layout is matched too) instead of polluting the harness dir — fixing "settings changed but nowhere to be found / config lost after restart".
+
 ## [1.3.0] — 2026-08-17
 
 ### Added
