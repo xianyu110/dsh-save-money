@@ -641,6 +641,10 @@ function detectLang(): Lang {
 // overridden by the persisted config choice ('zh'/'zh-TW'/'en'/...) or kept on
 // 'auto' (follow the browser) — see refresh() below and the settings dropdown.
 let currentLang: Lang = detectLang()
+// Plugin name + version shown next to the Save button in the settings popover.
+// '__VERSION__' is replaced at build time (scripts/build.js) with the real
+// version from package.json — never edit this literal by hand.
+const PLUGIN_VERSION = '__VERSION__'
 const resolveLang = (cfgLang: string | undefined | null): Lang => {
   if (cfgLang === 'zh' || cfgLang === 'zh-TW' || cfgLang === 'de' || cfgLang === 'fr' ||
       cfgLang === 'es' || cfgLang === 'it' || cfgLang === 'pt' || cfgLang === 'ja' || cfgLang === 'ko') {
@@ -1077,8 +1081,14 @@ return {
         React.createElement('div', { style: { margin: '8px 0' } },
           btn(t('addWindow'), () => addWin(), false),
         ),
-        // Bottom: unified Save button
-        React.createElement('div', { style: { margin: '10px 0 2px', display: 'flex', justifyContent: 'flex-end' } },
+        // Bottom: plugin name + version on the left, unified Save button
+        React.createElement('div', { style: { margin: '10px 0 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+          React.createElement('span', {
+            style: {
+              fontSize: '11px', color: 'var(--dsw-alias-label-secondary)',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            },
+          }, 'save-money v' + PLUGIN_VERSION),
           btn(t('save'), () => saveAll(), true),
         ),
       )

@@ -172,11 +172,26 @@ return {
     // path is ever hard-coded.
     const CONFIG_FILE = 'save-money.config.json'
     const POINTER_FILE = 'save-money-config-path.json'
-    const sandboxPolicy = ctx.get('sandboxPolicy')
-    const sessionsSvc = ctx.get('sessions')
-    const defaultWorkspaceRoot: string = (sandboxPolicy && typeof sandboxPolicy.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot.length > 0)
-      ? sandboxPolicy.workspaceRoot
-      : ''
+    // Services are read DYNAMICALLY on every use, not captured once at apply():
+    // the official bundle form (plugin/index.js) is a plugin row that can be
+    // activated BEFORE the base bundle's fs-sandbox / sandbox-policy / sessions
+    // rows (Cordis activation order is composition order, and the user's plugin
+    // row is inserted into the profile alongside them). A one-shot
+    // `const fs = ctx.get('fs')` would permanently capture `undefined` on such
+    // machines — exactly the "settings never persist / never load" report on a
+    // second computer. Each helper re-reads the service at call time, and the
+    // boot path also waits via ctx.inject(['fs']) (see startup below), so a
+    // late fs service is picked up as soon as it exists.
+    const getFs = (): any => ctx.get('fs')
+    const getSessions = (): any => ctx.get('sessions')
+    const getAgents = (): any => ctx.get('agents')
+    const getSandboxPolicy = (): any => ctx.get('sandboxPolicy')
+    const defaultWorkspaceRoot: string = (() => {
+      const sandboxPolicy = getSandboxPolicy()
+      return (sandboxPolicy && typeof sandboxPolicy.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot.length > 0)
+        ? sandboxPolicy.workspaceRoot
+        : ''
+    })()
     // sandboxPolicy.workspaceRoot is the process cwd (the DSH install dir), not
     // the session workspace. The plugin config belongs to the save-money
     // workspace, so prefer a session whose cwd points at this repo (matched by
@@ -199,10 +214,11 @@ return {
     // Read the pointer file (best-effort; '' when absent/unreadable).
     const readPointer = async (): Promise<string> => {
       const home = dshHome()
-      if (!home || !fsSvc) return ''
+      const fs = getFs()
+      if (!home || !fs) return ''
       try {
-        const target = await fsSvc.resolve(POINTER_FILE, { cwd: home })
-        const text = await fsSvc.readText(target)
+        const target = await fs.resolve(POINTER_FILE, { cwd: home })
+        const text = await fs.readText(target)
         const data = JSON.parse(text)
         const p = data && typeof data.path === 'string' ? data.path : ''
         return p.replace(/[\\/]+$/, '')
@@ -211,10 +227,11 @@ return {
     // Record the last real config dir in ~/.dsh (best-effort; never throws).
     const writePointer = async (dir: string): Promise<void> => {
       const home = dshHome()
-      if (!home || !fsSvc || !dir) return
+      const fs = getFs()
+      if (!home || !fs || !dir) return
       try {
-        const target = await fsSvc.resolve(POINTER_FILE, { cwd: home })
-        await fsSvc.writeText(target, JSON.stringify({ path: dir }, null, 2), undefined, undefined,
+        const target = await fs.resolve(POINTER_FILE, { cwd: home })
+        await fs.writeText(target, JSON.stringify({ path: dir }, null, 2), undefined, undefined,
           { mode: 'workspace-write', workspaceRoot: home })
       } catch (e) { /* best-effort */ }
     }
@@ -229,16 +246,18 @@ return {
       // ① the calling session (agents.currentInitiator): the session that
       //    actually uses the plugin, so config follows the user's workspace.
       try {
-        const agentsSvc = ctx.get('agents')
+        const agentsSvc = getAgents()
         const init = agentsSvc && typeof agentsSvc.currentInitiator === 'function'
           ? agentsSvc.currentInitiator()
           : undefined
+        const sessionsSvc = getSessions()
         if (init && sessionsSvc && typeof sessionsSvc.get === 'function') {
           push(sessionCwdOf(sessionsSvc.get(init.id) || init))
         }
       } catch (e) { /* skip */ }
       // ② every session whose cwd matches the repo basename (last wins, so
       //    the newest checkout is preferred when several exist).
+      const sessionsSvc = getSessions()
       if (sessionsSvc && typeof sessionsSvc.list === 'function') {
         try {
           const matches: string[] = []
@@ -274,13 +293,15 @@ return {
     // targeting without re-resolving on every call).
     let resolvedConfigDir = ''
     const resolveWorkspaceRoot = async (): Promise<string> => {
+      const fs = getFs()
+      if (!fs) return defaultWorkspaceRoot
       // ① pointer file: the last real location wins, so a restart resolves the
       //    same file even when no session cwd matches (the harness was started
       //    from a different directory than the repo).
       const ptr = await readPointer()
       if (ptr) {
         try {
-          await fsSvc!.readText(await fsSvc!.resolve(CONFIG_FILE, { cwd: ptr }))
+          await fs.readText(await fs.resolve(CONFIG_FILE, { cwd: ptr }))
           resolvedConfigDir = ptr
           return ptr
         } catch (e) { /* pointer stale — fall through to candidates */ }
@@ -289,7 +310,7 @@ return {
       for (const dir of roots) {
         if (!dir) continue
         try {
-          await fsSvc!.readText(await fsSvc!.resolve(CONFIG_FILE, { cwd: dir }))
+          await fs.readText(await fs.resolve(CONFIG_FILE, { cwd: dir }))
           resolvedConfigDir = dir
           return dir
         } catch (e) { /* no config here — try next */ }
@@ -302,21 +323,24 @@ return {
       for (const dir of roots) {
         if (dir && /dsh-save-money$/i.test(dir)) { target = dir; break }
       }
-      resolvedConfigDir = target || roots[0] || ''
+      resolvedConfigDir = target || roots[0] || defaultWorkspaceRoot
       return resolvedConfigDir
     }
-    const fsSvc = ctx.get('fs')
     const windowKey = (w: TimeWindow, tz: string) => w.pauseAt + '|' + w.resumeAt + '|' + (w.timezone || tz)
     const persistConfig = async () => {
-      if (!fsSvc) return
+      const fs = getFs()
+      if (!fs) {
+        console.error('[save-money] persist skipped: fs service unavailable')
+        return
+      }
       try {
         const workspaceRoot = await resolveWorkspaceRoot()
         if (!workspaceRoot) return
         const resolveOpts = { cwd: workspaceRoot }
         const writePolicy = { mode: 'workspace-write', workspaceRoot }
-        const target = await fsSvc.resolve(CONFIG_FILE, resolveOpts)
-        configPath = fsSvc.processPath ? String(fsSvc.processPath(target)) : String(target && (target.path || target.filePath || ''))
-        await fsSvc.writeText(target, JSON.stringify(snapshot(), null, 2), undefined, undefined, writePolicy)
+        const target = await fs.resolve(CONFIG_FILE, resolveOpts)
+        configPath = fs.processPath ? String(fs.processPath(target)) : String(target && (target.path || target.filePath || ''))
+        await fs.writeText(target, JSON.stringify(snapshot(), null, 2), undefined, undefined, writePolicy)
         await writePointer(workspaceRoot)
         console.log('[save-money] config persisted to ' + workspaceRoot + '\\' + CONFIG_FILE)
       } catch (e: any) {
@@ -324,14 +348,18 @@ return {
       }
     }
     const loadConfig = async () => {
-      if (!fsSvc) return
+      const fs = getFs()
+      if (!fs) {
+        console.error('[save-money] load skipped: fs service unavailable')
+        return
+      }
       try {
         const workspaceRoot = await resolveWorkspaceRoot()
         if (!workspaceRoot) return
         const resolveOpts = { cwd: workspaceRoot }
-        const target = await fsSvc.resolve(CONFIG_FILE, resolveOpts)
-        configPath = fsSvc.processPath ? String(fsSvc.processPath(target)) : String(target && (target.path || target.filePath || ''))
-        const text = await fsSvc.readText(target)
+        const target = await fs.resolve(CONFIG_FILE, resolveOpts)
+        configPath = fs.processPath ? String(fs.processPath(target)) : String(target && (target.path || target.filePath || ''))
+        const text = await fs.readText(target)
         const data = JSON.parse(text)
         configLoaded = true
         const next = { ...cfg }
@@ -724,6 +752,28 @@ return {
         }
       }
     })
+    // fs may activate AFTER the 100ms boot timer on compositions where the
+    // save-money row precedes the base bundle's fs-sandbox row. Wait for the
+    // service (Cordis resolves the dependency as soon as it exists) and run the
+    // same boot load + reconcile then — loadConfig is idempotent (it re-reads
+    // the file and re-applies), so running it a second time is harmless and
+    // only fills the gap when the first attempt found no fs yet.
+    if (typeof ctx.inject === 'function') {
+      // Bind keeps `this` (the ctx) when Cordis calls the returned inject
+      // function, and gives the closure a non-optional reference so the
+      // strict-null check in the delayed callback is satisfied.
+      const inject: (deps: string[], callback: (sub: any) => void) => any = ctx.inject.bind(ctx)
+      ctx.effect(() => inject(['fs'], (sub: any) => {
+        sub.effect(() => {
+          void loadConfig().then(() => {
+            if (cfg.reconcileOnStart) {
+              const r = reconcile()
+              if (r.restored > 0) console.log('[save-money] late-fs reconcile restored ' + r.restored + ' goal(s)')
+            }
+          })
+        })
+      }))
+    }
 
     // ---------- Status ----------
     function status(now: Date) {

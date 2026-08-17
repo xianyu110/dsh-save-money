@@ -4,6 +4,16 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] — 2026-08-17
+
+### Added
+
+- **Plugin name + version in the settings popover**: the settings footer now shows `save-money v1.3.2` on the left of the Save button (the version is injected at build time from `package.json`, so it always matches the shipped manifest).
+
+### Fixed
+
+- **Config persistence no longer depends on activation order**: on machines where the plugin row activates before the harness's `fs` service (a different load order than the developer machine), a one-shot `ctx.get('fs')` at startup used to be `undefined`, so settings were never saved or loaded — saved settings "silently disappeared" after restart. The host now reads `fs` dynamically on every use and waits for the service via `ctx.inject(['fs'])`, so a late `fs` is picked up the moment it exists.
+
 ## [1.3.1] — 2026-08-17
 
 ### Fixed

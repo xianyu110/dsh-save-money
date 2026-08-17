@@ -65,6 +65,13 @@ function stripExports(js) {
 
 mkdirSync(distDir, { recursive: true })
 
+// Plugin version for the client footer (replaces the '__VERSION__' placeholder
+// in src/client.ts). Read from the root package.json so the displayed version
+// always matches the shipped manifest.
+const rootPkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+const PLUGIN_VERSION = String(rootPkg.version || '0.0.0')
+const injectVersion = (js) => js.split('__VERSION__').join(PLUGIN_VERSION)
+
 // dist/*.js — ESM modules used by the unit tests (transpile once, reuse below)
 const core = transpile('core')
 const balanceHost = transpile('balance-host')
@@ -89,7 +96,7 @@ writeFileSync(join(distDir, 'host.js'), hostWithCore, 'utf8')
 console.log('[build] host.ts -> dist/host.js (core + balance-host inlined, ' + hostWithCore.length + ' bytes)')
 
 // dist/client.js — plugin body with core + balance-client helpers inlined
-const clientJs = transpile('client')
+const clientJs = injectVersion(transpile('client'))
 const clientIdx = clientJs.indexOf(inlineMarker)
 if (clientIdx < 0) {
   console.error('[build] client.ts: no top-level "return {" found')
