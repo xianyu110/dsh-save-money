@@ -624,11 +624,23 @@ return {
     // request corresponds to fresh user activity, so mark the balance stale —
     // the client refreshes it on the next poll (message-driven update; the
     // 10-minute timer is the client-side fallback cadence).
+    // lastRequestProvider records the provider of the MOST RECENT model
+    // request (multi-provider setups: DeepSeek + SiliconFlow/relays). The
+    // balance is a property of the official DeepSeek account, so it stays
+    // shown only while the latest actual request ran on the official provider;
+    // a switch to another provider hides it WITHOUT clearing the sampled
+    // history, so switching back re-shows it immediately.
     let balanceDirty = false
+    let lastRequestProvider: string | null = null
     if (typeof ctx.on === 'function') {
       ctx.effect(() => {
         const dispose = ctx.on('llm/stream', (options: any, next: any) => {
           balanceDirty = true
+          try {
+            lastRequestProvider = (options && typeof options.provider === 'string' && options.provider.length > 0)
+              ? options.provider
+              : null
+          } catch (e) { lastRequestProvider = null }
           if (!gateClosedAt(new Date())) return next()
           const waitForOpen = () => new Promise((resolve) => {
             const ready = () => gateDisposed || !gateClosedAt(new Date())
@@ -967,6 +979,10 @@ return {
       }
       return {
         ...out,
+        // Provider of the most recent model request: null when no request has
+        // been made yet (show the balance — the official account is queryable),
+        // otherwise the client shows the balance only for 'deepseek-official'.
+        provider: lastRequestProvider,
         spend: {
           m10: balanceHistory.spend(10 * 60 * 1000),
           h1: balanceHistory.spend(60 * 60 * 1000),

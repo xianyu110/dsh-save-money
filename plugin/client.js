@@ -560,9 +560,9 @@ function detectLang() {
 // 'auto' (follow the browser) — see refresh() below and the settings dropdown.
 let currentLang = detectLang();
 // Plugin name + version shown next to the Save button in the settings popover.
-// '1.3.2' is replaced at build time (scripts/build.js) with the real
+// '1.3.3' is replaced at build time (scripts/build.js) with the real
 // version from package.json — never edit this literal by hand.
-const PLUGIN_VERSION = '1.3.2';
+const PLUGIN_VERSION = '1.3.3';
 const resolveLang = (cfgLang) => {
     if (cfgLang === 'zh' || cfgLang === 'zh-TW' || cfgLang === 'de' || cfgLang === 'fr' ||
         cfgLang === 'es' || cfgLang === 'it' || cfgLang === 'pt' || cfgLang === 'ja' || cfgLang === 'ko') {
@@ -1362,7 +1362,17 @@ return {
                 const top = Math.max(8, Math.min(y + 14, vh - 180));
                 setBalTip({ right, top });
             };
-            const balanceEl = renderBalanceElement(st.balance, React);
+            // Balance visibility follows the MOST RECENT model request (dynamic
+            // multi-provider setups): show only while the latest actual request ran
+            // on the official DeepSeek provider. A provider switch hides the
+            // balance WITHOUT clearing the sampled history, so switching back to
+            // DeepSeek re-shows it immediately. `provider` is null before any
+            // request (fresh session) — show then too, the official account is
+            // queryable.
+            const balVisible = !!(st.balance && typeof st.balance === 'object'
+                && st.balance.ok === true
+                && (st.balance.provider === null || st.balance.provider === undefined || st.balance.provider === 'deepseek-official'));
+            const balanceEl = balVisible ? renderBalanceElement(st.balance, React) : null;
             const balCard = (() => {
                 if (!balTip || !balanceEl)
                     return null;

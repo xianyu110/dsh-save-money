@@ -4,6 +4,13 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.3.3] — 2026-08-17
+
+### 修复
+
+- **余额显示跟随实际使用的模型(多模型源场景)**:配置了多个模型源(DeepSeek 官方 + 硅基流动、中转等)时,只要会话的默认模型不是官方 DeepSeek,余额之前就会消失。现在插件读取**最近一次真实模型请求的 provider**(`llm/stream`):最近请求跑在 `deepseek-official` 上就显示余额,否则隐藏。隐藏时**不会清除**已采样的消费统计,切回 DeepSeek 后余额(及其消费数据)立即恢复显示。
+- **官方 API 闸门不再依赖默认模型**:此前当 `agentDefaultModel.currentSelection()` 不是 `deepseek-official` 时闸门直接拒绝——这是错误信号,因为余额属于官方账户,与当前默认选择无关。只有把 `llm-deepseek` 的 baseURL 改成非官方端点(没有 `/user/balance` 的中转)时才会禁用。
+
 ## [1.3.2] — 2026-08-17
 
 ### 新增

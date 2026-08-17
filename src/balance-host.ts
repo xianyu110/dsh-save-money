@@ -115,15 +115,20 @@ export function createBalanceService(ctx: any, opts: { sandbox: boolean }): { qu
   }
 }
 
-/** Gate: only the official DeepSeek API offers /user/balance. */
+/**
+ * Gate: only the official DeepSeek API offers /user/balance.
+ *
+ * The gate checks the DeepSeek provider's OWN configuration (baseURL must be
+ * the official endpoint, or unset to use the official default), NOT the
+ * session's current default model. Users routinely configure several model
+ * sources (official DeepSeek + SiliconFlow / relays / …) and switch the
+ * default model between them; the balance is a property of the official
+ * DeepSeek account, so it stays queryable regardless of which provider the
+ * current model belongs to. If the official baseURL is overridden to a relay
+ * (no /user/balance endpoint), the gate rejects so the UI does not show a
+ * misleading balance.
+ */
 async function balanceAvailable(ctx: any): Promise<{ ok: true } | { ok: false; reason: string }> {
-  try {
-    const adm = ctx.get('agentDefaultModel')
-    const sel = adm && typeof adm.currentSelection === 'function' ? adm.currentSelection() : undefined
-    if (sel && typeof sel === 'object' && sel.provider && sel.provider !== 'deepseek-official') {
-      return { ok: false, reason: 'current provider is ' + String(sel.provider) + ', not deepseek-official' }
-    }
-  } catch (e) { /* agentDefaultModel unavailable — continue; the API call itself will fail if wrong */ }
   try {
     const settings = ctx.get('settings')
     const sec = settings && typeof settings.get === 'function' ? settings.get('llm-deepseek') : undefined

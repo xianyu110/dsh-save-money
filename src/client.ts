@@ -1171,7 +1171,17 @@ return {
           const top = Math.max(8, Math.min(y + 14, vh - 180))
           setBalTip({ right, top })
         }
-        const balanceEl = renderBalanceElement(st.balance, React)
+        // Balance visibility follows the MOST RECENT model request (dynamic
+        // multi-provider setups): show only while the latest actual request ran
+        // on the official DeepSeek provider. A provider switch hides the
+        // balance WITHOUT clearing the sampled history, so switching back to
+        // DeepSeek re-shows it immediately. `provider` is null before any
+        // request (fresh session) — show then too, the official account is
+        // queryable.
+        const balVisible = !!(st.balance && typeof st.balance === 'object'
+          && st.balance.ok === true
+          && (st.balance.provider === null || st.balance.provider === undefined || st.balance.provider === 'deepseek-official'))
+        const balanceEl = balVisible ? renderBalanceElement(st.balance, React) : null
         const balCard = (() => {
           if (!balTip || !balanceEl) return null
           const lines = balanceDetailLines(st.balance, { h1: t('spendH1'), m10: t('spendM10'), h24: t('spendH24') })

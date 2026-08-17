@@ -306,16 +306,20 @@ function createBalanceService(ctx, opts) {
         },
     };
 }
-/** Gate: only the official DeepSeek API offers /user/balance. */
+/**
+ * Gate: only the official DeepSeek API offers /user/balance.
+ *
+ * The gate checks the DeepSeek provider's OWN configuration (baseURL must be
+ * the official endpoint, or unset to use the official default), NOT the
+ * session's current default model. Users routinely configure several model
+ * sources (official DeepSeek + SiliconFlow / relays / …) and switch the
+ * default model between them; the balance is a property of the official
+ * DeepSeek account, so it stays queryable regardless of which provider the
+ * current model belongs to. If the official baseURL is overridden to a relay
+ * (no /user/balance endpoint), the gate rejects so the UI does not show a
+ * misleading balance.
+ */
 async function balanceAvailable(ctx) {
-    try {
-        const adm = ctx.get('agentDefaultModel');
-        const sel = adm && typeof adm.currentSelection === 'function' ? adm.currentSelection() : undefined;
-        if (sel && typeof sel === 'object' && sel.provider && sel.provider !== 'deepseek-official') {
-            return { ok: false, reason: 'current provider is ' + String(sel.provider) + ', not deepseek-official' };
-        }
-    }
-    catch (e) { /* agentDefaultModel unavailable — continue; the API call itself will fail if wrong */ }
     try {
         const settings = ctx.get('settings');
         const sec = settings && typeof settings.get === 'function' ? settings.get('llm-deepseek') : undefined;
@@ -964,11 +968,26 @@ export function apply(ctx) {
         // request corresponds to fresh user activity, so mark the balance stale —
         // the client refreshes it on the next poll (message-driven update; the
         // 10-minute timer is the client-side fallback cadence).
+        // lastRequestProvider records the provider of the MOST RECENT model
+        // request (multi-provider setups: DeepSeek + SiliconFlow/relays). The
+        // balance is a property of the official DeepSeek account, so it stays
+        // shown only while the latest actual request ran on the official provider;
+        // a switch to another provider hides it WITHOUT clearing the sampled
+        // history, so switching back re-shows it immediately.
         let balanceDirty = false;
+        let lastRequestProvider = null;
         if (typeof ctx.on === 'function') {
             ctx.effect(() => {
                 const dispose = ctx.on('llm/stream', (options, next) => {
                     balanceDirty = true;
+                    try {
+                        lastRequestProvider = (options && typeof options.provider === 'string' && options.provider.length > 0)
+                            ? options.provider
+                            : null;
+                    }
+                    catch (e) {
+                        lastRequestProvider = null;
+                    }
                     if (!gateClosedAt(new Date()))
                         return next();
                     const waitForOpen = () => new Promise((resolve) => {
@@ -1350,6 +1369,10 @@ export function apply(ctx) {
             }
             return {
                 ...out,
+                // Provider of the most recent model request: null when no request has
+                // been made yet (show the balance — the official account is queryable),
+                // otherwise the client shows the balance only for 'deepseek-official'.
+                provider: lastRequestProvider,
                 spend: {
                     m10: balanceHistory.spend(10 * 60 * 1000),
                     h1: balanceHistory.spend(60 * 60 * 1000),

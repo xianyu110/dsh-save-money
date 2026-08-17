@@ -34,13 +34,29 @@ function goodSpawn(calls) {
 
 // ---- dist/balance-host.js ----
 
-test('balance-host: createBalanceService reports the official-API guard first', async () => {
+test('balance-host: official baseURL (or unset) keeps balance queryable regardless of the current default model provider', async () => {
+  // Multi-provider setup: the session's current model is on a NON-official
+  // provider (e.g. SiliconFlow), but the DeepSeek official baseURL is
+  // configured. The balance is a property of the official account, so it must
+  // still be queryable — the old gate wrongly rejected on the default model.
   const svc = createBalanceService(makeHostCtx({
-    agentDefaultModel: { currentSelection: () => ({ provider: 'relay', model: 'x' }) },
+    agentDefaultModel: { currentSelection: () => ({ provider: 'siliconflow', model: 'deepseek-v3' }) },
+    credentials: { resolve: async () => ({ value: 'sk-test', source: 'env' }) },
+    subprocess: goodSpawn([]),
   }), { sandbox: true })
   const out = await svc.query()
-  assert.equal(out.ok, false)
-  assert.match(out.error, /deepseek-official/)
+  assert.equal(out.ok, true, 'balance must work even when the default model is on another provider')
+  assert.equal(out.balance[0].currency, 'CNY')
+})
+
+test('balance-host: default model provider is irrelevant; unset baseURL uses the official default', async () => {
+  const svc = createBalanceService(makeHostCtx({
+    agentDefaultModel: { currentSelection: () => ({ provider: 'siliconflow', model: 'deepseek-v3' }) },
+    credentials: { resolve: async () => ({ value: 'sk-test', source: 'env' }) },
+    subprocess: goodSpawn([]),
+  }), { sandbox: true })
+  const out = await svc.query()
+  assert.equal(out.ok, true)
 })
 
 test('balance-host: guard rejects a relay baseURL before any request', async () => {
