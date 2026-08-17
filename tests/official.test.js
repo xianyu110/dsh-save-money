@@ -36,11 +36,15 @@ function makeCtx(overrides = {}) {
   }
   const timers = []
   const timerSvc = {
+    _timers: timers,
     interval(fn, ms) {
-      timers.push({ fn, ms })
+      timers.push({ fn, ms, kind: 'interval' })
       return () => {}
     },
-    timeout() { return () => {} },
+    timeout(fn, ms) {
+      timers.push({ fn, ms, kind: 'timeout' })
+      return () => {}
+    },
   }
   const ctx = {
     get(name) {
@@ -279,4 +283,168 @@ test('official balance display switch: off by default, enable works, disable hid
   assert.match(on.error, /credential/) // gated by the opt-in switch, not the guard
   const off2 = await configureAndGetBalance(handler, { showBalance: false })
   assert.match(off2.error, /disabled/)
+})
+
+// ---- Config location resolution (v1.3.1: multi-candidate + ~/.dsh pointer) ----
+
+/** In-memory fs for config-resolution tests. `files` is a plain map of
+ * absolute-path → content; writes mutate it. */
+function makeMemFs(files = {}) {
+  const writes = []
+  return {
+    files,
+    writes,
+    async resolve(p, opts = {}) {
+      const cwd = opts.cwd || ''
+      const abs = p.startsWith(process.cwd()) ? p : join(cwd, p)
+      return { displayPath: abs, targetKey: abs, path: abs }
+    },
+    async readText(t) {
+      const k = String(t.targetKey || t.path)
+      if (!(k in files)) {
+        const e = new Error('ENOENT ' + k)
+        e.code = 'ENOENT'
+        throw e
+      }
+      return files[k]
+    },
+    async writeText(t, content, expected, signal, policy) {
+      writes.push({ path: String(t.targetKey || t.path), policy })
+      files[String(t.targetKey || t.path)] = content
+      return { ok: true }
+    },
+    processPath(t) { return String(t.targetKey || t.path) },
+  }
+}
+
+/** Run one captured boot timeout (the 100ms loadConfig) and settle it. */
+function fireBootTimeout(ctx) {
+  const boot = (ctx.timer._timers || []).find((t) => t.kind === 'timeout')
+  assert.ok(boot, 'a boot timeout was registered')
+  boot.fn()
+}
+
+/** Apply with the given fs/sessions/sandboxPolicy overrides and return the
+ * captured HTTP handler plus the raw ctx (for firing the boot timer). */
+async function applyWithConfig({ fs, sessionsCwds = [], harnessRoot }) {
+  const overrides = {
+    fs,
+    sessions: { list: () => sessionsCwds.map((c) => ({ id: 's', meta: { cwd: c } })), get: () => undefined },
+    agents: { currentInitiator: () => undefined, list: () => [] },
+    goals: { get: () => undefined },
+    sandboxPolicy: { workspaceRoot: harnessRoot },
+  }
+  const { ctx, routes } = makeCtx(overrides)
+  await plugin.apply(ctx)
+  assert.equal(routes.length, 1)
+  return { ctx, handler: routes[0].handler }
+}
+
+/** GET /save-money/status and parse it. */
+async function getStatus(handler) {
+  const res = {
+    writeHead(code, headers) { this.code = code; this.headers = headers },
+    end(body) { this._body = body },
+  }
+  await handler({ method: 'GET', url: '/save-money/status' }, res)
+  return JSON.parse(res._body)
+}
+
+/** Drive a POST configure against a handler, then settle the async persist. */
+async function configure(handler, patch) {
+  const req = {
+    method: 'POST',
+    url: '/save-money/configure',
+    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(patch)) },
+  }
+  const res = {
+    writeHead(code, headers) { this.code = code; this.headers = headers },
+    end(body) { this._body = body },
+  }
+  await handler(req, res)
+  await new Promise((r) => setTimeout(r, 20)) // let the fire-and-forget persist settle
+  return JSON.parse(res._body)
+}
+
+test('config resolution: pointer file in ~/.dsh pins the location across restarts', async () => {
+  // Simulate a previous run that persisted the config to /repo-a: the pointer
+  // file records it. Even when NO session cwd matches, the pointer must win.
+  const repoA = join(process.cwd(), '..', 'repo-a')
+  const home = join(process.cwd(), '..', 'fake-dsh-home')
+  const files = {}
+  files[join(repoA, 'save-money.config.json')] = JSON.stringify({ enabled: true, lang: 'en' })
+  files[join(home, 'save-money-config-path.json')] = JSON.stringify({ path: repoA })
+  const mem = makeMemFs(files)
+  const oldHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try {
+    const { ctx, handler } = await applyWithConfig({
+      fs: mem,
+      sessionsCwds: [], // no repo session at all — only the pointer can find it
+      harnessRoot: join(process.cwd(), '..', 'deepseek-harness'),
+    })
+    fireBootTimeout(ctx) // loadConfig runs → resolves via the pointer
+    await new Promise((r) => setTimeout(r, 20))
+    const st = await getStatus(handler)
+    assert.equal(st.workspaceRoot, repoA, 'pointer pins the config dir')
+    assert.equal(st.configLoaded, true, 'config was loaded')
+    assert.equal(st.config.lang, 'en', 'loaded the pointer-targeted config')
+  } finally {
+    if (oldHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = oldHome
+  }
+})
+
+test('config resolution: a session cwd matching the repo basename wins without a pointer', async () => {
+  const repo = join(process.cwd(), '..', 'dsh-save-money') // basename matches
+  const files = {}
+  files[join(repo, 'save-money.config.json')] = JSON.stringify({ enabled: false, lang: 'zh' })
+  const mem = makeMemFs(files)
+  const oldHome = process.env.DSH_HOME
+  delete process.env.DSH_HOME // no pointer available
+  try {
+    const { ctx, handler } = await applyWithConfig({
+      fs: mem,
+      sessionsCwds: [join(process.cwd(), '..', 'deepseek-harness'), repo],
+      harnessRoot: join(process.cwd(), '..', 'deepseek-harness'),
+    })
+    fireBootTimeout(ctx)
+    await new Promise((r) => setTimeout(r, 20))
+    const st = await getStatus(handler)
+    assert.equal(st.workspaceRoot, repo, 'session cwd resolves the repo')
+    assert.equal(st.configLoaded, true)
+    assert.equal(st.config.lang, 'zh')
+  } finally {
+    if (oldHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = oldHome
+  }
+})
+
+test('config resolution: fresh install (no config anywhere) still persists to a repo-named candidate', async () => {
+  // README quick-install layout: harness at <parent>/deepseek-harness, repo at
+  // <parent>/dsh-save-money. No config exists yet anywhere.
+  const parent = join(process.cwd(), '..')
+  const repo = join(parent, 'dsh-save-money')
+  const mem = makeMemFs({}) // empty disk
+  const oldHome = process.env.DSH_HOME
+  delete process.env.DSH_HOME
+  try {
+    const { ctx, handler } = await applyWithConfig({
+      fs: mem,
+      sessionsCwds: [join(parent, 'deepseek-harness')], // only the harness dir session
+      harnessRoot: join(parent, 'deepseek-harness'),
+    })
+    // No boot-time config → status reports the default; then a configure writes
+    // the file and must pick the repo-named sibling candidate.
+    fireBootTimeout(ctx)
+    await new Promise((r) => setTimeout(r, 20))
+    const out = await configure(handler, { enabled: true })
+    assert.equal(out.ok, true)
+    const wrote = mem.writes.find((w) => w.path.endsWith('save-money.config.json') && !w.path.includes('config-path'))
+    assert.ok(wrote, 'config was written; writes=' + JSON.stringify(mem.writes.map((w) => w.path)))
+    assert.ok(wrote.path.startsWith(repo), 'fresh install wrote next to the repo, got ' + wrote.path)
+  } finally {
+    if (oldHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = oldHome
+  }
 })

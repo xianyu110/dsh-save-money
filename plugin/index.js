@@ -443,10 +443,18 @@ export function apply(ctx) {
         let configPath = '';
         const unwrap = (args) => (args && typeof args === 'object' && args.arguments && typeof args.arguments === 'object' ? args.arguments : args);
         // Config persistence to the workspace file (survives browser refresh /
-        // plugin re-activation). The workspace root is fetched at runtime from the
-        // sandboxPolicy service; when unavailable, fs.resolve falls back to its
-        // default cwd (the workspace). No machine path is ever hard-coded.
+        // plugin re-activation). The config location is resolved AT RUNTIME by
+        // walking a candidate list (see candidateRoots) — session cwd first, then
+        // process cwd and its sibling directory (the README quick-install layout
+        // ~/app/dsh-save-money next to ~/app/deepseek-harness), then the
+        // sandboxPolicy fallback. The FIRST directory that actually contains a
+        // save-money.config.json wins; a pointer file in the DSH user dir
+        // (~/.dsh/save-money-config-path.json) records the last real location so
+        // a later restart resolves the SAME file even when no session cwd matches
+        // (e.g. the harness was started from a different directory). No machine
+        // path is ever hard-coded.
         const CONFIG_FILE = 'save-money.config.json';
+        const POINTER_FILE = 'save-money-config-path.json';
         const sandboxPolicy = ctx.get('sandboxPolicy');
         const sessionsSvc = ctx.get('sessions');
         const defaultWorkspaceRoot = (sandboxPolicy && typeof sandboxPolicy.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot.length > 0)
@@ -460,42 +468,147 @@ export function apply(ctx) {
             const c = s && (s.meta && s.meta.cwd || s.header && s.header.cwd || s.cwd);
             return typeof c === 'string' ? c : '';
         };
-        const resolveWorkspaceRoot = () => {
-            // Prefer the CALLING session (agents.currentInitiator) so the config
-            // follows the session that actually uses the plugin (tool/RPC calls
-            // resolve to the workspace the user is working in, not an older
-            // checkout that happens to be listed first).
+        // DSH user dir (~/.dsh): exists on Windows / macOS / Linux. The pointer
+        // file lives here because it is the one location that never moves with the
+        // harness install dir or the session cwd.
+        const dshHome = () => {
+            try {
+                const h = (typeof process !== 'undefined' && process && process.env)
+                    ? (process.env.DSH_HOME || process.env.USERPROFILE || process.env.HOME)
+                    : '';
+                return typeof h === 'string' && h.length > 0 ? h.replace(/[\\/]+$/, '') : '';
+            }
+            catch (e) {
+                return '';
+            }
+        };
+        // Read the pointer file (best-effort; '' when absent/unreadable).
+        const readPointer = async () => {
+            const home = dshHome();
+            if (!home || !fsSvc)
+                return '';
+            try {
+                const target = await fsSvc.resolve(POINTER_FILE, { cwd: home });
+                const text = await fsSvc.readText(target);
+                const data = JSON.parse(text);
+                const p = data && typeof data.path === 'string' ? data.path : '';
+                return p.replace(/[\\/]+$/, '');
+            }
+            catch (e) {
+                return '';
+            }
+        };
+        // Record the last real config dir in ~/.dsh (best-effort; never throws).
+        const writePointer = async (dir) => {
+            const home = dshHome();
+            if (!home || !fsSvc || !dir)
+                return;
+            try {
+                const target = await fsSvc.resolve(POINTER_FILE, { cwd: home });
+                await fsSvc.writeText(target, JSON.stringify({ path: dir }, null, 2), undefined, undefined, { mode: 'workspace-write', workspaceRoot: home });
+            }
+            catch (e) { /* best-effort */ }
+        };
+        // Candidate config directories, highest priority first. The pointer (the
+        // last real location) is handled separately in resolveWorkspaceRoot.
+        const candidateRoots = () => {
+            const out = [];
+            const push = (c) => {
+                c = String(c || '').replace(/[\\/]+$/, '');
+                if (c && !out.includes(c))
+                    out.push(c);
+            };
+            // ① the calling session (agents.currentInitiator): the session that
+            //    actually uses the plugin, so config follows the user's workspace.
             try {
                 const agentsSvc = ctx.get('agents');
                 const init = agentsSvc && typeof agentsSvc.currentInitiator === 'function'
                     ? agentsSvc.currentInitiator()
                     : undefined;
                 if (init && sessionsSvc && typeof sessionsSvc.get === 'function') {
-                    const s = sessionsSvc.get(init.id);
-                    const c = sessionCwdOf(s || init).replace(/[\\/]+$/, '');
-                    if (/dsh-save-money$/i.test(c))
-                        return c;
+                    push(sessionCwdOf(sessionsSvc.get(init.id) || init));
                 }
             }
-            catch (e) { /* keep the default */ }
-            let ws = defaultWorkspaceRoot;
+            catch (e) { /* skip */ }
+            // ② every session whose cwd matches the repo basename (last wins, so
+            //    the newest checkout is preferred when several exist).
             if (sessionsSvc && typeof sessionsSvc.list === 'function') {
                 try {
-                    let matched = '';
-                    // sessions.list() returns creation order; keep the LAST match so
-                    // the newest (current) workspace wins when several checkouts
-                    // exist, while a single checkout still resolves trivially.
+                    const matches = [];
                     for (const s of sessionsSvc.list()) {
                         const c = sessionCwdOf(s).replace(/[\\/]+$/, '');
                         if (/dsh-save-money$/i.test(c))
-                            matched = c;
+                            matches.push(c);
                     }
-                    if (matched)
-                        ws = matched;
+                    for (const m of matches)
+                        push(m);
                 }
-                catch (e) { /* keep the default */ }
+                catch (e) { /* skip */ }
             }
-            return ws;
+            // ③ process.cwd() itself (official module form only; the harness may be
+            //    started from the repo checkout).
+            try {
+                if (typeof process !== 'undefined' && process && typeof process.cwd === 'function') {
+                    push(String(process.cwd()));
+                }
+            }
+            catch (e) { /* skip */ }
+            // ④ sibling of process.cwd() named dsh-save-money — the README
+            //    quick-install layout: ~/app/dsh-save-money next to
+            //    ~/app/deepseek-harness, harness started from the latter.
+            try {
+                if (typeof process !== 'undefined' && process && typeof process.cwd === 'function') {
+                    const cwd = String(process.cwd()).replace(/[\\/]+$/, '');
+                    const idx = Math.max(cwd.lastIndexOf('\\'), cwd.lastIndexOf('/'));
+                    if (idx > 0)
+                        push(cwd.slice(0, idx + 1) + 'dsh-save-money');
+                }
+            }
+            catch (e) { /* skip */ }
+            // ⑤ sandboxPolicy fallback (the harness install dir).
+            push(defaultWorkspaceRoot);
+            return out;
+        };
+        // The last successfully used config dir (for status diagnostics + write
+        // targeting without re-resolving on every call).
+        let resolvedConfigDir = '';
+        const resolveWorkspaceRoot = async () => {
+            // ① pointer file: the last real location wins, so a restart resolves the
+            //    same file even when no session cwd matches (the harness was started
+            //    from a different directory than the repo).
+            const ptr = await readPointer();
+            if (ptr) {
+                try {
+                    await fsSvc.readText(await fsSvc.resolve(CONFIG_FILE, { cwd: ptr }));
+                    resolvedConfigDir = ptr;
+                    return ptr;
+                }
+                catch (e) { /* pointer stale — fall through to candidates */ }
+            }
+            const roots = candidateRoots();
+            for (const dir of roots) {
+                if (!dir)
+                    continue;
+                try {
+                    await fsSvc.readText(await fsSvc.resolve(CONFIG_FILE, { cwd: dir }));
+                    resolvedConfigDir = dir;
+                    return dir;
+                }
+                catch (e) { /* no config here — try next */ }
+            }
+            // No config exists anywhere yet: prefer a repo-named candidate (the
+            // sibling-directory layout from the README, or a session cwd), so a
+            // fresh install writes next to the checkout instead of polluting the
+            // harness install dir; fall back to the first candidate.
+            let target = '';
+            for (const dir of roots) {
+                if (dir && /dsh-save-money$/i.test(dir)) {
+                    target = dir;
+                    break;
+                }
+            }
+            resolvedConfigDir = target || roots[0] || '';
+            return resolvedConfigDir;
         };
         const fsSvc = ctx.get('fs');
         const windowKey = (w, tz) => w.pauseAt + '|' + w.resumeAt + '|' + (w.timezone || tz);
@@ -503,13 +616,16 @@ export function apply(ctx) {
             if (!fsSvc)
                 return;
             try {
-                const workspaceRoot = resolveWorkspaceRoot();
-                const resolveOpts = workspaceRoot ? { cwd: workspaceRoot } : undefined;
-                const writePolicy = workspaceRoot ? { mode: 'workspace-write', workspaceRoot } : undefined;
+                const workspaceRoot = await resolveWorkspaceRoot();
+                if (!workspaceRoot)
+                    return;
+                const resolveOpts = { cwd: workspaceRoot };
+                const writePolicy = { mode: 'workspace-write', workspaceRoot };
                 const target = await fsSvc.resolve(CONFIG_FILE, resolveOpts);
                 configPath = fsSvc.processPath ? String(fsSvc.processPath(target)) : String(target && (target.path || target.filePath || ''));
                 await fsSvc.writeText(target, JSON.stringify(snapshot(), null, 2), undefined, undefined, writePolicy);
-                console.log('[save-money] config persisted to ' + (workspaceRoot ? workspaceRoot + '\\' + CONFIG_FILE : CONFIG_FILE));
+                await writePointer(workspaceRoot);
+                console.log('[save-money] config persisted to ' + workspaceRoot + '\\' + CONFIG_FILE);
             }
             catch (e) {
                 console.error('[save-money] persist failed: ' + String((e && e.message) || e));
@@ -519,8 +635,10 @@ export function apply(ctx) {
             if (!fsSvc)
                 return;
             try {
-                const workspaceRoot = resolveWorkspaceRoot();
-                const resolveOpts = workspaceRoot ? { cwd: workspaceRoot } : undefined;
+                const workspaceRoot = await resolveWorkspaceRoot();
+                if (!workspaceRoot)
+                    return;
+                const resolveOpts = { cwd: workspaceRoot };
                 const target = await fsSvc.resolve(CONFIG_FILE, resolveOpts);
                 configPath = fsSvc.processPath ? String(fsSvc.processPath(target)) : String(target && (target.path || target.filePath || ''));
                 const text = await fsSvc.readText(target);
@@ -547,7 +665,7 @@ export function apply(ctx) {
                         next.windows = data.windows.map((w) => ({ ...w }));
                 }
                 cfg = next;
-                console.log('[save-money] config loaded from ' + (workspaceRoot ? workspaceRoot + '\\' + CONFIG_FILE : CONFIG_FILE));
+                console.log('[save-money] config loaded from ' + workspaceRoot + '\\' + CONFIG_FILE);
             }
             catch (e) {
                 console.log('[save-money] no config file (fresh start): ' + String((e && e.message) || e));
@@ -984,8 +1102,9 @@ export function apply(ctx) {
                 gate: gateClosedAt(now) ? 'closed' : 'open',
                 gateInstalled,
                 // Diagnostics (runtime workspace resolution) — helps verify where the
-                // config file is loaded from / persisted to.
-                workspaceRoot: resolveWorkspaceRoot(),
+                // config file is loaded from / persisted to. resolveWorkspaceRoot is
+                // async (pointer + fs probes), so report the last resolved value.
+                workspaceRoot: resolvedConfigDir || defaultWorkspaceRoot,
                 configLoaded,
                 configPath,
                 nowUTC: now.toISOString(),
