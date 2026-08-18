@@ -67,9 +67,33 @@ stateDiagram-v2
 
 ## 安装
 
-DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml 挂载**（见 [DSH 官方教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)）。本仓库提供三种安装方式：两种官方安装路径（`--patch` 快速试用、bundle 打包分发）+ 一种开发调试形态（link + HMR 热重载）。官方形态安装的是**完整插件**：Host 半边（调度、闸门、目标冻结、工具、HTTP 端点）**和**浏览器界面（状态文字、横幅、设置页）都在，界面自动加载，**不需要 AI 辅助安装**。
+DeepSeek Harness 的官方插件形态是**导出 `apply` 的模块 + cordis.yml 挂载**（见 [DSH 官方教程](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)）。既可以从 **npm** 安装（一行命令，推荐），也可以从本仓库构建（下面的三种方式：`--patch` 快速试用、bundle 打包分发、link + HMR 热重载开发调试形态）。所有官方形态安装的都是**完整插件**：Host 半边（调度、闸门、目标冻结、工具、HTTP 端点）**和**浏览器界面（状态文字、横幅、设置页）都在，界面自动加载，**不需要 AI 辅助安装**。
 
-### 安装速览（照抄即可）
+
+### npm方式安装：从 npm 安装（推荐）
+
+插件已发布到 npm，推荐使用以下方式安装。
+
+#### 首次安装
+
+执行一行命令即可安装到 Web 环境：
+
+```sh
+npx @deepseek-ai/dsh plugin --profile web add dsh-save-money
+
+```
+
+#### 插件删除
+
+```sh
+npx @deepseek-ai/dsh plugin --profile web remove dsh-save-money
+```
+
+安装完成后，**完全重启 DSH**（Ctrl+C 停掉再启动）并**强制刷新浏览器**（Ctrl+Shift+R），即可在会话头部右上角看到“省钱”状态文字。
+
+
+
+### 源码安装
 
 以目录是 `~/app/` 为例（每一步都假设上一步已成功）：
 

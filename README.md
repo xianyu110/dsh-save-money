@@ -63,9 +63,27 @@ stateDiagram-v2
 
 ## Install
 
-The official DSH plugin form is a **module exporting `apply` + cordis.yml mounting** (see the [DSH official tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)). This repository offers three install options: two official paths (`--patch` quick try, distributable bundle) plus a development workflow (link + HMR hot reload). The official forms include the **full plugin**: Host logic (scheduling, gate, goal freeze, tools, HTTP endpoints) **and** the browser UI (status text, banner, settings page), which loads automatically — no AI-assisted setup needed.
+The official DSH plugin form is a **module exporting `apply` + cordis.yml mounting** (see the [DSH official tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/index.md)). You can install from **npm** (one command, recommended) or build from this repository (three options below: `--patch` quick try, distributable bundle, or the link + HMR development workflow). Every official form ships the **full plugin**: Host logic (scheduling, gate, goal freeze, tools, HTTP endpoints) **and** the browser UI (status text, banner, settings page), which loads automatically — no AI-assisted setup needed.
 
-### Quick install (copy-paste)
+### Install from npm (recommended)
+
+The plugin is published to npm — one command installs it into your Web profile:
+
+#### First-time install
+
+```sh
+npx @deepseek-ai/dsh plugin --profile web add dsh-save-money
+```
+
+#### Remove
+
+```sh
+npx @deepseek-ai/dsh plugin --profile web remove dsh-save-money
+```
+
+After installing, **fully restart DSH** (Ctrl+C, start again) and **hard-refresh the browser** (Ctrl+Shift+R) — the "Save" status text appears top-right in the session header.
+
+### Source install (build from this repo)
 
 Using `~/app/` as an example directory (each step assumes the previous one succeeded):
 
