@@ -205,7 +205,7 @@ test('official client bundle: plugin/client.js is a __ModuleLoader__ factory exp
 
 test('official bundle manifest: package.json declares dsh.client + exports["./client"]', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'plugin', 'package.json'), 'utf8'))
-  assert.equal(pkg.version, '1.4.0')
+  assert.equal(pkg.version, '1.4.1')
   assert.equal(pkg.exports['./client'], './client.js')
   assert.equal(pkg.dsh.client.platform, 'web')
   assert.ok(pkg.files.includes('client.js'))
@@ -513,7 +513,58 @@ test('config resolution: late fs service (the second-machine bug) still loads co
   }
 })
 
-// ---- Balance history persistence (host integration: keyId gating) ----
+// ---- v1.4.1 modelApply (per-tier save-money) host integration ----
+
+test('modelApply: default config applies to official tiers only, opencode exempt', async () => {
+  const { ctx, routes } = makeCtx({
+    sessions: { list: () => [], get: () => undefined },
+    agents: { currentInitiator: () => undefined, list: () => [] },
+    goals: { get: () => undefined },
+  })
+  await plugin.apply(ctx)
+  const res = {
+    writeHead(code, headers) { this.code = code; this.headers = headers },
+    end(body) { this._body = body },
+  }
+  await routes[0].handler({ method: 'GET', url: '/save-money/status' }, res)
+  const st = JSON.parse(res._body)
+  const ma = st.config.modelApply
+  assert.equal(ma['official-flash'], true, 'official flash applies by default')
+  assert.equal(ma['official-pro'], true, 'official pro applies by default')
+  assert.equal(ma['opencode-flash'], false, 'opencode flash exempt by default')
+  assert.equal(ma['opencode-pro'], false, 'opencode pro exempt by default')
+})
+
+test('modelApply: configure updates tiers and validates booleans', async () => {
+  const { ctx, routes } = makeCtx({
+    sessions: { list: () => [], get: () => undefined },
+    agents: { currentInitiator: () => undefined, list: () => [] },
+    goals: { get: () => undefined },
+  })
+  await plugin.apply(ctx)
+  const handler = routes[0].handler
+  const call = async (patch) => {
+    const res = { writeHead(c, h) { this.code = c }, end(b) { this._body = b } }
+    const req = {
+      method: 'POST', url: '/save-money/configure',
+      async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(patch)) },
+    }
+    await handler(req, res)
+    return JSON.parse(res._body)
+  }
+  // 更新:勾选 opencode-pro
+  const out = await call({ modelApply: { 'opencode-pro': true } })
+  assert.equal(out.ok, true)
+  assert.equal(out.config.modelApply['opencode-pro'], true)
+  assert.equal(out.config.modelApply['official-flash'], true, 'other tiers untouched')
+  // 非法值被拒绝
+  const bad = await call({ modelApply: { 'official-flash': 'yes' } })
+  assert.equal(bad.ok, false)
+  assert.match(bad.error, /boolean/)
+  // 非对象被拒绝
+  const bad2 = await call({ modelApply: 42 })
+  assert.equal(bad2.ok, false)
+})
 
 /** Apply the plugin with a fake fs pre-seeded with a balance-history file. */
 async function applyWithHistory({ home, key, historyJson }) {

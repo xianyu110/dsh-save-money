@@ -135,6 +135,9 @@ declare function serializeBalanceHistory(p: { keyId: string; points: { at: numbe
 declare function parseBalanceHistory(text: string): { keyId: string; points: { at: number; total: number; activity?: boolean }[] } | null
 declare const BALANCE_HISTORY_FILE: string
 declare const SAMPLE_MS: number
+declare type ModelClass = 'official-flash' | 'official-pro' | 'opencode-flash' | 'opencode-pro' | null
+declare function classifyModel(provider: any, model: any): ModelClass
+declare function modelApplyEnabled(applied: any, cls: ModelClass): boolean
 
 return {
   inject: ['timer'],
@@ -147,6 +150,15 @@ return {
       reconcileOnStart: true,
       lang: 'auto' as LangChoice,
       showBalance: false,
+      // v1.4.1:按模型档位决定是否执行省钱。默认只勾官方两项 —— 全新用户
+      // 启用省钱只作用于官方 flash/pro;OpenCode(订阅套餐)与未知模型默认
+      // 豁免,用户主动勾选才暂停。用户改过配置后尊重持久化值,绝不重置。
+      modelApply: {
+        'official-flash': true,
+        'official-pro': true,
+        'opencode-flash': false,
+        'opencode-pro': false,
+      },
     }
     let cfg = { ...DEFAULTS, windows: [] as TimeWindow[] }
     let pauseRecord: {
@@ -383,6 +395,15 @@ return {
           const v = validateWindows(data.windows, next.timezone)
           if (v.ok) next.windows = data.windows.map((w: TimeWindow) => ({ ...w }))
         }
+        // modelApply:仅当用户保存过才采用(逐档校验 boolean,只合并合法档位,
+        // 损坏/缺失的档位保持默认)。没有该字段 → 保持默认(官方两项勾选)。
+        if (data.modelApply && typeof data.modelApply === 'object') {
+          const ma: any = { ...next.modelApply }
+          for (const key of ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro']) {
+            if (typeof data.modelApply[key] === 'boolean') ma[key] = data.modelApply[key]
+          }
+          next.modelApply = ma
+        }
         cfg = next
         console.log('[save-money] config loaded from ' + workspaceRoot + '\\' + CONFIG_FILE)
       } catch (e: any) {
@@ -408,6 +429,17 @@ return {
       if (next.showBalance !== undefined && typeof next.showBalance !== 'boolean') {
         return { ok: false, error: 'showBalance must be a boolean' }
       }
+      // modelApply:接受对象,逐档必须是 boolean(缺档保持原值)
+      if (next.modelApply !== undefined) {
+        if (!next.modelApply || typeof next.modelApply !== 'object') {
+          return { ok: false, error: 'modelApply must be an object' }
+        }
+        for (const key of ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro']) {
+          if (next.modelApply[key] !== undefined && typeof next.modelApply[key] !== 'boolean') {
+            return { ok: false, error: 'modelApply.' + key + ' must be a boolean' }
+          }
+        }
+      }
       const LANGS = ['auto', 'zh', 'zh-TW', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko']
       if (next.lang !== undefined && !LANGS.includes(next.lang)) {
         return { ok: false, error: 'lang must be one of auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko' }
@@ -421,6 +453,15 @@ return {
         endWindowUntil = 0
         endWindowKey = null
         console.log('[save-money] re-enabled: end-this-save-mode state reset')
+      }
+      // modelApply 逐档合并:patch 只覆盖给定的档位,其余保留当前值,
+      // 避免 { modelApply: { 'opencode-pro': true } } 丢掉官方两项。
+      if (patch && patch.modelApply && typeof patch.modelApply === 'object') {
+        const merged: Record<string, boolean> = { ...cfg.modelApply }
+        for (const key of ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro']) {
+          if (typeof patch.modelApply[key] === 'boolean') merged[key] = patch.modelApply[key]
+        }
+        next.modelApply = merged as any
       }
       cfg = next
       // Wake waiters only when the gate is actually open (unconditional wake
@@ -438,6 +479,7 @@ return {
         reconcileOnStart: cfg.reconcileOnStart,
         lang: cfg.lang,
         showBalance: cfg.showBalance,
+        modelApply: { ...cfg.modelApply },
         windows: cfg.windows.map((w) => ({ ...w })),
       }
     }
@@ -650,6 +692,15 @@ return {
               ? options.provider
               : null
           } catch (e) { lastRequestProvider = null }
+          // v1.4.1 模型档位豁免:识别请求的 provider/model 档位,若该档位在
+          // modelApply 中未勾选(或识别失败=null),直接放行 —— 窗口内也不
+          // 暂停。豁免的请求同样算「本环境活动」(balanceDirty/activity 已
+          // 在上方打点),因为它确实是真实使用。识别/查询任何异常都安全失败
+          // 为豁免(不暂停),绝不抛出。
+          try {
+            const cls = classifyModel(options && options.provider, options && options.model)
+            if (!modelApplyEnabled(cfg.modelApply, cls)) return next()
+          } catch (e) { /* 识别异常 → 豁免(不暂停) */ }
           if (!gateClosedAt(new Date())) return next()
           const waitForOpen = () => new Promise((resolve) => {
             const ready = () => gateDisposed || !gateClosedAt(new Date())
@@ -1113,7 +1164,7 @@ return {
       },
       {
         name: 'save_money_configure',
-        description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+        description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), modelApply (object of booleans: official-flash / official-pro / opencode-flash / opencode-pro — checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
         parameters: {
           type: 'object',
           properties: {
@@ -1123,6 +1174,15 @@ return {
             reconcileOnStart: { type: 'boolean' },
             lang: { type: 'string' },
             showBalance: { type: 'boolean' },
+            modelApply: {
+              type: 'object',
+              properties: {
+                'official-flash': { type: 'boolean' },
+                'official-pro': { type: 'boolean' },
+                'opencode-flash': { type: 'boolean' },
+                'opencode-pro': { type: 'boolean' },
+              },
+            },
             windows: {
               type: 'array',
               items: {

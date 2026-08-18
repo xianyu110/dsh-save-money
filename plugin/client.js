@@ -63,6 +63,12 @@ const I18N = {
         sectionLabel: '省钱插件',
         settingsHeading: 'save-money 省钱插件',
         showBalance: '显示余额',
+        modelApplyTitle: '适用模型（勾选 = 窗口内暂停；不勾选 = 豁免）',
+        modelApplyHint: '识别失败或未列出的模型（如其他第三方）一律豁免',
+        applyOfficialFlash: '官方 flash API',
+        applyOfficialPro: '官方 pro API',
+        applyOpencodeFlash: 'opencode go/zen flash API',
+        applyOpencodePro: 'opencode go/zen pro API',
         spendH1: '近1h消费',
         spendM10: '近10m消费',
         spendH24: '近24h消费',
@@ -118,6 +124,12 @@ const I18N = {
         sectionLabel: 'Save-money',
         settingsHeading: 'save-money plugin',
         showBalance: 'Show balance',
+        modelApplyTitle: 'Apply to models (checked = pause in windows; unchecked = exempt)',
+        modelApplyHint: 'Models not recognized or not listed (e.g. other third parties) are always exempt',
+        applyOfficialFlash: 'Official flash API',
+        applyOfficialPro: 'Official pro API',
+        applyOpencodeFlash: 'opencode go/zen flash API',
+        applyOpencodePro: 'opencode go/zen pro API',
         spendH1: '1h spent',
         spendM10: '10m spent',
         spendH24: '24h spent',
@@ -173,6 +185,12 @@ const I18N = {
         sectionLabel: 'Sparmodus',
         settingsHeading: 'save-money Sparmodus',
         showBalance: 'Guthaben anzeigen',
+        modelApplyTitle: 'Gilt für Modelle (aktiviert = in Fenstern pausieren; deaktiviert = ausgenommen)',
+        modelApplyHint: 'Nicht erkannte oder nicht aufgeführte Modelle (z. B. andere Drittanbieter) sind immer ausgenommen',
+        applyOfficialFlash: 'Offizielle Flash-API',
+        applyOfficialPro: 'Offizielle Pro-API',
+        applyOpencodeFlash: 'opencode go/zen Flash-API',
+        applyOpencodePro: 'opencode go/zen Pro-API',
         spendH1: 'Verbrauch 1h',
         spendM10: 'Verbrauch 10m',
         spendH24: 'Verbrauch 24h',
@@ -228,6 +246,12 @@ const I18N = {
         sectionLabel: 'Économie',
         settingsHeading: 'Extension save-money',
         showBalance: 'Afficher le solde',
+        modelApplyTitle: 'Appliquer aux modèles (coché = suspendre pendant les fenêtres ; décoché = exempté)',
+        modelApplyHint: 'Les modèles non reconnus ou non listés (ex. autres tiers) sont toujours exemptés',
+        applyOfficialFlash: 'API flash officielle',
+        applyOfficialPro: 'API pro officielle',
+        applyOpencodeFlash: 'API flash opencode go/zen',
+        applyOpencodePro: 'API pro opencode go/zen',
         spendH1: 'dépensé 1h',
         spendM10: 'dépensé 10m',
         spendH24: 'dépensé 24h',
@@ -283,6 +307,12 @@ const I18N = {
         sectionLabel: 'Ahorro',
         settingsHeading: 'Extensión save-money',
         showBalance: 'Mostrar saldo',
+        modelApplyTitle: 'Aplicar a modelos (marcado = pausar en ventanas; desmarcado = exento)',
+        modelApplyHint: 'Los modelos no reconocidos o no listados (p. ej. otros terceros) siempre están exentos',
+        applyOfficialFlash: 'API flash oficial',
+        applyOfficialPro: 'API pro oficial',
+        applyOpencodeFlash: 'API flash opencode go/zen',
+        applyOpencodePro: 'API pro opencode go/zen',
         spendH1: 'gastado 1h',
         spendM10: 'gastado 10m',
         spendH24: 'gastado 24h',
@@ -338,6 +368,12 @@ const I18N = {
         sectionLabel: 'Risparmio',
         settingsHeading: 'Estensione save-money',
         showBalance: 'Mostra saldo',
+        modelApplyTitle: 'Applica ai modelli (selezionato = pausa nelle finestre; deselezionato = esente)',
+        modelApplyHint: 'I modelli non riconosciuti o non elencati (es. altri terzi) sono sempre esenti',
+        applyOfficialFlash: 'API flash ufficiale',
+        applyOfficialPro: 'API pro ufficiale',
+        applyOpencodeFlash: 'API flash opencode go/zen',
+        applyOpencodePro: 'API pro opencode go/zen',
         spendH1: 'speso 1h',
         spendM10: 'speso 10m',
         spendH24: 'speso 24h',
@@ -393,6 +429,12 @@ const I18N = {
         sectionLabel: 'Economia',
         settingsHeading: 'Extensão save-money',
         showBalance: 'Mostrar saldo',
+        modelApplyTitle: 'Aplicar a modelos (marcado = pausar nas janelas; desmarcado = isento)',
+        modelApplyHint: 'Modelos não reconhecidos ou não listados (ex. outros terceiros) estão sempre isentos',
+        applyOfficialFlash: 'API flash oficial',
+        applyOfficialPro: 'API pro oficial',
+        applyOpencodeFlash: 'API flash opencode go/zen',
+        applyOpencodePro: 'API pro opencode go/zen',
         spendH1: 'gasto 1h',
         spendM10: 'gasto 10m',
         spendH24: 'gasto 24h',
@@ -448,6 +490,12 @@ const I18N = {
         sectionLabel: '節約プラグイン',
         settingsHeading: 'save-money 節約プラグイン',
         showBalance: '残高を表示',
+        modelApplyTitle: '適用モデル（チェック = ウィンドウ内で一時停止;外す = 対象外）',
+        modelApplyHint: '認識できない・一覧にないモデル（他社など）は常に対象外',
+        applyOfficialFlash: '公式 flash API',
+        applyOfficialPro: '公式 pro API',
+        applyOpencodeFlash: 'opencode go/zen flash API',
+        applyOpencodePro: 'opencode go/zen pro API',
         spendH1: '1h 消費',
         spendM10: '10m 消費',
         spendH24: '24h 消費',
@@ -503,6 +551,12 @@ const I18N = {
         sectionLabel: '절약 플러그인',
         settingsHeading: 'save-money 절약 플러그인',
         showBalance: '잔액 표시',
+        modelApplyTitle: '적용 모델 (체크 = 창 내 일시중지; 해제 = 면제)',
+        modelApplyHint: '인식되지 않거나 목록에 없는 모델(예: 기타 제3자)은 항상 면제',
+        applyOfficialFlash: '공식 flash API',
+        applyOfficialPro: '공식 pro API',
+        applyOpencodeFlash: 'opencode go/zen flash API',
+        applyOpencodePro: 'opencode go/zen pro API',
         spendH1: '1h 소비',
         spendM10: '10m 소비',
         spendH24: '24h 소비',
@@ -558,6 +612,12 @@ const I18N = {
         sectionLabel: '省錢外掛',
         settingsHeading: 'save-money 省錢外掛',
         showBalance: '顯示餘額',
+        modelApplyTitle: '適用模型（勾選 = 視窗內暫停；不勾選 = 豁免）',
+        modelApplyHint: '識別失敗或未列出的模型（如其他第三方）一律豁免',
+        applyOfficialFlash: '官方 flash API',
+        applyOfficialPro: '官方 pro API',
+        applyOpencodeFlash: 'opencode go/zen flash API',
+        applyOpencodePro: 'opencode go/zen pro API',
         spendH1: '近1小時消費',
         spendM10: '近10分鐘消費',
         spendH24: '近24小時消費',
@@ -600,9 +660,9 @@ function detectLang() {
 // 'auto' (follow the browser) — see refresh() below and the settings dropdown.
 let currentLang = detectLang();
 // Plugin name + version shown next to the Save button in the settings popover.
-// '1.4.0' is replaced at build time (scripts/build.js) with the real
+// '1.4.1' is replaced at build time (scripts/build.js) with the real
 // version from package.json — never edit this literal by hand.
-const PLUGIN_VERSION = '1.4.0';
+const PLUGIN_VERSION = '1.4.1';
 const resolveLang = (cfgLang) => {
     if (cfgLang === 'zh' || cfgLang === 'zh-TW' || cfgLang === 'de' || cfgLang === 'fr' ||
         cfgLang === 'es' || cfgLang === 'it' || cfgLang === 'pt' || cfgLang === 'ja' || cfgLang === 'ko') {
@@ -1265,7 +1325,7 @@ return {
             // Green status line while "end this save mode" is in effect for the
             // current window (in-memory, one-shot): tells the user what happened
             // and how to reset it.
-            st.endWindowUntil ? React.createElement('div', { style: { margin: '6px 0 10px', fontSize: '12px', color: 'var(--dsw-alias-state-success-primary)', fontWeight: 600 } }, t('endWindowActive', { a: st.window ? st.window.pauseAt : '', b: st.window ? st.window.resumeAt : '', c: st.window ? st.window.resumeAt : '' })) : null, btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true), msg ? React.createElement('div', { style: { margin: '8px 0', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, msg) : null, row(t('enable'), React.createElement('input', {
+            st.endWindowUntil ? React.createElement('div', { style: { margin: '6px 0 10px', fontSize: '12px', color: 'var(--dsw-alias-state-success-primary)', fontWeight: 600 } }, t('endWindowActive', { a: st.window ? st.window.pauseAt : '', b: st.window ? st.window.resumeAt : '', c: st.window ? st.window.resumeAt : '' })) : null, msg ? React.createElement('div', { style: { margin: '8px 0', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, msg) : null, row(t('enable'), React.createElement('input', {
                 type: 'checkbox', checked: !!st.enabled,
                 onChange: (e) => void doConfigure({ enabled: e.target.checked }),
                 style: { accentColor: 'var(--dsw-alias-brand-primary)', width: 16, height: 16, cursor: 'pointer' },
@@ -1273,7 +1333,21 @@ return {
                 type: 'checkbox', checked: !!cfg.showBalance,
                 onChange: (e) => void doConfigure({ showBalance: e.target.checked }),
                 style: { accentColor: 'var(--dsw-alias-brand-primary)', width: 16, height: 16, cursor: 'pointer' },
-            })), row(t('timezone'), React.createElement('select', {
+            })), 
+            // 适用模型:勾选 = 该档位在窗口内暂停;不勾选 = 豁免。默认只勾官方
+            // 两项;用户改过后尊重持久化值。识别失败/未列出的模型一律豁免。
+            React.createElement('div', { style: { margin: '10px 0 2px', fontSize: '13px', fontWeight: 600 } }, t('modelApplyTitle')), ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro'].map((key) => {
+                const label = key === 'official-flash' ? t('applyOfficialFlash')
+                    : key === 'official-pro' ? t('applyOfficialPro')
+                        : key === 'opencode-flash' ? t('applyOpencodeFlash')
+                            : t('applyOpencodePro');
+                const checked = !!(cfg.modelApply && cfg.modelApply[key] === true);
+                return row(label, React.createElement('input', {
+                    type: 'checkbox', checked,
+                    onChange: (e) => void doConfigure({ modelApply: { ...cfg.modelApply, [key]: e.target.checked } }),
+                    style: { accentColor: 'var(--dsw-alias-brand-primary)', width: 16, height: 16, cursor: 'pointer' },
+                }));
+            }), React.createElement('div', { style: { margin: '0 0 8px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } }, t('modelApplyHint')), row(t('timezone'), React.createElement('select', {
                 value: tz,
                 onChange: (e) => {
                     const v = e.target.value;
@@ -1323,7 +1397,9 @@ return {
                     background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
                     border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
                 },
-            }, React.createElement('option', { value: 'auto' }, t('langAuto')), React.createElement('option', { value: 'zh' }, t('langZh')), React.createElement('option', { value: 'zh-TW' }, t('langZhTw')), React.createElement('option', { value: 'en' }, t('langEn')), React.createElement('option', { value: 'de' }, t('langDe')), React.createElement('option', { value: 'fr' }, t('langFr')), React.createElement('option', { value: 'es' }, t('langEs')), React.createElement('option', { value: 'it' }, t('langIt')), React.createElement('option', { value: 'pt' }, t('langPt')), React.createElement('option', { value: 'ja' }, t('langJa')), React.createElement('option', { value: 'ko' }, t('langKo')))), React.createElement('div', { style: { marginTop: '12px', fontSize: '13px', fontWeight: 600 } }, t('windowsTitle', { tz, n: wins.length })), wins.map((w, i) => React.createElement('div', { key: i, style: { margin: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'), React.createElement('span', { style: { fontSize: '12px' } }, t('pause')), input(w.pauseAt, (v) => setWin(i, 'pauseAt', v)), React.createElement('span', { style: { fontSize: '12px' } }, t('resume')), input(w.resumeAt, (v) => setWin(i, 'resumeAt', v)), React.createElement('button', {
+            }, React.createElement('option', { value: 'auto' }, t('langAuto')), React.createElement('option', { value: 'zh' }, t('langZh')), React.createElement('option', { value: 'zh-TW' }, t('langZhTw')), React.createElement('option', { value: 'en' }, t('langEn')), React.createElement('option', { value: 'de' }, t('langDe')), React.createElement('option', { value: 'fr' }, t('langFr')), React.createElement('option', { value: 'es' }, t('langEs')), React.createElement('option', { value: 'it' }, t('langIt')), React.createElement('option', { value: 'pt' }, t('langPt')), React.createElement('option', { value: 'ja' }, t('langJa')), React.createElement('option', { value: 'ko' }, t('langKo')))), 
+            // 一键 DeepSeek 预设按钮:紧邻暂停窗口标题上方(它是窗口的快捷操作)
+            React.createElement('div', { style: { margin: '10px 0 4px' } }, btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true)), React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } }, t('windowsTitle', { tz, n: wins.length })), wins.map((w, i) => React.createElement('div', { key: i, style: { margin: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'), React.createElement('span', { style: { fontSize: '12px' } }, t('pause')), input(w.pauseAt, (v) => setWin(i, 'pauseAt', v)), React.createElement('span', { style: { fontSize: '12px' } }, t('resume')), input(w.resumeAt, (v) => setWin(i, 'resumeAt', v)), React.createElement('button', {
                 onClick: () => delWin(i),
                 style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-state-error-primary)', padding: '2px 4px' },
                 title: t('removeTitle'),

@@ -21,6 +21,7 @@ Each bar is a 10-minute window: the X axis shows whole-hour ticks, the Y axis ke
 - **Multiple time windows**: add / remove pause-resume windows freely; supports midnight-crossing windows (23:00–08:00) and per-weekday filtering;
 - **Automatic pause on schedule**: when the pause time arrives, running tasks are safely "frozen" (their progress is preserved exactly — nothing is interrupted or lost) and resume automatically when the window ends; **if nothing is running, nothing is paused**;
 - **No requests during the window (the saving core)**: inside a pause window the AI sends no new requests to the model service, so **no cost is incurred**; after the window ends (or on disable / end-this-window) everything resumes, with conversation context and in-flight tasks unaffected. **The AI not replying inside a window (including new conversations) is expected** — to resume right away, click the **End this save mode** button (takes effect directly, no AI involved);
+- **Per-model-tier save mode**: decide per model tier which ones pause during windows. The settings panel has four toggles — official flash / official pro / opencode go·zen flash / opencode go·zen pro. Checked = paused (saving money); unchecked = **exempt** (requests flow even during a window). Defaults: official flash + pro checked, opencode exempt; your changes are persisted and never reset. Any unrecognized model (legacy `chat`/`reasoner` names, other third parties, anything else) is always exempt — it can never block your requests;
 - **End this save mode (one-shot, current window only)**: the banner and settings-popover button end the **currently active** pause window only — if paused, tasks resume immediately and the gate opens; if a pause is upcoming, it is cancelled. The window is skipped until its resume time, then the state clears automatically. The **next window (today or later) still takes effect**, and the persistent **Enable** flag is never touched, so you cannot accidentally leave the feature disabled;
 - **UI reminders**: top floating banner (light yellow for upcoming pause / light red for paused, with the **End this save mode** button) + the single persistent session-header entry (next to the Session log, "Save · 🟢 Working" colored status text; click to expand settings), colors follow the state in real time;
 - **Timezone support**: IANA timezone dropdown, browser auto-detection with Beijing time (+8) fallback; UTC projection checked (Beijing 09:00 == UTC 01:00);
@@ -98,13 +99,13 @@ npm install
 cd plugin
 npm pack                    # runs the build automatically; produces the plugin tarball
 
-ls                          # check the tarball name, e.g. dsh-save-money-1.4.0.tgz
+ls                          # check the tarball name, e.g. dsh-save-money-1.4.1.tgz
 
 cd ~/app/deepseek-harness   # change to your harness directory (clone it first if missing — see "0." below)
 
 pnpm dsh plugin --profile web remove dsh-save-money   # only if you installed it before; skip if you haven't
 
-pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.4.0.tgz   # use the name from `ls` above
+pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.4.1.tgz   # use the name from `ls` above
 
 pnpm dsh --profile web      # starts DeepSeek Harness — the plugin appears top-right in the session header
 ```
@@ -176,7 +177,7 @@ The bundle is a small `.tgz` that you build once and install anywhere. **You do 
 cd dsh-save-money
 npm install             # first clone only (typescript dev dependency)
 cd plugin
-npm pack                # runs the prepare build automatically; produces dsh-save-money-1.4.0.tgz
+npm pack                # runs the prepare build automatically; produces dsh-save-money-1.4.1.tgz
 ```
 
 `plugin/` is the standard bundle layout: `package.json` declares `dsh.bundle.patch` + `dsh.client`, `cordis.patch.yml` inserts the plugin row, `index.js` is the Host module and `client.js` the browser UI bundle.
@@ -184,16 +185,16 @@ npm pack                # runs the prepare build automatically; produces dsh-sav
 **Step 2 — copy the tgz to the target machine** (scp / USB stick / however you move files; run this on the build machine, **one directory above** the repository, adjusting the path to yours):
 
 ```sh
-scp dsh-save-money/plugin/dsh-save-money-1.4.0.tgz pi@<pi-ip>:~/
+scp dsh-save-money/plugin/dsh-save-money-1.4.1.tgz pi@<pi-ip>:~/
 ```
 
 **Step 3 — install into a profile** (on the target machine; first run initializes the profile with `@deepseek-ai/dsh-base`):
 
 ```sh
 # DSH run from source (inside the deepseek-harness directory):
-pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.0.tgz
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.1.tgz
 # npx-launched (Step 0, option A) or globally installed dsh: works from any directory
-npx @deepseek-ai/dsh plugin --profile web add ~/dsh-save-money-1.4.0.tgz
+npx @deepseek-ai/dsh plugin --profile web add ~/dsh-save-money-1.4.1.tgz
 ```
 
 > Both commands do the same thing: install the tgz into `~/.dsh/profiles/web/node_modules/`. Use whichever matches how you start DSH.
@@ -216,11 +217,11 @@ pnpm dsh --profile web                 # Ctrl+C to stop an already-running insta
 ```sh
 # on the build machine:
 cd dsh-save-money && git pull && cd plugin && npm pack    # fresh dsh-save-money-<new>.tgz
-scp dsh-save-money/plugin/dsh-save-money-1.4.0.tgz pi@<pi-ip>:~/
+scp dsh-save-money/plugin/dsh-save-money-1.4.1.tgz pi@<pi-ip>:~/
 
 # on the target:
 pnpm dsh plugin --profile web remove dsh-save-money
-pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.0.tgz
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.1.tgz
 pnpm dsh --profile web                # restart, then hard-refresh the browser
 ```
 

@@ -25,6 +25,7 @@ DSH（DeepSeek Harness）**省钱插件** —— 自定义"暂停 / 继续"时�
 - **多组时间窗口**：暂停 / 继续时间自由增删，支持跨午夜（23:00–08:00）、按星期过滤；
 - **到点自动暂停**：暂停时刻到达后，正在运行的任务会被安全地"冻住"（进度现场原样保留，不会中断或丢失），窗口结束自动恢复接着跑；**没有任务在跑就不暂停**；
 - **暂停期间不发请求（省钱核心）**：暂停窗口内，AI 不会向模型服务发出任何新请求，**不产生任何费用**；窗口结束 / 停用 / 结束本次窗口后自动恢复继续，对话上下文和进行中的任务都不受影响。**窗口内 AI 不回复（包括新对话）是预期行为**，想立刻恢复就点「结束本次省钱模式」按钮（不经 AI，直接生效）；
+- **按模型档位决定是否省钱**：可以按模型档位选择哪些在窗口内暂停。设置面板有 4 个开关——官方 flash / 官方 pro / opencode go·zen flash / opencode go·zen pro。勾选 = 暂停（省钱）；不勾选 = **豁免**（窗口内也照常放行）。默认勾选官方 flash+pro、opencode 豁免；你的改动持久化保存、绝不重置。任何无法识别的模型（旧名 `chat`/`reasoner`、其他第三方、其他任何模型）一律豁免——永远不会阻塞你的请求；
 - **结束本次省钱模式（一次性，仅当前窗口）**：横幅与设置浮层上的按钮只结束**当前触发的这一个暂停窗口**——已暂停则立即恢复并放行闸门，即将暂停则取消本次暂停；本窗口一直跳过到其继续时间，随后状态自动清除。**下一个窗口（今天或以后）照常生效**，且**不会改动持久化的「启用」开关**——不用担心忘记重新启用导致以后不再省钱；
 - **界面提醒**：顶部浮动横幅（即将暂停浅黄 / 已暂停浅红，含【结束本次省钱模式】按钮）+ 会话头部**唯一常驻入口**（Session log 旁，"省钱 · 🟢 工作中"彩色状态文字，点击展开设置），颜色随状态实时变化；
 - **时区支持**：IANA 时区下拉，浏览器自动探测、失败回退北京时间（+8）；UTC 等价投影校对（北京 09:00 == UTC 01:00）；
@@ -108,13 +109,13 @@ npm install
 cd plugin
 npm pack                    # 自动执行构建；产出插件包
 
-ls                          # 查看插件打包文件名，比如 dsh-save-money-1.4.0.tgz
+ls                          # 查看插件打包文件名，比如 dsh-save-money-1.4.1.tgz
 
 cd ~/app/deepseek-harness   # 这里改成你的 harness 目录（没有就先 clone，见下方「第 0 步」）
 
 pnpm dsh plugin --profile web remove dsh-save-money   # 如果之前安装过，这一步是卸载；没安装过可以跳过
 
-pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.4.0.tgz   # 文件名按上面 ls 的实际输出
+pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.4.1.tgz   # 文件名按上面 ls 的实际输出
 
 pnpm dsh --profile web      # 启动 DeepSeek Harness，可以看到本插件在右上角了
 ```
@@ -186,7 +187,7 @@ bundle 是一个很小的 `.tgz`，在一台机器上打出来，装到任何机
 cd dsh-save-money
 npm install             # 仅首次克隆需要（typescript 开发依赖）
 cd plugin
-npm pack                # 自动执行 prepare 构建；产出 dsh-save-money-1.4.0.tgz
+npm pack                # 自动执行 prepare 构建；产出 dsh-save-money-1.4.1.tgz
 ```
 
 `plugin/` 目录就是标准 bundle 结构：`package.json` 声明 `dsh.bundle.patch` 与 `dsh.client`，`cordis.patch.yml` 插入插件行，`index.js` 为 Host 模块，`client.js` 为浏览器界面 bundle。
@@ -194,16 +195,16 @@ npm pack                # 自动执行 prepare 构建；产出 dsh-save-money-1.
 **第 2 步——把 tgz 拷到目标机器**（scp / U 盘 / 任意方式；下面命令在打包机上、仓库目录的**上一级**执行，路径按实际调整）：
 
 ```sh
-scp dsh-save-money/plugin/dsh-save-money-1.4.0.tgz pi@<树莓派IP>:~/
+scp dsh-save-money/plugin/dsh-save-money-1.4.1.tgz pi@<树莓派IP>:~/
 ```
 
 **第 3 步——安装进 profile**（在目标机器上执行；首次运行会自动以 `@deepseek-ai/dsh-base` 初始化 profile）：
 
 ```sh
 # 源码运行 DSH（在 deepseek-harness 目录内）：
-pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.0.tgz
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.1.tgz
 # npx 启动（README「第 0 步-方式 A」）或已全局安装 dsh：任意目录都可执行
-npx @deepseek-ai/dsh plugin --profile web add ~/dsh-save-money-1.4.0.tgz
+npx @deepseek-ai/dsh plugin --profile web add ~/dsh-save-money-1.4.1.tgz
 ```
 
 > 两种命令效果一样，都是把 tgz 装进 `~/.dsh/profiles/web/node_modules/`。选你启动 DSH 用的那一种即可。
@@ -226,11 +227,11 @@ pnpm dsh --profile web                 # 若已有实例在跑，先 Ctrl+C 停�
 ```sh
 # 在打包机上：
 cd dsh-save-money && git pull && cd plugin && npm pack    # 产出新的 dsh-save-money-<新版本>.tgz
-scp dsh-save-money/plugin/dsh-save-money-1.4.0.tgz pi@<树莓派IP>:~/
+scp dsh-save-money/plugin/dsh-save-money-1.4.1.tgz pi@<树莓派IP>:~/
 
 # 在目标机器上：
 pnpm dsh plugin --profile web remove dsh-save-money
-pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.0.tgz
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.1.tgz
 pnpm dsh --profile web                # 重启，然后强制刷新浏览器
 ```
 

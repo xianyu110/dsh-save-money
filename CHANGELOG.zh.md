@@ -4,6 +4,15 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.4.1] — 2026-08-18
+
+### 新增
+
+- **按模型档位决定是否省钱（只对你想暂停的模型生效）**：设置面板新增「适用模型」区块，4 个独立勾选——官方 flash / 官方 pro / opencode go·zen flash / opencode go·zen pro。勾选的档位在暂停窗口内**执行省钱**（挂起请求）；不勾选的档位**豁免**（即使窗口内也照常放行）。请求按 provider 路由名（`deepseek-official` 或名称含 `opencode` 的 provider）和模型名（`flash`/`pro`）实时识别。
+- **合理的默认值 + 尊重用户选择**：全新安装默认勾选官方 flash/pro（窗口内暂停），opencode go/zen 默认不勾选（OpenCode 是订阅套餐,想暂停时再自己勾）。你改过任何勾选后,持久化保存,之后绝不重置。
+- **安全兜底**：任何无法识别为官方 flash/pro 或 opencode flash/pro 的模型——旧名（`deepseek-chat`/`deepseek-reasoner`）、其他第三方、其他任何模型——一律**豁免**（绝不暂停）,所以识别不到的 provider 永远不会阻塞你的请求。
+- **「一键 DeepSeek 预设」按钮**移到暂停窗口列表正上方（它是窗口的快捷操作,不是通用设置）。
+
 ## [1.4.0] — 2026-08-18
 
 ### 新增

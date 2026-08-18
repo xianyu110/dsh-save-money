@@ -355,6 +355,40 @@ function parseBalanceHistory(text) {
         return null;
     }
 }
+/** 官方 DeepSeek provider 路由名(harness 硬编码)。 */
+const OFFICIAL_PROVIDER = 'deepseek-official';
+/**
+ * 按 provider 名 + 模型名识别请求的档位。纯函数、永不抛异常:
+ *  - 服务商:provider 小写含 'opencode' → OpenCode(go/zen 网关复用同路由);
+ *    provider === 'deepseek-official' → 官方;其余 → null(豁免)。
+ *  - 档位:模型名小写含 'pro' → pro;含 'flash' → flash;否则 null(豁免,
+ *    包括旧名 chat/reasoner 与未知模型 —— 只有明确 flash/pro 才可能被暂停)。
+ * 任何输入形态(undefined/非字符串)都安全返回 null。
+ */
+function classifyModel(provider, model) {
+    const p = typeof provider === 'string' ? provider.toLowerCase() : '';
+    const m = typeof model === 'string' ? model.toLowerCase() : '';
+    if (p.length === 0 || m.length === 0)
+        return null;
+    const isPro = m.indexOf('pro') >= 0;
+    const isFlash = m.indexOf('flash') >= 0;
+    if (!isPro && !isFlash)
+        return null; // unknown → 豁免
+    if (p === OFFICIAL_PROVIDER)
+        return isPro ? 'official-pro' : 'official-flash';
+    if (p.indexOf('opencode') >= 0)
+        return isPro ? 'opencode-pro' : 'opencode-flash';
+    return null; // 其他第三方 → 豁免(它们没有 DeepSeek 峰谷策略)
+}
+/**
+ * 查询某一档位在当前 modelApply 配置中是否勾选(是否应执行省钱)。
+ * 配置缺省/损坏时返回 false(安全方向:不暂停);档位为 null 时恒 false。
+ */
+function modelApplyEnabled(applied, cls) {
+    if (!applied || typeof applied !== 'object' || cls === null)
+        return false;
+    return applied[cls] === true;
+}
 /** tz 时区的墙钟分钟-of-day(0..1439)。内部工具,供时区对齐使用。 */
 function tzMinutes(tz, date) {
     try {
@@ -636,6 +670,15 @@ export function apply(ctx) {
             reconcileOnStart: true,
             lang: 'auto',
             showBalance: false,
+            // v1.4.1:按模型档位决定是否执行省钱。默认只勾官方两项 —— 全新用户
+            // 启用省钱只作用于官方 flash/pro;OpenCode(订阅套餐)与未知模型默认
+            // 豁免,用户主动勾选才暂停。用户改过配置后尊重持久化值,绝不重置。
+            modelApply: {
+                'official-flash': true,
+                'official-pro': true,
+                'opencode-flash': false,
+                'opencode-pro': false,
+            },
         };
         let cfg = { ...DEFAULTS, windows: [] };
         let pauseRecord = null;
@@ -898,6 +941,16 @@ export function apply(ctx) {
                     if (v.ok)
                         next.windows = data.windows.map((w) => ({ ...w }));
                 }
+                // modelApply:仅当用户保存过才采用(逐档校验 boolean,只合并合法档位,
+                // 损坏/缺失的档位保持默认)。没有该字段 → 保持默认(官方两项勾选)。
+                if (data.modelApply && typeof data.modelApply === 'object') {
+                    const ma = { ...next.modelApply };
+                    for (const key of ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro']) {
+                        if (typeof data.modelApply[key] === 'boolean')
+                            ma[key] = data.modelApply[key];
+                    }
+                    next.modelApply = ma;
+                }
                 cfg = next;
                 console.log('[save-money] config loaded from ' + workspaceRoot + '\\' + CONFIG_FILE);
             }
@@ -925,6 +978,17 @@ export function apply(ctx) {
             if (next.showBalance !== undefined && typeof next.showBalance !== 'boolean') {
                 return { ok: false, error: 'showBalance must be a boolean' };
             }
+            // modelApply:接受对象,逐档必须是 boolean(缺档保持原值)
+            if (next.modelApply !== undefined) {
+                if (!next.modelApply || typeof next.modelApply !== 'object') {
+                    return { ok: false, error: 'modelApply must be an object' };
+                }
+                for (const key of ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro']) {
+                    if (next.modelApply[key] !== undefined && typeof next.modelApply[key] !== 'boolean') {
+                        return { ok: false, error: 'modelApply.' + key + ' must be a boolean' };
+                    }
+                }
+            }
             const LANGS = ['auto', 'zh', 'zh-TW', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko'];
             if (next.lang !== undefined && !LANGS.includes(next.lang)) {
                 return { ok: false, error: 'lang must be one of auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko' };
@@ -938,6 +1002,16 @@ export function apply(ctx) {
                 endWindowUntil = 0;
                 endWindowKey = null;
                 console.log('[save-money] re-enabled: end-this-save-mode state reset');
+            }
+            // modelApply 逐档合并:patch 只覆盖给定的档位,其余保留当前值,
+            // 避免 { modelApply: { 'opencode-pro': true } } 丢掉官方两项。
+            if (patch && patch.modelApply && typeof patch.modelApply === 'object') {
+                const merged = { ...cfg.modelApply };
+                for (const key of ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro']) {
+                    if (typeof patch.modelApply[key] === 'boolean')
+                        merged[key] = patch.modelApply[key];
+                }
+                next.modelApply = merged;
             }
             cfg = next;
             // Wake waiters only when the gate is actually open (unconditional wake
@@ -956,6 +1030,7 @@ export function apply(ctx) {
                 reconcileOnStart: cfg.reconcileOnStart,
                 lang: cfg.lang,
                 showBalance: cfg.showBalance,
+                modelApply: { ...cfg.modelApply },
                 windows: cfg.windows.map((w) => ({ ...w })),
             };
         }
@@ -1192,6 +1267,17 @@ export function apply(ctx) {
                     catch (e) {
                         lastRequestProvider = null;
                     }
+                    // v1.4.1 模型档位豁免:识别请求的 provider/model 档位,若该档位在
+                    // modelApply 中未勾选(或识别失败=null),直接放行 —— 窗口内也不
+                    // 暂停。豁免的请求同样算「本环境活动」(balanceDirty/activity 已
+                    // 在上方打点),因为它确实是真实使用。识别/查询任何异常都安全失败
+                    // 为豁免(不暂停),绝不抛出。
+                    try {
+                        const cls = classifyModel(options && options.provider, options && options.model);
+                        if (!modelApplyEnabled(cfg.modelApply, cls))
+                            return next();
+                    }
+                    catch (e) { /* 识别异常 → 豁免(不暂停) */ }
                     if (!gateClosedAt(new Date()))
                         return next();
                     const waitForOpen = () => new Promise((resolve) => {
@@ -1708,7 +1794,7 @@ export function apply(ctx) {
             },
             {
                 name: 'save_money_configure',
-                description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+                description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), modelApply (object of booleans: official-flash / official-pro / opencode-flash / opencode-pro — checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -1718,6 +1804,15 @@ export function apply(ctx) {
                         reconcileOnStart: { type: 'boolean' },
                         lang: { type: 'string' },
                         showBalance: { type: 'boolean' },
+                        modelApply: {
+                            type: 'object',
+                            properties: {
+                                'official-flash': { type: 'boolean' },
+                                'official-pro': { type: 'boolean' },
+                                'opencode-flash': { type: 'boolean' },
+                                'opencode-pro': { type: 'boolean' },
+                            },
+                        },
                         windows: {
                             type: 'array',
                             items: {

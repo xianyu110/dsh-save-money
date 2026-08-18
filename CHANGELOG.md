@@ -4,6 +4,15 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] — 2026-08-18
+
+### Added
+
+- **Per-model-tier save mode (apply only to the models you want)**: the settings panel now has an "Apply to models" section with four independent toggles — official flash / official pro / opencode go·zen flash / opencode go·zen pro. A checked tier is paused inside windows (saving money); an unchecked tier is **exempt** (requests flow normally even during a pause window). Requests are classified at runtime by provider route (`deepseek-official` vs any provider whose name contains `opencode`) and model name (`flash` / `pro`).
+- **Sensible defaults + respect user choice**: on a fresh install the official flash and pro tiers are checked (paused), while opencode go/zen tiers are unchecked (exempt — OpenCode is a subscription, you opt in when you want it paused). Once you change any toggle, your persisted choice is honored and never reset.
+- **Safe fallback**: any model that cannot be recognized as official flash/pro or opencode flash/pro — legacy names (`deepseek-chat` / `deepseek-reasoner`), other third parties, or any other model — is always **exempt** (never paused), so an unrecognized provider can never block your requests.
+- The **One-click DeepSeek preset** button moved just above the pause-window list (it is a shortcut for the windows, not general settings).
+
 ## [1.4.0] — 2026-08-18
 
 ### Added

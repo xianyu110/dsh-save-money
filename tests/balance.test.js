@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createBalanceService, createBalanceHistory, spendBars, alignWallClock, keyFingerprint, serializeBalanceHistory, parseBalanceHistory, SAMPLE_MS, HISTORY_LEN } from '../dist/balance-host.js'
+import { createBalanceService, createBalanceHistory, spendBars, alignWallClock, keyFingerprint, serializeBalanceHistory, parseBalanceHistory, classifyModel, modelApplyEnabled, SAMPLE_MS, HISTORY_LEN } from '../dist/balance-host.js'
 
 /** 已对齐的基准时间:整除 5 分钟与 10 分钟(1699999800000 % 300000 == 0)。
  * 所有时间测试都从它出发,避免采样/柱对齐造成边界偏移。 */
@@ -629,4 +629,53 @@ test('balance-host: spendBars(tz) produces bar windows on integer minutes of tha
 test('balance-host: alignWallClock returns undefined for invalid timezone (caller falls back)', () => {
   assert.equal(alignWallClock('Not/AZone', Date.now(), 10 * 60000), undefined)
   assert.equal(alignWallClock('Asia/Shanghai', Date.now(), 0), undefined) // bad step
+})
+
+// ---- v1.4.1 model classification (per-tier save-money) ----
+
+test('model-class: official provider classifies flash/pro correctly', () => {
+  assert.equal(classifyModel('deepseek-official', 'deepseek-v4-flash'), 'official-flash')
+  assert.equal(classifyModel('deepseek-official', 'deepseek-v4-pro'), 'official-pro')
+  // 大小写不敏感
+  assert.equal(classifyModel('DEEPSEEK-OFFICIAL', 'DeepSeek-V4-Flash'), 'official-flash')
+})
+
+test('model-class: opencode provider (go/zen aliases) classifies flash/pro', () => {
+  assert.equal(classifyModel('opencode', 'deepseek-v4-flash'), 'opencode-flash')
+  assert.equal(classifyModel('opencode', 'deepseek-v4-pro'), 'opencode-pro')
+  assert.equal(classifyModel('opencode-go', 'deepseek-v4-flash'), 'opencode-flash')
+  assert.equal(classifyModel('opencode-zen', 'deepseek-v4-pro'), 'opencode-pro')
+  assert.equal(classifyModel('opencode-go', 'deepseek-v4-flash-free'), 'opencode-flash', 'flash-free still contains flash')
+})
+
+test('model-class: unrecognized providers are exempt (null)', () => {
+  assert.equal(classifyModel('siliconflow', 'deepseek-v4-flash'), null, 'other third party → exempt')
+  assert.equal(classifyModel('my-relay', 'deepseek-v4-pro'), null, 'relay → exempt')
+  assert.equal(classifyModel('openai', 'gpt-4o'), null)
+})
+
+test('model-class: unknown model names are exempt (incl. legacy chat/reasoner)', () => {
+  assert.equal(classifyModel('deepseek-official', 'deepseek-chat'), null, 'legacy chat → exempt (no mapping)')
+  assert.equal(classifyModel('deepseek-official', 'deepseek-reasoner'), null, 'legacy reasoner → exempt')
+  assert.equal(classifyModel('opencode', 'deepseek-v3'), null, 'v3 → exempt')
+  assert.equal(classifyModel('deepseek-official', 'qwen-max'), null)
+})
+
+test('model-class: garbage input never throws, always null', () => {
+  assert.equal(classifyModel(undefined, undefined), null)
+  assert.equal(classifyModel(null, 'deepseek-v4-flash'), null)
+  assert.equal(classifyModel('deepseek-official', null), null)
+  assert.equal(classifyModel(123, 456), null)
+  assert.equal(classifyModel('', ''), null)
+})
+
+test('model-apply: enabled follows the config object per tier; null class → false', () => {
+  const applied = { 'official-flash': true, 'official-pro': true, 'opencode-flash': false, 'opencode-pro': false }
+  assert.equal(modelApplyEnabled(applied, 'official-flash'), true)
+  assert.equal(modelApplyEnabled(applied, 'official-pro'), true)
+  assert.equal(modelApplyEnabled(applied, 'opencode-flash'), false)
+  assert.equal(modelApplyEnabled(applied, 'opencode-pro'), false)
+  assert.equal(modelApplyEnabled(applied, null), false, 'unrecognized class never applies')
+  assert.equal(modelApplyEnabled(undefined, 'official-flash'), false, 'missing config → safe false')
+  assert.equal(modelApplyEnabled('garbage', 'official-flash'), false)
 })

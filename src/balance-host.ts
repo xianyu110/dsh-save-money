@@ -165,6 +165,49 @@ export interface SpendBar {
   activity: boolean
 }
 
+/**
+ * 模型档位分类结果:只有明确识别为「官方 / OpenCode」且档位为 flash/pro
+ * 的模型才会进入省钱闸门的档位检查;null 表示识别失败 → 豁免(不暂停)。
+ */
+export type ModelClass =
+  | 'official-flash'
+  | 'official-pro'
+  | 'opencode-flash'
+  | 'opencode-pro'
+  | null
+
+/** 官方 DeepSeek provider 路由名(harness 硬编码)。 */
+export const OFFICIAL_PROVIDER = 'deepseek-official'
+
+/**
+ * 按 provider 名 + 模型名识别请求的档位。纯函数、永不抛异常:
+ *  - 服务商:provider 小写含 'opencode' → OpenCode(go/zen 网关复用同路由);
+ *    provider === 'deepseek-official' → 官方;其余 → null(豁免)。
+ *  - 档位:模型名小写含 'pro' → pro;含 'flash' → flash;否则 null(豁免,
+ *    包括旧名 chat/reasoner 与未知模型 —— 只有明确 flash/pro 才可能被暂停)。
+ * 任何输入形态(undefined/非字符串)都安全返回 null。
+ */
+export function classifyModel(provider: any, model: any): ModelClass {
+  const p = typeof provider === 'string' ? provider.toLowerCase() : ''
+  const m = typeof model === 'string' ? model.toLowerCase() : ''
+  if (p.length === 0 || m.length === 0) return null
+  const isPro = m.indexOf('pro') >= 0
+  const isFlash = m.indexOf('flash') >= 0
+  if (!isPro && !isFlash) return null // unknown → 豁免
+  if (p === OFFICIAL_PROVIDER) return isPro ? 'official-pro' : 'official-flash'
+  if (p.indexOf('opencode') >= 0) return isPro ? 'opencode-pro' : 'opencode-flash'
+  return null // 其他第三方 → 豁免(它们没有 DeepSeek 峰谷策略)
+}
+
+/**
+ * 查询某一档位在当前 modelApply 配置中是否勾选(是否应执行省钱)。
+ * 配置缺省/损坏时返回 false(安全方向:不暂停);档位为 null 时恒 false。
+ */
+export function modelApplyEnabled(applied: any, cls: ModelClass): boolean {
+  if (!applied || typeof applied !== 'object' || cls === null) return false
+  return applied[cls] === true
+}
+
 /** tz 时区的墙钟分钟-of-day(0..1439)。内部工具,供时区对齐使用。 */
 function tzMinutes(tz: string, date: Date): number {
   try {
