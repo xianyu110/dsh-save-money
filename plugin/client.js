@@ -20,9 +20,9 @@ window.__ModuleLoader__.load({
 // 'auto' (follow the browser) — see refresh() below and the settings dropdown.
 let currentLang = detectLang();
 // Plugin name + version shown next to the Save button in the settings popover.
-// '1.4.2' is replaced at build time (scripts/build.js) with the real
+// '1.4.3' is replaced at build time (scripts/build.js) with the real
 // version from package.json — never edit this literal by hand.
-const PLUGIN_VERSION = '1.4.2';
+const PLUGIN_VERSION = '1.4.3';
 // Local translator bound to the reactive language.
 const translate = (key, vars) => t(currentLang, key, vars);
 /**
