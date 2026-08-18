@@ -4,6 +4,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.4.3] — 2026-08-18
+
+### 新增
+
+- **自动化发布脚本**（`scripts/release.js`，零依赖）：一条命令覆盖所有版本触点——界面版本（根 `package.json`，构建时注入客户端页脚）、`plugin/package.json`、两份 README 里的 `dsh-save-money-<x.y.z>.tgz` 示例、测试断言、`v<版本>` tag、推送与 `npm publish`。`--dry-run` 演练；代理用 `--proxy http://host:port` 传入。
+- **npm 包现在携带 README**：发布步骤会把根 `README.md` 临时复制到 `plugin/README.md`（npm 只打包 `plugin/` 目录内文件）并在发布后立即移除——仓库始终只有根目录一份 README。
+
+### 变更
+
+- `plugin/package.json` 的 `files` 清理：移除无效的 `"../README.md"` / `"../README.zh.md"` 条目（npm 忽略包目录外路径）；`plugin/README.md` 已加入 .gitignore。
+
 ## [1.4.2] — 2026-08-18
 
 ### 变更

@@ -11,6 +11,9 @@ dist/
 # npm pack artifacts (plugin/dsh-save-money-*.tgz)
 *.tgz
 
+# Temporary README copied into plugin/ only during npm publish (removed after)
+plugin/README.md
+
 # Logs, editor/OS droppings
 *.log
 .DS_Store

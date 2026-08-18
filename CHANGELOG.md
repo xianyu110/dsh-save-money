@@ -4,6 +4,17 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] — 2026-08-18
+
+### Added
+
+- **Automated release script** (`scripts/release.js`, zero dependencies): one command handles every version touchpoint — in-app version (root `package.json`, injected into the client footer at build), `plugin/package.json`, the `dsh-save-money-<x.y.z>.tgz` examples in both READMEs, the test assertion, the `v<version>` tag, push, and `npm publish`. Rehearse with `--dry-run`, pass your proxy with `--proxy http://host:port`.
+- **README now ships in the npm package**: the publish step temporarily copies the root `README.md` into `plugin/README.md` (npm only packs files inside `plugin/`) and removes it right after — the repo keeps exactly one README, at the root.
+
+### Changed
+
+- `plugin/package.json` `files` cleaned: the ineffective `"../README.md"` / `"../README.zh.md"` entries (npm ignores paths outside the package dir) were removed; `plugin/README.md` is gitignored.
+
 ## [1.4.2] — 2026-08-18
 
 ### Changed
