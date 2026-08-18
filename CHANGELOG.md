@@ -4,6 +4,22 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — 2026-08-18
+
+### Added
+
+- **Spend bar chart (last 8 hours, per 10 minutes)**: click the balance in the header to open a popup chart. 48 bars, positive = spent (red, up), negative = top-up/recovery (green, down), 0 = neutral, unsampled = faint. Zero chart-library dependency, theme tokens only. 10 languages. Includes **X axis** (8 whole-hour ticks in the configured timezone) and **Y axis** (1/2/5×10ⁿ key-point ticks, ≤5, with dashed gridlines; the axis top sits slightly above the tallest bar for readability).
+- **Time-aligned sampling and windows**: sample points are aligned to whole 5-minute boundaries and bar windows to whole 10-minute boundaries **in the configured timezone** (DST-aware, incl. non-whole-hour offsets like Asia/Kathmandu +5:45) — matching how the official console bills by local whole hours, so the chart compares cleanly with official records. The hover spend card shows the exact window range (e.g. `近1h消费 07:00–08:00 ¥1.25`), consistent with the bar chart.
+- **Balance history is now persisted** to `~/.dsh/dsh-save-money-balance.json` (account-level, shared across projects): the plugin no longer loses sampled history on update / restart / disable-re-enable. The file is keyed by a fingerprint of the DeepSeek API key — **changing the key (= changing the account) automatically discards the old history**, so one account's balance trajectory never bleeds into another's.
+- **External-spend attribution (no more "1-second spend explosion" scare)**: the plugin records whether the local environment actually made model requests (`llm/stream` activity) per sample. On the bar chart, a window where the balance dropped **without any local activity** is rendered as a **warning-colored bar** with a hover note "no local activity in this window; change may come from elsewhere" — instead of being reported as local consumption.
+- **Chart footer disclaimer**: "data is estimated from sampling and is for reference only; official records take precedence" (10 languages).
+
+### Fixed
+
+- **False-zero bars in the spend chart**: a window whose both ends resolve to the same sample (insufficient coverage) is now `null` (faint), never a fabricated `0` that would look like "no spend".
+- **Bar chart interaction**: clicking the balance now toggles the popup and clears the hover card; truly-zero bars use a neutral color instead of red; the title is no longer duplicated; opening the chart forces a refresh so it always shows the latest sample.
+- **Unified window clock**: the 1h/10m/24h spend stats now share the same aligned clock basis as the bar chart, so the hover card and the chart refer to the same time windows (previously they could disagree by a few minutes).
+
 ## [1.3.3] — 2026-08-17
 
 ### Fixed

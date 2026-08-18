@@ -10,6 +10,12 @@
 
 The colored status text in the top-right of the session header (Save · ⚪/🟢/🟡/🔴, color follows the state) is the single persistent entry — click it to open the settings popover. When a pause is upcoming or active, a reminder banner appears at the top of the page (with the **End this save mode** button).
 
+With "Show balance" enabled, your official DeepSeek account balance appears next to the status text; **clicking the balance** opens the last-8-hours spend bar chart:
+
+![Balance and spend bar chart screenshot](./screenshot-balance.en.png)
+
+Each bar is a 10-minute window: the X axis shows whole-hour ticks, the Y axis key-point amount ticks (≤5, with gridlines), and hovering shows each window's exact time range and amount. Windows where the balance dropped without any local activity are marked in warning color (changes may come from another device).
+
 ## Features
 
 - **Multiple time windows**: add / remove pause-resume windows freely; supports midnight-crossing windows (23:00–08:00) and per-weekday filtering;
@@ -22,6 +28,8 @@ The colored status text in the top-right of the session header (Save · ⚪/🟢
 - **Persistent config**: all settings are saved automatically to the workspace file `save-money.config.json` (gitignored); configuration survives browser refresh and plugin disable/re-activate, and is loaded on startup with optional reconciliation of paused goals;
 - **Account balance display (optional)**: tick "Show balance" in settings and your official DeepSeek account balance appears next to the status text in the header (automatic currency symbol, theme-adaptive color). Off by default. With several model sources configured (official DeepSeek + SiliconFlow, relays, …) the balance **follows the model actually in use**: it is shown while the latest real request runs on the official provider and hidden otherwise (the sampled spend history is kept, so switching back to DeepSeek re-shows the balance immediately);
 - **Spend statistics**: with the balance display enabled, the backend samples the balance every 5 minutes (288 points covering the last 24 hours). Hover the balance to see **how much was spent in the last 1 hour / 10 minutes / 24 hours** (balance increases from top-ups or refunds show as "+amount");
+- **Spend bar chart (last 8 hours, per 10 minutes)**: click the balance to open a chart of the last 48 ten-minute windows. **External-spend attribution** — a window where the balance dropped without any local model activity is marked with a warning color (hover: "no local activity in this window; change may come from elsewhere") instead of being reported as local consumption, so using the same API key from another machine never looks like a one-second spend explosion;
+- **Persistent balance history**: sampled history is saved to `~/.dsh/dsh-save-money-balance.json` (account-level, shared across projects) and survives plugin updates/restarts. The file is keyed by a fingerprint of the API key — **changing the key discards the old history** automatically;
 - **Non-intrusive by design**: no screen lock, no overlay blocking, no user action prevented — only the automatic continuation of goals is paused; manual interaction always flows.
 
 ## How it works
@@ -72,13 +80,13 @@ npm install
 cd plugin
 npm pack                    # runs the build automatically; produces the plugin tarball
 
-ls                          # check the tarball name, e.g. dsh-save-money-1.3.3.tgz
+ls                          # check the tarball name, e.g. dsh-save-money-1.4.0.tgz
 
 cd ~/app/deepseek-harness   # change to your harness directory (clone it first if missing — see "0." below)
 
 pnpm dsh plugin --profile web remove dsh-save-money   # only if you installed it before; skip if you haven't
 
-pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.3.3.tgz   # use the name from `ls` above
+pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.4.0.tgz   # use the name from `ls` above
 
 pnpm dsh --profile web      # starts DeepSeek Harness — the plugin appears top-right in the session header
 ```
@@ -150,7 +158,7 @@ The bundle is a small `.tgz` that you build once and install anywhere. **You do 
 cd dsh-save-money
 npm install             # first clone only (typescript dev dependency)
 cd plugin
-npm pack                # runs the prepare build automatically; produces dsh-save-money-1.3.3.tgz
+npm pack                # runs the prepare build automatically; produces dsh-save-money-1.4.0.tgz
 ```
 
 `plugin/` is the standard bundle layout: `package.json` declares `dsh.bundle.patch` + `dsh.client`, `cordis.patch.yml` inserts the plugin row, `index.js` is the Host module and `client.js` the browser UI bundle.
@@ -158,16 +166,16 @@ npm pack                # runs the prepare build automatically; produces dsh-sav
 **Step 2 — copy the tgz to the target machine** (scp / USB stick / however you move files; run this on the build machine, **one directory above** the repository, adjusting the path to yours):
 
 ```sh
-scp dsh-save-money/plugin/dsh-save-money-1.3.3.tgz pi@<pi-ip>:~/
+scp dsh-save-money/plugin/dsh-save-money-1.4.0.tgz pi@<pi-ip>:~/
 ```
 
 **Step 3 — install into a profile** (on the target machine; first run initializes the profile with `@deepseek-ai/dsh-base`):
 
 ```sh
 # DSH run from source (inside the deepseek-harness directory):
-pnpm dsh plugin --profile web add ~/dsh-save-money-1.3.3.tgz
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.0.tgz
 # npx-launched (Step 0, option A) or globally installed dsh: works from any directory
-npx @deepseek-ai/dsh plugin --profile web add ~/dsh-save-money-1.3.3.tgz
+npx @deepseek-ai/dsh plugin --profile web add ~/dsh-save-money-1.4.0.tgz
 ```
 
 > Both commands do the same thing: install the tgz into `~/.dsh/profiles/web/node_modules/`. Use whichever matches how you start DSH.
@@ -190,11 +198,11 @@ pnpm dsh --profile web                 # Ctrl+C to stop an already-running insta
 ```sh
 # on the build machine:
 cd dsh-save-money && git pull && cd plugin && npm pack    # fresh dsh-save-money-<new>.tgz
-scp dsh-save-money/plugin/dsh-save-money-1.3.3.tgz pi@<pi-ip>:~/
+scp dsh-save-money/plugin/dsh-save-money-1.4.0.tgz pi@<pi-ip>:~/
 
 # on the target:
 pnpm dsh plugin --profile web remove dsh-save-money
-pnpm dsh plugin --profile web add ~/dsh-save-money-1.3.3.tgz
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.0.tgz
 pnpm dsh --profile web                # restart, then hard-refresh the browser
 ```
 

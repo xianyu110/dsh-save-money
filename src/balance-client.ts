@@ -55,27 +55,34 @@ export function balanceTitle(b: { currency: string; total: string; granted: stri
     + (b.granted !== undefined ? ' (granted ' + b.granted + ', topped-up ' + b.toppedUp + ')' : '')
 }
 
-/** Format one spend value: spent → "¥1.25", recovered → "+¥1.25", n/a → "". */
+/** Format one spend value: spent → "¥1.25", recovered → "+¥1.25", n/a → "–". */
 function fmtSpend(v: any, sym: string): string {
-  if (v === null || v === undefined) return ''
+  if (v === null || v === undefined) return '\u2013' // en dash — history not yet sampled
   const n = Number(v)
-  if (!Number.isFinite(n)) return ''
+  if (!Number.isFinite(n)) return '\u2013'
   // 正数=花掉(显示 "¥1.23"),负数=余额回升(显示 "+¥1.23")
   return (n >= 0 ? '' : '+') + sym + Math.abs(n).toFixed(2)
 }
 
 /**
  * The multi-line hover detail for the balance card, or null when the balance
- * is unavailable. Line 0 is the balance summary; then one line per spend
- * window that has enough history ({ h1, m10, h24 }, in currency units;
- * positive = spent, negative = recovered). `labels` provides the i18n texts
- * (e.g. '近1h消费'); windows without history are skipped entirely.
+ * is unavailable. Line 0 is the balance summary; then ONE LINE PER spend
+ * window — 10m / 1h / 24h — always present so the user can see the features
+ * exist. A window whose history is not yet sampled (first ~5 minutes after
+ * enabling the display) shows "–" instead of a value; `labels` provides the
+ * i18n texts (e.g. '近1h消费').
+ *
+ * `ranges` (when supplied) carries the wall-clock start instants of each
+ * window (m10 / h1 / h24, ms). The client renders them as a time suffix so
+ * the rolling spend windows are explicit — e.g. "近1h消费 07:00–08:00 ¥1.25" —
+ * matching the bar chart's explicit "07:40–07:50" windows instead of leaving
+ * two different "10 minutes" unlabeled and confusing.
  *
  * The client renders these lines in its own card (native `title` tooltips get
  * clipped at the viewport edge and cannot wrap, which is why the single-line
  * title is no longer used).
  */
-export function balanceDetailLines(balance: any, labels?: { h1: string; m10: string; h24: string }): string[] | null {
+export function balanceDetailLines(balance: any, labels?: { h1: string; m10: string; h24: string }, ranges?: { h1: number; m10: number; h24: number }): string[] | null {
   const b = pickBalance(balance)
   if (!b) return null
   const sym = currencySymbol(b.currency)
@@ -85,9 +92,12 @@ export function balanceDetailLines(balance: any, labels?: { h1: string; m10: str
     const h1 = fmtSpend(s.h1, sym)
     const m10 = fmtSpend(s.m10, sym)
     const h24 = fmtSpend(s.h24, sym)
-    if (h1) lines.push((labels ? labels.h1 : '1h') + ' ' + h1)
-    if (m10) lines.push((labels ? labels.m10 : '10m') + ' ' + m10)
-    if (h24) lines.push((labels ? labels.h24 : '24h') + ' ' + h24)
+    // Every window line is always rendered; unsampled history shows "–".
+    // ranges carry window START instants → append "HH:mm–HH:mm" via a
+    // caller-supplied formatter (kept out of this pure module: it has no tz).
+    lines.push((labels ? labels.h1 : '1h') + ' ' + h1)
+    lines.push((labels ? labels.m10 : '10m') + ' ' + m10)
+    lines.push((labels ? labels.h24 : '24h') + ' ' + h24)
   }
   return lines
 }

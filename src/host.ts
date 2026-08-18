@@ -120,13 +120,21 @@ declare function isValidTz(tz: string): boolean
 declare function validateWindows(windows: TimeWindow[], defaultTz: string): { ok: boolean; error?: string }
 declare function createBalanceService(ctx: any, opts: { sandbox: boolean }): { query(): Promise<any> }
 declare function createBalanceHistory(): {
-  record(total: number, at?: number): void
+  record(total: number, at?: number, activity?: boolean): void
   latest(): number | null
   totalAgo(ms: number, now?: number): number | null
   spend(ms: number, now?: number): number | null
-  points(): { at: number; total: number }[]
+  points(): { at: number; total: number; activity?: boolean }[]
+  load(persisted: { at: number; total: number; activity?: boolean }[]): void
   clear(): void
 }
+declare function spendBars(points: { at: number; total: number; activity?: boolean }[], now?: number, count?: number, barMs?: number, tz?: string): { at: number; spent: number | null; activity: boolean }[]
+declare function alignWallClock(tz: string, ms: number, stepMs: number): number | undefined
+declare function keyFingerprint(key: string): string
+declare function serializeBalanceHistory(p: { keyId: string; points: { at: number; total: number; activity?: boolean }[] }): string
+declare function parseBalanceHistory(text: string): { keyId: string; points: { at: number; total: number; activity?: boolean }[] } | null
+declare const BALANCE_HISTORY_FILE: string
+declare const SAMPLE_MS: number
 
 return {
   inject: ['timer'],
@@ -636,6 +644,7 @@ return {
       ctx.effect(() => {
         const dispose = ctx.on('llm/stream', (options: any, next: any) => {
           balanceDirty = true
+          lastActivityAt = Date.now() // 活动信号:本环境正在产生模型请求
           try {
             lastRequestProvider = (options && typeof options.provider === 'string' && options.provider.length > 0)
               ? options.provider
@@ -735,13 +744,15 @@ return {
     // update can never leak a 60s tick or a boot timeout.
     ctx.effect(() => {
       const boot = ctx.timer.timeout(() => {
-        // Load the persisted config first, then run startup reconciliation
+        // Load the persisted config first, then run startup reconciliation.
+        // Balance history loads in parallel (keyId-gated; independent of config).
         void loadConfig().then(() => {
           if (cfg.reconcileOnStart) {
             const r = reconcile()
             if (r.restored > 0) console.log('[save-money] startup reconcile restored ' + r.restored + ' goal(s)')
           }
         })
+        void loadBalanceHistory()
       }, 100)
       const tick = ctx.timer.interval(() => {
         try {
@@ -948,14 +959,85 @@ return {
     const balanceSvc = createBalanceService(ctx, { sandbox: !!harnessApi })
     // 余额历史(5 分钟采样 × 288 = 24 小时):由余额变化计算
     // 最近 1 小时 / 10 分钟 / 24 小时的消费金额。
+    // 持久化到 ~/.dsh/dsh-save-money-balance.json(账户级、跨项目共享),
+    // 插件更新/重启不丢历史;文件带 keyId 指纹,换 key(=换账户)自动作废旧历史。
     const balanceHistory = createBalanceHistory()
+    const historyFile = (() => {
+      const home = dshHome()
+      return home ? home + (home.includes('\\') ? '\\' : '/') + BALANCE_HISTORY_FILE : ''
+    })()
+    // 本环境活动信号:llm/stream 每次请求都打点;采样点据此标记 activity,
+    // 柱形图用它在「下降」时区分「本环境消费」(可信)与「可能外部消费」(警示)。
+    let lastActivityAt = 0
+    let historyDirty = false
+    let historyKeyId: string | null = null
+    // 记录一次余额(带当前活动信号),并标脏待写盘。
+    const recordBalance = (total: number): void => {
+      const now = Date.now()
+      // 活动信号:距上次 llm/stream 请求在 SAMPLE_MS 内 → 本环境有活动
+      const activity = lastActivityAt > 0 && now - lastActivityAt < SAMPLE_MS
+      balanceHistory.record(total, now, activity)
+      historyDirty = true
+    }
+    // 加载持久化历史:keyId 与当前凭据指纹一致才采用(否则旧账户轨迹作废)。
+    const loadBalanceHistory = async (): Promise<void> => {
+      const fs = getFs()
+      if (!fs || !historyFile) return
+      try {
+        const text = await fs.readText(await fs.resolve(historyFile))
+        const parsed = parseBalanceHistory(text)
+        if (!parsed) { console.log('[save-money] balance history: unreadable, starting fresh'); return }
+        const creds = ctx.get('credentials')
+        const key = creds && typeof creds.resolve === 'function'
+          ? await creds.resolve('DEEPSEEK_API_KEY').then((r: any) => r && r.value).catch(() => undefined)
+          : undefined
+        historyKeyId = typeof key === 'string' && key.length > 0 ? keyFingerprint(key) : null
+        if (parsed.keyId !== historyKeyId) {
+          console.log('[save-money] balance history: key changed (' + String(parsed.keyId) + ' → ' + String(historyKeyId) + '), discarding old history')
+          balanceHistory.clear()
+          return
+        }
+        balanceHistory.load(parsed.points)
+        console.log('[save-money] balance history loaded: ' + balanceHistory.points().length + ' samples')
+      } catch (e: any) {
+        console.log('[save-money] balance history: none yet (fresh start)')
+      }
+    }
+    // 写盘:best-effort,绝不 throw。
+    const persistBalanceHistory = async (): Promise<void> => {
+      const fs = getFs()
+      if (!fs || !historyFile) return
+      historyDirty = false
+      try {
+        const creds = ctx.get('credentials')
+        const key = creds && typeof creds.resolve === 'function'
+          ? await creds.resolve('DEEPSEEK_API_KEY').then((r: any) => r && r.value).catch(() => undefined)
+          : undefined
+        const kid = typeof key === 'string' && key.length > 0 ? keyFingerprint(key) : historyKeyId || 'unknown'
+        historyKeyId = kid
+        const points = balanceHistory.points()
+        const target = await fs.resolve(historyFile)
+        // 写入位置:历史文件所在目录(~/.dsh)作为 workspaceRoot,确保沙箱放行。
+        const dir = historyFile.slice(0, Math.max(historyFile.lastIndexOf('\\'), historyFile.lastIndexOf('/')))
+        await fs.writeText(target, serializeBalanceHistory({ keyId: kid, points }), undefined, undefined,
+          { mode: 'workspace-write', workspaceRoot: dir })
+      } catch (e: any) {
+        console.error('[save-money] balance history persist failed: ' + String((e && e.message) || e))
+      }
+    }
+    // 卸载时强制落盘(异步尽力,通常能完成)。
+    ctx.effect(() => {
+      return () => {
+        if (historyDirty) void persistBalanceHistory()
+      }
+    })
     /** 拉一次余额并写入历史采样点(5 分钟窗口内只更新不新增)。 */
     const sampleBalance = async (): Promise<void> => {
       try {
         const out = await balanceSvc.query()
         if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
           const total = parseFloat(out.balance[0].total)
-          if (Number.isFinite(total)) balanceHistory.record(total)
+          if (Number.isFinite(total)) recordBalance(total)
         }
       } catch (e) { /* the sampler must never throw */ }
     }
@@ -968,6 +1050,15 @@ return {
         try { dispose() } catch (e) { /* unload must never throw */ }
       }
     })
+    // 写盘节流:与采样同频 5 分钟;有脏数据才写(减少磁盘 IO)。
+    ctx.effect(() => {
+      const dispose = ctx.timer.interval(() => {
+        if (historyDirty) void persistBalanceHistory()
+      }, 300000)
+      return () => {
+        try { dispose() } catch (e) { /* unload must never throw */ }
+      }
+    })
     const balanceQuery = async (): Promise<any> => {
       if (!cfg.showBalance) return { ok: false, error: 'balance display is disabled' }
       const out = await balanceSvc.query()
@@ -975,7 +1066,18 @@ return {
       // 把本次余额记为最新采样点(窗口内去重),再附带消费统计。
       if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
         const total = parseFloat(out.balance[0].total)
-        if (Number.isFinite(total)) balanceHistory.record(total)
+        if (Number.isFinite(total)) recordBalance(total)
+      }
+      // 统一的窗口时钟基准:spend 三窗口与柱形图共享同一个「配置时区整 10 分钟」
+      // 对齐时刻,这样 m10 与 bars[0] 指向同一段时间(hover 卡与柱形图对得上),
+      // 且都落在配置时区的整数边界上(与官方后台按当地整点计费可比)。
+      const nowMs = Date.now()
+      const alignedNow = (cfg.timezone ? alignWallClock(cfg.timezone, nowMs, 10 * 60 * 1000) : undefined)
+        ?? (nowMs - (nowMs % (10 * 60 * 1000)))
+      const spendAt = {
+        m10: alignedNow - 10 * 60 * 1000,
+        h1: alignedNow - 60 * 60 * 1000,
+        // h24 跨天,不做 HH:mm 范围标注(避免"昨天/今天"歧义)
       }
       return {
         ...out,
@@ -984,10 +1086,15 @@ return {
         // otherwise the client shows the balance only for 'deepseek-official'.
         provider: lastRequestProvider,
         spend: {
-          m10: balanceHistory.spend(10 * 60 * 1000),
-          h1: balanceHistory.spend(60 * 60 * 1000),
-          h24: balanceHistory.spend(24 * 60 * 60 * 1000),
+          m10: balanceHistory.spend(10 * 60 * 1000, alignedNow),
+          h1: balanceHistory.spend(60 * 60 * 1000, alignedNow),
+          h24: balanceHistory.spend(24 * 60 * 60 * 1000, alignedNow),
         },
+        // 各窗口的起始时刻(ms),hover 卡据此标注精确时间范围
+        spendAt,
+        // 最近 8 小时、10 分钟一根的消费柱形(第 0 根 = 最近 10 分钟);
+        // 与 spend 相同来源、相同对齐基准,点击余额后由客户端绘制。
+        bars: spendBars(balanceHistory.points(), nowMs, 48, 10 * 60 * 1000, cfg.timezone),
       }
     }
     if (harnessApi) {

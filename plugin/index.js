@@ -214,21 +214,52 @@ const HISTORY_LEN = 288;
 /**
  * 余额历史队列:每 5 分钟一个采样点,保留最近 24 小时。
  * 用途:由余额变化计算「最近 1 小时 / 10 分钟 / 24 小时消费了多少钱」。
- * 同一 5 分钟窗口内的再次 record 只更新最新值(不新增点),所以前端高频
- * 查询不会撑爆队列,288 个点恰好覆盖 24 小时。
+ *
+ * 防膨胀保证(绝对上限,任何输入都不可能突破):
+ *  - record() 先做输入校验:非有限数字(NaN / ±Infinity / 非数字)直接忽略,
+ *    不会入队,也不可能污染 latest() / spend()。
+ *  - 同一 5 分钟窗口内的再次 record 只更新最新值(不新增点)。
+ *  - 时间戳乱序(倒退)一律不新增:at <= last.at 时视为同窗口更新,从根上
+ *    杜绝乱序 push 破坏升序;只有严格递增且间隔 >= SAMPLE_MS 才新增。
+ *  - push 后立即用 splice 强制裁剪到 HISTORY_LEN —— 即使某次批量 push 了
+ *    多个点,数组长度也一次性回到上限内,峰值严格 <= HISTORY_LEN + 批量数,
+ *    且 splice(0, overflow) 只发生一次。调用路径当前每次仅 push 1 个,
+ *    所以实际峰值恒为 HISTORY_LEN + 1 = 289,随后即回到 288。
  */
 function createBalanceHistory() {
     const points = [];
+    const pushPoint = (at, total, activity) => {
+        points.push({ at, total, ...(activity === undefined ? {} : { activity }) });
+        if (points.length > HISTORY_LEN) {
+            points.splice(0, points.length - HISTORY_LEN); // 一次裁掉全部溢出
+        }
+    };
     return {
-        record(total, at = Date.now()) {
+        record(total, at = Date.now(), activity) {
+            if (typeof at !== 'number' || !Number.isFinite(at))
+                return;
+            if (typeof total !== 'number' || !Number.isFinite(total))
+                return;
+            // 采样点对齐到整数 5 分钟(07:42:37 → 07:40):任何时区偏移都是整分钟,
+            // 所以 ms % SAMPLE_MS == 0 在所有时区都落在整 5 分钟上 —— 与墙钟对齐,
+            // 便于和官方后台(按整点计费)对比。对齐后同窗口的多次 record 共享同
+            // 一个 at,自然落入「同刻更新」分支,去重语义与整数边界完全一致。
+            at = at - (at % SAMPLE_MS);
             const last = points[points.length - 1];
-            if (last && at - last.at < SAMPLE_MS) {
+            // 乱序(倒退或同刻)一律按同窗口更新,绝不新增:保持数组按 at 升序。
+            if (last && at <= last.at) {
                 last.total = total;
+                if (activity !== undefined)
+                    last.activity = activity;
                 return;
             }
-            points.push({ at, total });
-            if (points.length > HISTORY_LEN)
-                points.shift();
+            if (last && at - last.at < SAMPLE_MS) {
+                last.total = total;
+                if (activity !== undefined)
+                    last.activity = activity;
+                return;
+            }
+            pushPoint(at, total, activity);
         },
         /** 最新一条余额,无采样时返回 null。 */
         latest() {
@@ -236,6 +267,8 @@ function createBalanceHistory() {
         },
         /** now - ms 时刻的余额(取不晚于该时刻的最近采样);历史不足返回 null。 */
         totalAgo(ms, now = Date.now()) {
+            if (typeof ms !== 'number' || !Number.isFinite(ms) || typeof now !== 'number' || !Number.isFinite(now))
+                return null;
             const target = now - ms;
             for (let i = points.length - 1; i >= 0; i--) {
                 if (points[i].at <= target)
@@ -255,8 +288,178 @@ function createBalanceHistory() {
         points() {
             return points.slice();
         },
+        /** 用持久化的数据整体替换当前历史(启动时调用);空/非法输入忽略。 */
+        load(persisted) {
+            if (!Array.isArray(persisted) || persisted.length === 0)
+                return;
+            const clean = [];
+            for (const p of persisted) {
+                if (!p || typeof p.at !== 'number' || !Number.isFinite(p.at))
+                    continue;
+                if (typeof p.total !== 'number' || !Number.isFinite(p.total))
+                    continue;
+                // 对齐到整数 5 分钟(与 record 一致):旧版本可能存了任意时刻,载入后统一
+                const aligned = p.at - (p.at % SAMPLE_MS);
+                clean.push({ at: aligned, total: p.total, ...(p.activity === undefined ? {} : { activity: !!p.activity }) });
+            }
+            if (clean.length === 0)
+                return;
+            // 保证升序(持久化文件可能乱序)
+            clean.sort((a, b) => a.at - b.at);
+            // 去重(同一时刻保留最后一条)
+            const deduped = [];
+            for (const p of clean) {
+                const last = deduped[deduped.length - 1];
+                if (last && last.at === p.at)
+                    deduped[deduped.length - 1] = p;
+                else
+                    deduped.push(p);
+            }
+            points.length = 0;
+            for (const p of deduped.slice(-HISTORY_LEN))
+                pushPoint(p.at, p.total, p.activity);
+        },
         clear() { points.length = 0; },
     };
+}
+/**
+ * 账户指纹:对 DeepSeek API key 做 FNV-1a 32 位散列(前 8 位十六进制)。
+ * 仅用于「换 key = 换账户 = 旧历史作废」的身份比对,不是安全用途
+ * (密钥本身不进持久化文件,也不会被这个哈希还原)。
+ */
+function keyFingerprint(key) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) {
+        h ^= key.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16).padStart(8, '0');
+}
+/** 余额历史持久化文件名(用户目录 ~/.dsh 下,账户级、跨项目共享)。 */
+const BALANCE_HISTORY_FILE = 'dsh-save-money-balance.json';
+/** 序列化历史(供写盘)。 */
+function serializeBalanceHistory(p) {
+    return JSON.stringify({ keyId: p.keyId, points: p.points });
+}
+/** 解析持久化历史;非法 JSON / 非对象 / 结构不符返回 null(绝不 throw)。 */
+function parseBalanceHistory(text) {
+    try {
+        const data = JSON.parse(text);
+        if (!data || typeof data !== 'object' || typeof data.keyId !== 'string')
+            return null;
+        if (!Array.isArray(data.points))
+            return null;
+        return { keyId: data.keyId, points: data.points };
+    }
+    catch (e) {
+        return null;
+    }
+}
+/** tz 时区的墙钟分钟-of-day(0..1439)。内部工具,供时区对齐使用。 */
+function tzMinutes(tz, date) {
+    try {
+        const f = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz, hour12: false,
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+        });
+        const parts = {};
+        for (const p of f.formatToParts(date))
+            parts[p.type] = p.value;
+        return Number(parts.hour) * 60 + Number(parts.minute);
+    }
+    catch (e) {
+        return -1;
+    } // 非法时区 → 调用方回退到 UTC 对齐
+}
+/** 把绝对时刻 ms 对齐到「tz 时区墙钟的整 step 分钟」。
+ * 例如 tz=Asia/Shanghai、step=10min:任何时刻都对齐到 xx:00 / xx:10 / xx:20 …。
+ * 关键:对齐基于**墙钟分钟**而不是 UTC 毫秒——对偏移非 10 分钟整倍数的
+ * 时区(如 Asia/Kathmandu +5:45)也正确,柱边界恒显示为整数 10 分钟,
+ * 与官方后台按当地整点计费的数据可比。DST 安全(基于实时区规则,不是
+ * 固定偏移)。非法 tz 返回 undefined,调用方回退到 UTC 对齐。 */
+function alignWallClock(tz, ms, stepMs) {
+    const m = tzMinutes(tz, new Date(ms));
+    if (m < 0)
+        return undefined;
+    const stepMin = Math.round(stepMs / 60000);
+    if (!(stepMin >= 1))
+        return undefined;
+    const aligned = m - (m % stepMin);
+    // 用对齐后的墙钟分钟求绝对时刻:先近似 UTC,再按 tz 规则迭代校正
+    // (wallToUTC 的思路:对齐 DST 偏移造成的日差,再对分钟差)。
+    const wc = (() => {
+        const f = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz, hour12: false,
+            year: 'numeric', month: '2-digit', day: '2-digit',
+        });
+        const parts = {};
+        for (const p of f.formatToParts(new Date(ms)))
+            parts[p.type] = p.value;
+        return { y: Number(parts.year), mo: Number(parts.month), d: Number(parts.day) };
+    })();
+    let out = Date.UTC(wc.y, wc.mo - 1, wc.d, Math.floor(aligned / 60), aligned % 60);
+    const targetDay = Date.UTC(wc.y, wc.mo - 1, wc.d);
+    for (let i = 0; i < 8; i++) {
+        const cur = tzMinutes(tz, new Date(out));
+        if (cur === aligned)
+            return out;
+        const curDay = Date.UTC(Number(new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric' }).format(new Date(out))), Number(new Intl.DateTimeFormat('en-US', { timeZone: tz, month: '2-digit' }).format(new Date(out))) - 1, Number(new Intl.DateTimeFormat('en-US', { timeZone: tz, day: '2-digit' }).format(new Date(out))));
+        const dayDiff = Math.round((curDay - targetDay) / 86400000);
+        if (dayDiff !== 0) {
+            out -= dayDiff * 86400000;
+            continue;
+        }
+        out += (aligned - cur) * 60000;
+    }
+    return out;
+}
+/**
+ * 从余额采样点聚合「最近 8 小时、10 分钟一根」的消费柱形数据。
+ * 每根柱 = 窗口起始时刻的余额 − 窗口结束时刻的余额(正=花掉,负=回升)。
+ * 窗口边界对齐:tz 给定(推荐)时按**该时区墙钟的整 10 分钟**对齐,柱窗口
+ * 恒为「07:40–07:50」「07:50–08:00」这类整数区间,与官方后台按当地整点
+ * 计费的数据天然可比(DST 安全);tz 缺省或非法时回退到 UTC 对齐。
+ * 窗口两端的余额取自不晚于该时刻的最近采样;任一端无采样,或两端取到
+ * **同一个采样点**(该窗口内没有可观测的余额变化,历史覆盖不足),则该柱
+ * 为 null——绝不用假 0 冒充"没有消费"。
+ * activity:该柱时间窗内任一采样点带 activity=true 即为 true(本环境有活动)。
+ * 数组从最近到最远排列(第 0 根是最近 10 分钟)。
+ * 纯函数、不抛异常、长度恒为 count(默认 48 = 8 小时)。
+ */
+function spendBars(points, now = Date.now(), count = 48, barMs = 10 * 60 * 1000, tz) {
+    // 返回不晚于 t 的最近采样索引;无则 -1。
+    const indexAt = (t) => {
+        for (let i = points.length - 1; i >= 0; i--) {
+            if (points[i].at <= t)
+                return i;
+        }
+        return -1;
+    };
+    // 对齐 now:优先按 tz 墙钟的整 barMs 分钟对齐(官方后台按当地整点计费);
+    // tz 缺省/非法时回退到 UTC 对齐。
+    const alignedNow = (tz ? alignWallClock(tz, now, barMs) : undefined) ?? (now - (now % barMs));
+    const out = [];
+    for (let i = 0; i < count; i++) {
+        const end = alignedNow - i * barMs;
+        const start = alignedNow - (i + 1) * barMs;
+        const endIdx = indexAt(end);
+        const startIdx = indexAt(start);
+        // 任一端无采样,或两端是同一个采样点(窗口内无余额变化信息)→ null。
+        const spent = (startIdx >= 0 && endIdx >= 0 && startIdx !== endIdx)
+            ? points[startIdx].total - points[endIdx].total
+            : null;
+        // 窗口内(start..end] 任一采样点有活动 → 本环境活动为 true
+        let activity = false;
+        for (let j = Math.max(0, startIdx); j <= endIdx && j < points.length; j++) {
+            if (points[j].activity === true) {
+                activity = true;
+                break;
+            }
+        }
+        out.push({ at: start, spent, activity });
+    }
+    return out;
 }
 /** Hard ceiling for one upstream balance attempt (fetch or subprocess settle).
  * The DeepSeek /user/balance call normally returns in ~1s; a 5s bound gives
@@ -980,6 +1183,7 @@ export function apply(ctx) {
             ctx.effect(() => {
                 const dispose = ctx.on('llm/stream', (options, next) => {
                     balanceDirty = true;
+                    lastActivityAt = Date.now(); // 活动信号:本环境正在产生模型请求
                     try {
                         lastRequestProvider = (options && typeof options.provider === 'string' && options.provider.length > 0)
                             ? options.provider
@@ -1101,7 +1305,8 @@ export function apply(ctx) {
         // update can never leak a 60s tick or a boot timeout.
         ctx.effect(() => {
             const boot = ctx.timer.timeout(() => {
-                // Load the persisted config first, then run startup reconciliation
+                // Load the persisted config first, then run startup reconciliation.
+                // Balance history loads in parallel (keyId-gated; independent of config).
                 void loadConfig().then(() => {
                     if (cfg.reconcileOnStart) {
                         const r = reconcile();
@@ -1109,6 +1314,7 @@ export function apply(ctx) {
                             console.log('[save-money] startup reconcile restored ' + r.restored + ' goal(s)');
                     }
                 });
+                void loadBalanceHistory();
             }, 100);
             const tick = ctx.timer.interval(() => {
                 try {
@@ -1330,7 +1536,85 @@ export function apply(ctx) {
         const balanceSvc = createBalanceService(ctx, { sandbox: !!harnessApi });
         // 余额历史(5 分钟采样 × 288 = 24 小时):由余额变化计算
         // 最近 1 小时 / 10 分钟 / 24 小时的消费金额。
+        // 持久化到 ~/.dsh/dsh-save-money-balance.json(账户级、跨项目共享),
+        // 插件更新/重启不丢历史;文件带 keyId 指纹,换 key(=换账户)自动作废旧历史。
         const balanceHistory = createBalanceHistory();
+        const historyFile = (() => {
+            const home = dshHome();
+            return home ? home + (home.includes('\\') ? '\\' : '/') + BALANCE_HISTORY_FILE : '';
+        })();
+        // 本环境活动信号:llm/stream 每次请求都打点;采样点据此标记 activity,
+        // 柱形图用它在「下降」时区分「本环境消费」(可信)与「可能外部消费」(警示)。
+        let lastActivityAt = 0;
+        let historyDirty = false;
+        let historyKeyId = null;
+        // 记录一次余额(带当前活动信号),并标脏待写盘。
+        const recordBalance = (total) => {
+            const now = Date.now();
+            // 活动信号:距上次 llm/stream 请求在 SAMPLE_MS 内 → 本环境有活动
+            const activity = lastActivityAt > 0 && now - lastActivityAt < SAMPLE_MS;
+            balanceHistory.record(total, now, activity);
+            historyDirty = true;
+        };
+        // 加载持久化历史:keyId 与当前凭据指纹一致才采用(否则旧账户轨迹作废)。
+        const loadBalanceHistory = async () => {
+            const fs = getFs();
+            if (!fs || !historyFile)
+                return;
+            try {
+                const text = await fs.readText(await fs.resolve(historyFile));
+                const parsed = parseBalanceHistory(text);
+                if (!parsed) {
+                    console.log('[save-money] balance history: unreadable, starting fresh');
+                    return;
+                }
+                const creds = ctx.get('credentials');
+                const key = creds && typeof creds.resolve === 'function'
+                    ? await creds.resolve('DEEPSEEK_API_KEY').then((r) => r && r.value).catch(() => undefined)
+                    : undefined;
+                historyKeyId = typeof key === 'string' && key.length > 0 ? keyFingerprint(key) : null;
+                if (parsed.keyId !== historyKeyId) {
+                    console.log('[save-money] balance history: key changed (' + String(parsed.keyId) + ' → ' + String(historyKeyId) + '), discarding old history');
+                    balanceHistory.clear();
+                    return;
+                }
+                balanceHistory.load(parsed.points);
+                console.log('[save-money] balance history loaded: ' + balanceHistory.points().length + ' samples');
+            }
+            catch (e) {
+                console.log('[save-money] balance history: none yet (fresh start)');
+            }
+        };
+        // 写盘:best-effort,绝不 throw。
+        const persistBalanceHistory = async () => {
+            const fs = getFs();
+            if (!fs || !historyFile)
+                return;
+            historyDirty = false;
+            try {
+                const creds = ctx.get('credentials');
+                const key = creds && typeof creds.resolve === 'function'
+                    ? await creds.resolve('DEEPSEEK_API_KEY').then((r) => r && r.value).catch(() => undefined)
+                    : undefined;
+                const kid = typeof key === 'string' && key.length > 0 ? keyFingerprint(key) : historyKeyId || 'unknown';
+                historyKeyId = kid;
+                const points = balanceHistory.points();
+                const target = await fs.resolve(historyFile);
+                // 写入位置:历史文件所在目录(~/.dsh)作为 workspaceRoot,确保沙箱放行。
+                const dir = historyFile.slice(0, Math.max(historyFile.lastIndexOf('\\'), historyFile.lastIndexOf('/')));
+                await fs.writeText(target, serializeBalanceHistory({ keyId: kid, points }), undefined, undefined, { mode: 'workspace-write', workspaceRoot: dir });
+            }
+            catch (e) {
+                console.error('[save-money] balance history persist failed: ' + String((e && e.message) || e));
+            }
+        };
+        // 卸载时强制落盘(异步尽力,通常能完成)。
+        ctx.effect(() => {
+            return () => {
+                if (historyDirty)
+                    void persistBalanceHistory();
+            };
+        });
         /** 拉一次余额并写入历史采样点(5 分钟窗口内只更新不新增)。 */
         const sampleBalance = async () => {
             try {
@@ -1338,7 +1622,7 @@ export function apply(ctx) {
                 if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
                     const total = parseFloat(out.balance[0].total);
                     if (Number.isFinite(total))
-                        balanceHistory.record(total);
+                        recordBalance(total);
                 }
             }
             catch (e) { /* the sampler must never throw */ }
@@ -1356,6 +1640,19 @@ export function apply(ctx) {
                 catch (e) { /* unload must never throw */ }
             };
         });
+        // 写盘节流:与采样同频 5 分钟;有脏数据才写(减少磁盘 IO)。
+        ctx.effect(() => {
+            const dispose = ctx.timer.interval(() => {
+                if (historyDirty)
+                    void persistBalanceHistory();
+            }, 300000);
+            return () => {
+                try {
+                    dispose();
+                }
+                catch (e) { /* unload must never throw */ }
+            };
+        });
         const balanceQuery = async () => {
             if (!cfg.showBalance)
                 return { ok: false, error: 'balance display is disabled' };
@@ -1365,8 +1662,19 @@ export function apply(ctx) {
             if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
                 const total = parseFloat(out.balance[0].total);
                 if (Number.isFinite(total))
-                    balanceHistory.record(total);
+                    recordBalance(total);
             }
+            // 统一的窗口时钟基准:spend 三窗口与柱形图共享同一个「配置时区整 10 分钟」
+            // 对齐时刻,这样 m10 与 bars[0] 指向同一段时间(hover 卡与柱形图对得上),
+            // 且都落在配置时区的整数边界上(与官方后台按当地整点计费可比)。
+            const nowMs = Date.now();
+            const alignedNow = (cfg.timezone ? alignWallClock(cfg.timezone, nowMs, 10 * 60 * 1000) : undefined)
+                ?? (nowMs - (nowMs % (10 * 60 * 1000)));
+            const spendAt = {
+                m10: alignedNow - 10 * 60 * 1000,
+                h1: alignedNow - 60 * 60 * 1000,
+                // h24 跨天,不做 HH:mm 范围标注(避免"昨天/今天"歧义)
+            };
             return {
                 ...out,
                 // Provider of the most recent model request: null when no request has
@@ -1374,10 +1682,15 @@ export function apply(ctx) {
                 // otherwise the client shows the balance only for 'deepseek-official'.
                 provider: lastRequestProvider,
                 spend: {
-                    m10: balanceHistory.spend(10 * 60 * 1000),
-                    h1: balanceHistory.spend(60 * 60 * 1000),
-                    h24: balanceHistory.spend(24 * 60 * 60 * 1000),
+                    m10: balanceHistory.spend(10 * 60 * 1000, alignedNow),
+                    h1: balanceHistory.spend(60 * 60 * 1000, alignedNow),
+                    h24: balanceHistory.spend(24 * 60 * 60 * 1000, alignedNow),
                 },
+                // 各窗口的起始时刻(ms),hover 卡据此标注精确时间范围
+                spendAt,
+                // 最近 8 小时、10 分钟一根的消费柱形(第 0 根 = 最近 10 分钟);
+                // 与 spend 相同来源、相同对齐基准,点击余额后由客户端绘制。
+                bars: spendBars(balanceHistory.points(), nowMs, 48, 10 * 60 * 1000, cfg.timezone),
             };
         };
         if (harnessApi) {

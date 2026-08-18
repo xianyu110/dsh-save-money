@@ -66,6 +66,10 @@ const I18N = {
         spendH1: '近1h消费',
         spendM10: '近10m消费',
         spendH24: '近24h消费',
+        barsTitle: '最近 8 小时消费(每 10 分钟)',
+        barsHint: '绿色柱=余额回升,数值为 0 表示无消费',
+        barsExternal: ' · 本窗口无本环境活动,变动可能来自其他环境',
+        barsDisclaimer: '数据为采样计算获得仅供参考,实际以官方数据为准',
     },
     en: {
         badgeDisabled: 'Disabled',
@@ -117,6 +121,10 @@ const I18N = {
         spendH1: '1h spent',
         spendM10: '10m spent',
         spendH24: '24h spent',
+        barsTitle: 'Last 8h spend (per 10 min)',
+        barsHint: 'green bars = balance topped up; 0 = no spend',
+        barsExternal: ' · no local activity in this window; change may come from elsewhere',
+        barsDisclaimer: 'Estimated from sampled data; official billing takes precedence',
     },
     de: {
         badgeDisabled: 'Deaktiviert',
@@ -168,6 +176,10 @@ const I18N = {
         spendH1: 'Verbrauch 1h',
         spendM10: 'Verbrauch 10m',
         spendH24: 'Verbrauch 24h',
+        barsTitle: 'Verbrauch letzte 8h (pro 10 Min.)',
+        barsHint: 'grüne Balken = Guthaben aufgestockt; 0 = kein Verbrauch',
+        barsExternal: ' · in diesem Fenster keine lokale Aktivität; Änderung evtl. von anderswo',
+        barsDisclaimer: 'Aus Stichproben geschätzt; maßgeblich ist die offizielle Abrechnung',
     },
     fr: {
         badgeDisabled: 'Désactivé',
@@ -219,6 +231,10 @@ const I18N = {
         spendH1: 'dépensé 1h',
         spendM10: 'dépensé 10m',
         spendH24: 'dépensé 24h',
+        barsTitle: 'Dépenses 8 dernières h (par 10 min)',
+        barsHint: 'barres vertes = solde rechargé ; 0 = aucune dépense',
+        barsExternal: ' · aucune activité locale dans cette fenêtre ; variation peut venir d\u2019ailleurs',
+        barsDisclaimer: 'Estimation à partir d\u2019échantillons ; la facturation officielle fait foi',
     },
     es: {
         badgeDisabled: 'Desactivado',
@@ -270,6 +286,10 @@ const I18N = {
         spendH1: 'gastado 1h',
         spendM10: 'gastado 10m',
         spendH24: 'gastado 24h',
+        barsTitle: 'Gasto últimas 8 h (por 10 min)',
+        barsHint: 'barras verdes = saldo recargado; 0 = sin gasto',
+        barsExternal: ' · sin actividad local en este tramo; el cambio puede venir de otro sitio',
+        barsDisclaimer: 'Estimado a partir de muestras; la facturación oficial es la referencia',
     },
     it: {
         badgeDisabled: 'Disattivato',
@@ -321,6 +341,10 @@ const I18N = {
         spendH1: 'speso 1h',
         spendM10: 'speso 10m',
         spendH24: 'speso 24h',
+        barsTitle: 'Spese ultime 8 h (per 10 min)',
+        barsHint: 'barre verdi = saldo ricaricato; 0 = nessuna spesa',
+        barsExternal: ' · nessuna attività locale in questo intervallo; variazione forse esterna',
+        barsDisclaimer: 'Stima da campionamenti; fa fede la fatturazione ufficiale',
     },
     pt: {
         badgeDisabled: 'Desativado',
@@ -372,6 +396,10 @@ const I18N = {
         spendH1: 'gasto 1h',
         spendM10: 'gasto 10m',
         spendH24: 'gasto 24h',
+        barsTitle: 'Gastos últimas 8 h (por 10 min)',
+        barsHint: 'barras verdes = saldo recarregado; 0 = sem gasto',
+        barsExternal: ' · sem atividade local neste trecho; variação pode vir de outro lugar',
+        barsDisclaimer: 'Estimativa baseada em amostras; a cobrança oficial prevalece',
     },
     ja: {
         badgeDisabled: '無効',
@@ -423,6 +451,10 @@ const I18N = {
         spendH1: '1h 消費',
         spendM10: '10m 消費',
         spendH24: '24h 消費',
+        barsTitle: '最近8時間の消費（10分ごと）',
+        barsHint: '緑のバー=残高チャージ、0=消費なし',
+        barsExternal: ' · この区間にローカル活動なし、変動は他環境の可能性',
+        barsDisclaimer: 'サンプルから推定した参考値です。公式の請求が優先されます',
     },
     ko: {
         badgeDisabled: '비활성화됨',
@@ -474,6 +506,10 @@ const I18N = {
         spendH1: '1h 소비',
         spendM10: '10m 소비',
         spendH24: '24h 소비',
+        barsTitle: '최근 8시간 소비(10분 단위)',
+        barsHint: '초록 막대=잔액 충전, 0=소비 없음',
+        barsExternal: ' · 이 구간에 로컬 활동 없음, 변동은 다른 환경 가능성',
+        barsDisclaimer: '샘플 기반 추정치이며, 공식 청구 내역이 우선합니다',
     },
     'zh-TW': {
         badgeDisabled: '未啟用',
@@ -525,6 +561,10 @@ const I18N = {
         spendH1: '近1小時消費',
         spendM10: '近10分鐘消費',
         spendH24: '近24小時消費',
+        barsTitle: '最近 8 小時消費（每 10 分鐘）',
+        barsHint: '綠色柱=餘額回升，數值為 0 表示無消費',
+        barsExternal: ' · 本窗口無本環境活動，變動可能來自其他環境',
+        barsDisclaimer: '數據為採樣計算獲得僅供參考，實際以官方數據為準',
     },
 };
 function detectLang() {
@@ -560,9 +600,9 @@ function detectLang() {
 // 'auto' (follow the browser) — see refresh() below and the settings dropdown.
 let currentLang = detectLang();
 // Plugin name + version shown next to the Save button in the settings popover.
-// '1.3.3' is replaced at build time (scripts/build.js) with the real
+// '1.4.0' is replaced at build time (scripts/build.js) with the real
 // version from package.json — never edit this literal by hand.
-const PLUGIN_VERSION = '1.3.3';
+const PLUGIN_VERSION = '1.4.0';
 const resolveLang = (cfgLang) => {
     if (cfgLang === 'zh' || cfgLang === 'zh-TW' || cfgLang === 'de' || cfgLang === 'fr' ||
         cfgLang === 'es' || cfgLang === 'it' || cfgLang === 'pt' || cfgLang === 'ja' || cfgLang === 'ko') {
@@ -852,28 +892,35 @@ function balanceTitle(b) {
     return sym + ' total ' + b.total
         + (b.granted !== undefined ? ' (granted ' + b.granted + ', topped-up ' + b.toppedUp + ')' : '');
 }
-/** Format one spend value: spent → "¥1.25", recovered → "+¥1.25", n/a → "". */
+/** Format one spend value: spent → "¥1.25", recovered → "+¥1.25", n/a → "–". */
 function fmtSpend(v, sym) {
     if (v === null || v === undefined)
-        return '';
+        return '\u2013'; // en dash — history not yet sampled
     const n = Number(v);
     if (!Number.isFinite(n))
-        return '';
+        return '\u2013';
     // 正数=花掉(显示 "¥1.23"),负数=余额回升(显示 "+¥1.23")
     return (n >= 0 ? '' : '+') + sym + Math.abs(n).toFixed(2);
 }
 /**
  * The multi-line hover detail for the balance card, or null when the balance
- * is unavailable. Line 0 is the balance summary; then one line per spend
- * window that has enough history ({ h1, m10, h24 }, in currency units;
- * positive = spent, negative = recovered). `labels` provides the i18n texts
- * (e.g. '近1h消费'); windows without history are skipped entirely.
+ * is unavailable. Line 0 is the balance summary; then ONE LINE PER spend
+ * window — 10m / 1h / 24h — always present so the user can see the features
+ * exist. A window whose history is not yet sampled (first ~5 minutes after
+ * enabling the display) shows "–" instead of a value; `labels` provides the
+ * i18n texts (e.g. '近1h消费').
+ *
+ * `ranges` (when supplied) carries the wall-clock start instants of each
+ * window (m10 / h1 / h24, ms). The client renders them as a time suffix so
+ * the rolling spend windows are explicit — e.g. "近1h消费 07:00–08:00 ¥1.25" —
+ * matching the bar chart's explicit "07:40–07:50" windows instead of leaving
+ * two different "10 minutes" unlabeled and confusing.
  *
  * The client renders these lines in its own card (native `title` tooltips get
  * clipped at the viewport edge and cannot wrap, which is why the single-line
  * title is no longer used).
  */
-function balanceDetailLines(balance, labels) {
+function balanceDetailLines(balance, labels, ranges) {
     const b = pickBalance(balance);
     if (!b)
         return null;
@@ -884,12 +931,12 @@ function balanceDetailLines(balance, labels) {
         const h1 = fmtSpend(s.h1, sym);
         const m10 = fmtSpend(s.m10, sym);
         const h24 = fmtSpend(s.h24, sym);
-        if (h1)
-            lines.push((labels ? labels.h1 : '1h') + ' ' + h1);
-        if (m10)
-            lines.push((labels ? labels.m10 : '10m') + ' ' + m10);
-        if (h24)
-            lines.push((labels ? labels.h24 : '24h') + ' ' + h24);
+        // Every window line is always rendered; unsampled history shows "–".
+        // ranges carry window START instants → append "HH:mm–HH:mm" via a
+        // caller-supplied formatter (kept out of this pure module: it has no tz).
+        lines.push((labels ? labels.h1 : '1h') + ' ' + h1);
+        lines.push((labels ? labels.m10 : '10m') + ' ' + m10);
+        lines.push((labels ? labels.h24 : '24h') + ' ' + h24);
     }
     return lines;
 }
@@ -1323,11 +1370,285 @@ return {
                 onClick: () => void doEndWindow(),
             }, t('endThisWindow')));
         };
+        // ---- Bar chart: last 8h spend per 10 minutes (click the balance) ----
+        // Rendered with plain divs (no chart library, theme tokens only). Positive
+        // bars (spent) use the error/primary color upward, negative (top-up) use
+        // the success color downward. Bars with null history (not yet sampled) are
+        // drawn as a faint dot so the feature is visible from the start.
+        // Hover tooltip is a CUSTOM floating card (same as the header balance
+        // card): instant (no native-title delay), follows the mouse, clamped to the
+        // viewport. Bars expose the window time range, the amount, and the
+        // external-spend warning.
+        const BarChart = (props) => {
+            const bars = props.bars;
+            const sym = props.symbol;
+            const tzShow = props.timezone || detectedTz;
+            const tipInit = null;
+            const [tip, setTip] = React.useState(tipInit);
+            if (!Array.isArray(bars) || bars.length === 0) {
+                return React.createElement('div', { style: { padding: '24px 8px', textAlign: 'center', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, '–');
+            }
+            // bars[0] = most recent; render newest on the right → reverse to oldest first
+            const ordered = bars.slice().reverse();
+            const HEIGHT = 120;
+            // ---- 坐标轴数据 ----
+            // 正负最大值(绝对值),决定 0 基线与 Y 轴刻度范围
+            let maxPos = 0;
+            let maxNeg = 0;
+            for (const b of ordered) {
+                if (b && typeof b.spent === 'number' && Number.isFinite(b.spent)) {
+                    if (b.spent > 0 && b.spent > maxPos)
+                        maxPos = b.spent;
+                    if (b.spent < 0 && -b.spent > maxNeg)
+                        maxNeg = -b.spent;
+                }
+            }
+            // Y 轴:用 1/2/5×10^n 关键点步长(用户易读的整数/半整数),上限取覆盖
+            // 数据最高点的下一个关键点倍数(略高于最高柱、留白)。刻度数 ≤ 5,
+            // 允许更少 —— 网格线、标签、柱高都基于这个统一的上限,读图直观。
+            const axis = (() => {
+                const span = Math.max(maxPos, maxNeg, 0.001);
+                const mag = Math.pow(10, Math.floor(Math.log10(span)));
+                let step = 0;
+                for (const m of [1, 2, 5, 10]) {
+                    const s = m * mag;
+                    if (Math.ceil(span / s) <= 4) {
+                        step = s;
+                        break;
+                    } // 间隔≤4 → 刻度≤5
+                }
+                if (step === 0)
+                    step = 10 * mag;
+                const topMax = Math.ceil(span / step) * step; // 上限略高于最高点
+                const ticks = [];
+                for (let v = 0; v <= topMax + 1e-9; v += step) {
+                    const clean = step >= 1 ? Math.round(v) : Math.round(v * 1000) / 1000;
+                    if (clean !== ticks[ticks.length - 1])
+                        ticks.push(clean);
+                }
+                return { step, topMax, ticks };
+            })();
+            const yTicks = axis.ticks;
+            const yMax = axis.topMax; // 刻度上限(≥ maxPos)
+            // 0 基线位置(距顶部像素):正负按各自刻度上限各占比例
+            const zeroY = maxNeg === 0 ? HEIGHT : Math.round(maxNeg / (yMax + maxNeg) * HEIGHT);
+            // 每根柱的高度(像素):正柱占 0 线上方空间,负柱占下方,统一按 yMax 归一
+            const barH = (v) => {
+                if (v > 0)
+                    return yMax > 0 ? Math.max(2, Math.round(v / yMax * zeroY)) : 2;
+                if (v < 0)
+                    return maxNeg > 0 ? Math.max(2, Math.round(-v / maxNeg * (HEIGHT - zeroY))) : 2;
+                return 2;
+            };
+            // 正柱(消费)用 error 色向上;负柱(回升)用 success 色向下;
+            // 0 值(确实没消费)用中性边框色,避免与"有消费"混淆;
+            // null(未采样)为半透明浅色短点;
+            // 正柱且本窗口无本环境活动(activity=false)用 warn 警示色——
+            // 下降可能来自其他环境(本机未用却扣款),不当作本环境消费。
+            const barStyle = (b) => {
+                const spent = b ? b.spent : null;
+                const finite = typeof spent === 'number' && Number.isFinite(spent);
+                const value = finite ? spent : 0;
+                const zero = finite && value === 0;
+                const positive = value > 0;
+                const external = finite && positive && !(b && b.activity);
+                return {
+                    position: 'absolute',
+                    left: '0',
+                    right: '0',
+                    bottom: positive ? '0' : undefined,
+                    top: positive ? undefined : '0',
+                    height: barH(value) + 'px',
+                    margin: '0 1px',
+                    background: !finite
+                        ? 'var(--dsw-alias-border-l1)' // faint placeholder for unsampled
+                        : zero
+                            ? 'var(--dsw-alias-border-l1)' // truly zero spend → neutral
+                            : external
+                                ? 'var(--dsw-alias-state-warn-primary)' // spend without local activity → warn
+                                : positive
+                                    ? 'var(--dsw-alias-state-error-primary)'
+                                    : 'var(--dsw-alias-state-success-primary)',
+                    opacity: finite ? (zero ? 0.4 : 0.92) : 0.5,
+                    borderRadius: '1px',
+                };
+            };
+            const formatBar = (spent) => {
+                if (!(typeof spent === 'number' && Number.isFinite(spent)))
+                    return '–';
+                const abs = Math.abs(spent).toFixed(2);
+                return spent >= 0 ? sym + abs : '+' + sym + abs;
+            };
+            // 柱窗口的墙钟起止 "HH:mm–HH:mm",按配置时区显示(与柱边界对齐使用的
+            // 时区一致——用户配置哪个时区,看到的就是哪个时区的整数窗口)。
+            // fallback:浏览器本地时区。
+            const fmtWindow = (at, ms) => {
+                try {
+                    const f = (t) => {
+                        try {
+                            const wc = wallClock(tzShow, new Date(t));
+                            return String(Math.floor(wc.minutes / 60)).padStart(2, '0') + ':' + String(wc.minutes % 60).padStart(2, '0');
+                        }
+                        catch (e2) {
+                            const d = new Date(t);
+                            return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+                        }
+                    };
+                    return f(at) + '–' + f(at + ms);
+                }
+                catch (e) {
+                    return '';
+                }
+            };
+            // 浮动框定位:跟随鼠标,右缘贴鼠标左侧 12px,clamp 在视口内
+            const updateTip = (e, b) => {
+                const vw = typeof window !== 'undefined' && window && typeof window.innerWidth === 'number' ? window.innerWidth : 1024;
+                const vh = typeof window !== 'undefined' && window && typeof window.innerHeight === 'number' ? window.innerHeight : 768;
+                const x = typeof e.clientX === 'number' ? e.clientX : vw;
+                const y = typeof e.clientY === 'number' ? e.clientY : 0;
+                const right = Math.max(8, Math.min(vw - 8, vw - x + 12));
+                const top = Math.max(8, Math.min(y + 14, vh - 120));
+                setTip({ right, top, b });
+            };
+            const BAR_MS = 10 * 60 * 1000;
+            const tipCard = tip && tip.b
+                ? React.createElement('div', {
+                    style: {
+                        position: 'fixed', right: tip.right, top: tip.top, zIndex: 10001,
+                        background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                        borderRadius: '8px', border: '1px solid var(--dsw-alias-border-l1)',
+                        boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
+                        padding: '6px 10px', fontSize: '12px', lineHeight: '1.6',
+                        maxWidth: 'min(340px, calc(100vw - 24px))',
+                        whiteSpace: 'normal', overflowWrap: 'break-word',
+                        pointerEvents: 'none',
+                    },
+                }, React.createElement('div', { style: { fontWeight: 700 } }, '10min ' + fmtWindow(tip.b.at, BAR_MS)), React.createElement('div', null, (tip.b && tip.b.spent !== null && tip.b.spent !== undefined ? formatBar(tip.b.spent) : '–')), (tip.b && tip.b.spent !== null && tip.b.spent !== undefined && tip.b.spent >= 0 && !tip.b.activity)
+                    ? React.createElement('div', { style: { color: 'var(--dsw-alias-state-warn-primary)', marginTop: '2px' } }, t('barsExternal'))
+                    : null)
+                : null;
+            const nowLabel = t('barsHint');
+            const fmtTick = (t) => {
+                try {
+                    const wc = wallClock(tzShow, new Date(t));
+                    return String(Math.floor(wc.minutes / 60)).padStart(2, '0') + ':' + String(wc.minutes % 60).padStart(2, '0');
+                }
+                catch (e) {
+                    const d = new Date(t);
+                    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+                }
+            };
+            const fmtTickVal = (v) => {
+                // 浮点清洗:接近整数的值(如 0.6000000000000001)按整数显示
+                const cleaned = Math.abs(v - Math.round(v)) < 1e-9 ? Math.round(v) : v;
+                const abs = Math.abs(cleaned);
+                const s = abs >= 1000 ? abs.toFixed(0) : abs >= 100 ? abs.toFixed(1) : abs.toFixed(2);
+                return (cleaned < 0 ? '-' : '') + s;
+            };
+            // Y 轴刻度定位:刻度值 v 的像素 top = zeroY - (v/yMax)*zeroY。
+            // 值越大越靠上,0 恰落在基线上 —— 与柱体视觉一致(统一按 yMax 归一)。
+            const yTop = (v) => {
+                if (yMax <= 0)
+                    return zeroY;
+                return Math.round(zeroY - (v / yMax) * zeroY);
+            };
+            // X 轴:整点小时刻度。在柱覆盖的时间范围内找所有整点时刻
+            // (HH:00),按柱索引换算成百分比位置 —— 比均匀分布的任意时刻更易读、
+            // 与官方后台按整点计费可比。最多取 8 个。
+            const BAR_MS_X = 10 * 60 * 1000;
+            const oldestAt = ordered[0] ? ordered[0].at : 0;
+            const newestEnd = ordered[ordered.length - 1] ? ordered[ordered.length - 1].at + BAR_MS_X : 0;
+            const xTicks = [];
+            if (newestEnd > 0 && ordered.length > 0) {
+                const firstHour = Math.floor(oldestAt / 3600000) * 3600000;
+                const spanMs = newestEnd - oldestAt;
+                for (let t = firstHour; t <= newestEnd; t += 3600000) {
+                    if (t < oldestAt)
+                        continue;
+                    const leftPct = spanMs > 0 ? ((t - oldestAt) / spanMs) * 100 : 0;
+                    xTicks.push({ at: t, leftPct });
+                    if (xTicks.length >= 8)
+                        break;
+                }
+            }
+            // 布局:左列 Y 轴刻度 + 右列(绘图区 + X 轴)
+            return React.createElement('div', { style: { padding: '10px 12px 8px' } }, React.createElement('div', { style: { display: 'flex', alignItems: 'stretch' } }, 
+            // Y 轴刻度列(金额,绝对定位对齐柱高)
+            React.createElement('div', {
+                style: {
+                    position: 'relative', width: '44px', marginRight: '6px',
+                    fontSize: '10px', color: 'var(--dsw-alias-label-secondary)', textAlign: 'right',
+                    height: HEIGHT + 'px', flexShrink: 0,
+                },
+            }, yTicks.map((v, i) => React.createElement('span', {
+                key: i,
+                style: {
+                    position: 'absolute', right: '0',
+                    top: yTop(v) + 'px',
+                    transform: 'translateY(-50%)',
+                    whiteSpace: 'nowrap',
+                },
+            }, sym + fmtTickVal(v)))), 
+            // 绘图区 + X 轴
+            React.createElement('div', { style: { flex: '1 1 0', minWidth: 0 } }, React.createElement('div', {
+                style: {
+                    position: 'relative',
+                    height: HEIGHT + 'px',
+                    borderBottom: '1px solid var(--dsw-alias-border-l1)',
+                },
+            }, 
+            // 水平网格线(Y 轴每个刻度一条,虚线;0 基线实线)已在下方渲染,
+            // 不再单独画 0 基线(由 v===0 的网格线承担)。
+            yTicks.map((v, i) => React.createElement('div', {
+                key: 'g' + i,
+                style: {
+                    position: 'absolute', left: '0', right: '0',
+                    top: yTop(v) + 'px', height: '1px',
+                    borderTop: v === 0
+                        ? '1px solid var(--dsw-alias-border-l1)'
+                        : '1px dashed var(--dsw-alias-border-l1)',
+                    opacity: v === 0 ? 1 : 0.45,
+                    pointerEvents: 'none',
+                },
+            })), 
+            // 柱(每个占 1/48 宽度)
+            ordered.map((b, i) => {
+                return React.createElement('div', {
+                    key: i,
+                    style: {
+                        position: 'absolute', top: '0', bottom: '0',
+                        left: (i / ordered.length * 100) + '%',
+                        width: (100 / ordered.length) + '%',
+                    },
+                }, React.createElement('div', {
+                    style: barStyle(b),
+                    onMouseEnter: (e) => updateTip(e, b),
+                    onMouseMove: (e) => updateTip(e, b),
+                    onMouseLeave: () => setTip(null),
+                }));
+            })), 
+            // X 轴刻度(整点小时)
+            React.createElement('div', {
+                style: {
+                    position: 'relative', height: '16px', marginTop: '2px',
+                    fontSize: '10px', color: 'var(--dsw-alias-label-secondary)',
+                },
+            }, xTicks.map((tk, i) => React.createElement('span', {
+                key: i,
+                style: {
+                    position: 'absolute',
+                    left: tk.leftPct + '%',
+                    transform: 'translateX(-50%)',
+                    whiteSpace: 'nowrap',
+                },
+            }, fmtTick(tk.at)))))), React.createElement('div', { style: { marginTop: '4px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } }, nowLabel), React.createElement('div', { style: { marginTop: '2px', fontSize: '10px', color: 'var(--dsw-alias-label-secondary)', opacity: 0.8 } }, t('barsDisclaimer')), tipCard);
+        };
         // ---- Main UI: session-header right-aligned area (status text + floating
         //      banner in the same slot; the banner no longer uses shell.overlay) ----
         slots.inject('conversation.session.header.utilities', () => slots.register({ name: 'conversation.session.header.utilities', id: 'save-money-status-text', order: 5 }, () => {
             const [st, setSt] = useSnap();
             const [open, setOpen] = React.useState(false);
+            const [barsOpen, setBarsOpen] = React.useState(false);
             const actions = makeActions(setSt);
             const b = badgeInfo(st);
             // "Save" + symbol + status text all use the state color
@@ -1379,6 +1700,25 @@ return {
                 const lines = balanceDetailLines(st.balance, { h1: t('spendH1'), m10: t('spendM10'), h24: t('spendH24') });
                 if (!lines)
                     return null;
+                // 给 m10/h1 行追加精确时间窗口(与柱形图同源、同对齐基准):
+                // "近1h消费 07:00–08:00 ¥1.25"。h24 跨天,不加范围避免歧义。
+                const sa = st.balance && st.balance.spendAt;
+                if (sa && typeof sa.m10 === 'number' && typeof sa.h1 === 'number') {
+                    try {
+                        const tzShow = (st.config && typeof st.config.timezone === 'string' && st.config.timezone.length > 0)
+                            ? st.config.timezone
+                            : detectedTz;
+                        const fmt = (t) => {
+                            const wc = wallClock(tzShow, new Date(t));
+                            return String(Math.floor(wc.minutes / 60)).padStart(2, '0') + ':' + String(wc.minutes % 60).padStart(2, '0');
+                        };
+                        if (lines.length >= 2)
+                            lines[1] += ' ' + fmt(sa.h1) + '–' + fmt(sa.h1 + 60 * 60 * 1000);
+                        if (lines.length >= 3)
+                            lines[2] += ' ' + fmt(sa.m10) + '–' + fmt(sa.m10 + 10 * 60 * 1000);
+                    }
+                    catch (e) { /* keep the unlabelled lines on any tz error */ }
+                }
                 return React.createElement('div', {
                     style: {
                         position: 'fixed', right: balTip.right, top: balTip.top, zIndex: 10001,
@@ -1411,14 +1751,48 @@ return {
                     style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-label-secondary)', pointerEvents: 'auto' },
                 }, '✕')), React.createElement(SettingsView, { st, ...actions }))
                 : null;
+            // Spend bar-chart popup (click the balance): last 8h per 10 min.
+            const chartPopup = barsOpen && balanceEl
+                ? React.createElement('div', {
+                    style: {
+                        position: 'fixed', right: '16px', top: '56px', width: '420px',
+                        background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                        borderRadius: '10px',
+                        boxShadow: '0 6px 24px rgba(0,0,0,0.35)', padding: '4px 8px 8px',
+                        zIndex: 10000, border: '1px solid var(--dsw-alias-border-l1)', pointerEvents: 'auto',
+                    },
+                }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 6px 0' } }, React.createElement('span', { style: { fontSize: '13px', fontWeight: 700 } }, t('barsTitle')), React.createElement('button', {
+                    onClick: () => setBarsOpen(false),
+                    style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-label-secondary)', pointerEvents: 'auto' },
+                }, '✕')), React.createElement(BarChart, {
+                    bars: st.balance && st.balance.bars,
+                    timezone: st.config && st.config.timezone,
+                    symbol: (st.balance && st.balance.balance && st.balance.balance[0])
+                        ? currencySymbol(String(st.balance.balance[0].currency || ''))
+                        : '¥',
+                }))
+                : null;
             return React.createElement('div', { style: { display: 'contents' } }, text, balanceEl
                 ? React.createElement('div', {
-                    style: { display: 'contents' },
+                    style: { display: 'contents', cursor: 'pointer' },
                     onMouseEnter: updateBalTip,
                     onMouseMove: updateBalTip,
                     onMouseLeave: () => setBalTip(null),
+                    onClick: (e) => {
+                        e.stopPropagation();
+                        setBalTip(null); // 打开弹窗时清掉 hover 卡片,避免遮挡
+                        setBarsOpen((v) => {
+                            const opening = !v;
+                            if (opening) {
+                                // 打开柱形图时强制刷新一次,确保图表反映最新采样
+                                // (host 5 分钟定时器采样后不会主动推给 client)。
+                                void refresh();
+                            }
+                            return !v;
+                        }); // 再次点击关闭(toggle)
+                    },
                 }, balanceEl, balCard)
-                : null, pop, React.createElement(FloatingBanner, { st, doEndWindow: actions.doEndWindow }));
+                : null, pop, chartPopup, React.createElement(FloatingBanner, { st, doEndWindow: actions.doEndWindow }));
         }));
         // ---- System settings page (settings.section, kept) ----
         slots.inject('settings.section', () => slots.register({ name: 'settings.section', id: 'save-money', order: 25, label: t('sectionLabel') }, () => {
