@@ -12,7 +12,9 @@
   "files": [
     "index.js",
     "cordis.patch.yml",
-    "client.js"
+    "client.js",
+    "../README.md",
+    "../README.zh.md"
   ],
   "type": "module",
   "main": "index.js",
