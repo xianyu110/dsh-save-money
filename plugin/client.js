@@ -15,699 +15,16 @@ window.__ModuleLoader__.load({
     var exports = module.exports;
     const React = require('react');
     var plugin = (() => {
-const I18N = {
-    zh: {
-        badgeDisabled: '未启用',
-        badgePaused: '已经暂停',
-        badgeWarn: '即将暂停',
-        badgeWorking: '工作中',
-        bannerPaused: '⛔ 已暂停：模型请求已挂起，不产生费用。',
-        bannerAutoResume: ' 自动继续',
-        bannerWarn: '⏳ 距离暂停还有 ',
-        bannerMinutes: ' 分钟',
-        bannerMoment: '片刻',
-        endThisWindow: '结束本次省钱模式',
-        endWindowActive: '✅ 您已结束本次省钱模式：窗口 {a}-{b} 已跳过，{c} 自动恢复省钱（重新关闭再勾选「启用」可重置）',
-        statusPrefix: '状态：',
-        windowSuffix: '（{a}-{b}）',
-        pausedNote: '暂停窗口内所有模型请求在发出前被挂起（不产生费用），窗口结束自动继续，上下文不受影响；点「结束本次省钱模式」可立即恢复并跳过本窗口（只影响当前窗口，下一窗口照常生效）。',
-        deepseekPreset: '一键 DeepSeek 分时计价省钱策略',
-        presetExists: 'DeepSeek 预设两组窗口（含 2 分钟余量）已存在，未重复添加。勾选「启用」即可生效。',
-        presetUpgraded: '已升级 {n} 组旧窗口为带余量窗口；',
-        presetAdded: '已添加 {n} 组 DeepSeek 预设窗口（未启用，请自行勾选「启用」）。',
-        applyFailed: '一键应用失败：',
-        savedMsg: '已保存 {n} 组窗口。',
-        enable: '启用',
-        timezone: '时区',
-        language: '语言',
-        langAuto: '自动（跟随浏览器）',
-        langZh: '中文',
-        langZhTw: '中文（繁體）',
-        langEn: 'English',
-        langDe: 'Deutsch',
-        langFr: 'Français',
-        langEs: 'Español',
-        langIt: 'Italiano',
-        langPt: 'Português',
-        langJa: '日本語',
-        langKo: '한국어',
-        windowsTitle: '暂停窗口（{tz} 墙上时间，共 {n} 组）',
-        pause: '暂停',
-        resume: '继续',
-        removeTitle: '删除该组',
-        addWindow: '+ 添加窗口',
-        save: '保存',
-        settingsTitle: '省钱插件设置',
-        headerTitle: 'save-money：{status}（点击进入设置）',
-        badgeLabel: '省钱 · {symbol} {text}',
-        sectionLabel: '省钱插件',
-        settingsHeading: 'save-money 省钱插件',
-        showBalance: '显示余额',
-        modelApplyTitle: '适用模型（勾选 = 窗口内暂停；不勾选 = 豁免）',
-        modelApplyHint: '识别失败或未列出的模型（如其他第三方）一律豁免',
-        applyOfficialFlash: '官方 flash API',
-        applyOfficialPro: '官方 pro API',
-        applyOpencodeFlash: 'opencode go/zen flash API',
-        applyOpencodePro: 'opencode go/zen pro API',
-        spendH1: '近1h消费',
-        spendM10: '近10m消费',
-        spendH24: '近24h消费',
-        barsTitle: '最近 8 小时消费(每 10 分钟)',
-        barsHint: '绿色柱=余额回升,数值为 0 表示无消费',
-        barsExternal: ' · 本窗口无本环境活动,变动可能来自其他环境',
-        barsDisclaimer: '数据为采样计算获得仅供参考,实际以官方数据为准',
-    },
-    en: {
-        badgeDisabled: 'Disabled',
-        badgePaused: 'Paused',
-        badgeWarn: 'Pausing soon',
-        badgeWorking: 'Working',
-        bannerPaused: '⛔ Paused: model requests suspended, no cost.',
-        bannerAutoResume: ' auto-resumes',
-        bannerWarn: '⏳ Pause in ',
-        bannerMinutes: ' min',
-        bannerMoment: 'a moment',
-        endThisWindow: 'End this save mode',
-        endWindowActive: '✅ You ended this save mode: window {a}-{b} skipped, saving resumes at {c} (toggle Enable off/on to reset)',
-        statusPrefix: 'Status: ',
-        windowSuffix: ' ({a}-{b})',
-        pausedNote: 'All model requests are suspended before being sent (no cost). They resume automatically when the window ends; context is unaffected. Click "End this save mode" to resume now and skip only this window (the next window still takes effect).',
-        deepseekPreset: 'One-click DeepSeek peak/off-peak savings',
-        presetExists: 'DeepSeek preset windows (2-min margin) already present; not re-added. Check "Enable" to activate.',
-        presetUpgraded: 'Upgraded {n} window(s) to the margin version; ',
-        presetAdded: 'Added {n} DeepSeek preset window(s) (not enabled — check "Enable" to activate).',
-        applyFailed: 'One-click failed: ',
-        savedMsg: 'Saved {n} window(s).',
-        enable: 'Enable',
-        timezone: 'Timezone',
-        language: 'Language',
-        langAuto: 'Auto (browser)',
-        langZh: '中文',
-        langZhTw: '中文（繁體）',
-        langEn: 'English',
-        langDe: 'Deutsch',
-        langFr: 'Français',
-        langEs: 'Español',
-        langIt: 'Italiano',
-        langPt: 'Português',
-        langJa: '日本語',
-        langKo: '한국어',
-        windowsTitle: 'Pause windows ({tz} wall-clock, {n} total)',
-        pause: 'Pause',
-        resume: 'Resume',
-        removeTitle: 'Remove this window',
-        addWindow: '+ Add window',
-        save: 'Save',
-        settingsTitle: 'Save-money settings',
-        headerTitle: 'save-money: {status} (click for settings)',
-        badgeLabel: 'Save · {symbol} {text}',
-        sectionLabel: 'Save-money',
-        settingsHeading: 'save-money plugin',
-        showBalance: 'Show balance',
-        modelApplyTitle: 'Apply to models (checked = pause in windows; unchecked = exempt)',
-        modelApplyHint: 'Models not recognized or not listed (e.g. other third parties) are always exempt',
-        applyOfficialFlash: 'Official flash API',
-        applyOfficialPro: 'Official pro API',
-        applyOpencodeFlash: 'opencode go/zen flash API',
-        applyOpencodePro: 'opencode go/zen pro API',
-        spendH1: '1h spent',
-        spendM10: '10m spent',
-        spendH24: '24h spent',
-        barsTitle: 'Last 8h spend (per 10 min)',
-        barsHint: 'green bars = balance topped up; 0 = no spend',
-        barsExternal: ' · no local activity in this window; change may come from elsewhere',
-        barsDisclaimer: 'Estimated from sampled data; official billing takes precedence',
-    },
-    de: {
-        badgeDisabled: 'Deaktiviert',
-        badgePaused: 'Pausiert',
-        badgeWarn: 'Bald pausiert',
-        badgeWorking: 'Aktiv',
-        bannerPaused: '⛔ Pausiert: Modellanfragen werden angehalten, keine Kosten.',
-        bannerAutoResume: ' setzt automatisch fort',
-        bannerWarn: '⏳ Pause in ',
-        bannerMinutes: ' Min.',
-        bannerMoment: 'einem Moment',
-        endThisWindow: 'Diese Sparphase beenden',
-        endWindowActive: '✅ Sie haben diese Sparphase beendet: Fenster {a}-{b} übersprungen, Sparmodus setzt um {c} automatisch fort (Ein/Aus schalten setzt zurück).',
-        statusPrefix: 'Status: ',
-        windowSuffix: ' ({a}-{b})',
-        pausedNote: 'Alle Modellanfragen werden im Pausefenster vor dem Senden angehalten (keine Kosten). Sie werden automatisch fortgesetzt, wenn das Fenster endet; der Kontext bleibt unverändert. Klicken Sie auf „Diese Sparphase beenden“, um sofort fortzufahren und nur dieses Fenster zu überspringen.',
-        deepseekPreset: 'DeepSeek-Spartarif mit einem Klick',
-        presetExists: 'Die beiden DeepSeek-Fenster (mit 2 Min. Rand) sind bereits vorhanden und wurden nicht erneut hinzugefügt. Aktivieren Sie „Aktiviert“.',
-        presetUpgraded: '{n} alte Fenster wurden auf die Version mit Rand aktualisiert; ',
-        presetAdded: '{n} DeepSeek-Fenster hinzugefügt (nicht aktiviert – bitte „Aktiviert“ ankreuzen).',
-        applyFailed: 'Ein-Klick fehlgeschlagen: ',
-        savedMsg: '{n} Fenster gespeichert.',
-        enable: 'Aktiviert',
-        timezone: 'Zeitzone',
-        language: 'Sprache',
-        langAuto: 'Automatisch (Browser)',
-        langZh: 'Chinesisch (vereinfacht)',
-        langZhTw: 'Chinesisch (traditionell)',
-        langEn: 'Englisch',
-        langDe: 'Deutsch',
-        langFr: 'Französisch',
-        langEs: 'Spanisch',
-        langIt: 'Italienisch',
-        langPt: 'Portugiesisch',
-        langJa: 'Japanisch',
-        langKo: 'Koreanisch',
-        windowsTitle: 'Pausefenster ({tz} Ortszeit, {n} gesamt)',
-        pause: 'Pause',
-        resume: 'Fortsetzen',
-        removeTitle: 'Fenster entfernen',
-        addWindow: '+ Fenster hinzufügen',
-        save: 'Speichern',
-        settingsTitle: 'Sparmodus-Einstellungen',
-        headerTitle: 'save-money: {status} (klicken für Einstellungen)',
-        badgeLabel: 'Sparen · {symbol} {text}',
-        sectionLabel: 'Sparmodus',
-        settingsHeading: 'save-money Sparmodus',
-        showBalance: 'Guthaben anzeigen',
-        modelApplyTitle: 'Gilt für Modelle (aktiviert = in Fenstern pausieren; deaktiviert = ausgenommen)',
-        modelApplyHint: 'Nicht erkannte oder nicht aufgeführte Modelle (z. B. andere Drittanbieter) sind immer ausgenommen',
-        applyOfficialFlash: 'Offizielle Flash-API',
-        applyOfficialPro: 'Offizielle Pro-API',
-        applyOpencodeFlash: 'opencode go/zen Flash-API',
-        applyOpencodePro: 'opencode go/zen Pro-API',
-        spendH1: 'Verbrauch 1h',
-        spendM10: 'Verbrauch 10m',
-        spendH24: 'Verbrauch 24h',
-        barsTitle: 'Verbrauch letzte 8h (pro 10 Min.)',
-        barsHint: 'grüne Balken = Guthaben aufgestockt; 0 = kein Verbrauch',
-        barsExternal: ' · in diesem Fenster keine lokale Aktivität; Änderung evtl. von anderswo',
-        barsDisclaimer: 'Aus Stichproben geschätzt; maßgeblich ist die offizielle Abrechnung',
-    },
-    fr: {
-        badgeDisabled: 'Désactivé',
-        badgePaused: 'En pause',
-        badgeWarn: 'Pause imminente',
-        badgeWorking: 'En cours',
-        bannerPaused: '⛔ En pause : requêtes modèle suspendues, aucun coût.',
-        bannerAutoResume: ' reprend automatiquement',
-        bannerWarn: '⏳ Pause dans ',
-        bannerMinutes: ' min',
-        bannerMoment: 'un instant',
-        endThisWindow: 'Terminer cette économie',
-        endWindowActive: '✅ Vous avez terminé cette économie : fenêtre {a}-{b} ignorée, reprise automatique à {c} (désactivez puis réactivez « Activer » pour réinitialiser).',
-        statusPrefix: 'État : ',
-        windowSuffix: ' ({a}-{b})',
-        pausedNote: 'Toutes les requêtes modèle sont suspendues avant envoi dans la fenêtre de pause (aucun coût) et reprennent automatiquement à la fin de la fenêtre ; le contexte est préservé. Cliquez sur « Terminer cette économie » pour reprendre immédiatement en ignorant uniquement cette fenêtre.',
-        deepseekPreset: 'Économies DeepSeek en un clic',
-        presetExists: 'Les deux fenêtres DeepSeek (marge de 2 min) existent déjà, rien n\u2019a été ajouté. Cochez « Activer ».',
-        presetUpgraded: '{n} ancienne(s) fenêtre(s) mise(s) à niveau avec marge ; ',
-        presetAdded: '{n} fenêtre(s) DeepSeek ajoutée(s) (non activée(s) – cochez « Activer »).',
-        applyFailed: 'Échec de l\u2019application : ',
-        savedMsg: '{n} fenêtre(s) enregistrée(s).',
-        enable: 'Activer',
-        timezone: 'Fuseau horaire',
-        language: 'Langue',
-        langAuto: 'Automatique (navigateur)',
-        langZh: 'Chinois (simplifié)',
-        langZhTw: 'Chinois (traditionnel)',
-        langEn: 'Anglais',
-        langDe: 'Allemand',
-        langFr: 'Français',
-        langEs: 'Espagnol',
-        langIt: 'Italien',
-        langPt: 'Portugais',
-        langJa: 'Japonais',
-        langKo: 'Coréen',
-        windowsTitle: 'Fenêtres de pause ({tz} heure locale, {n} au total)',
-        pause: 'Pause',
-        resume: 'Reprendre',
-        removeTitle: 'Supprimer cette fenêtre',
-        addWindow: '+ Ajouter une fenêtre',
-        save: 'Enregistrer',
-        settingsTitle: 'Paramètres de l\u2019économie',
-        headerTitle: 'save-money : {status} (cliquer pour les paramètres)',
-        badgeLabel: 'Économie · {symbol} {text}',
-        sectionLabel: 'Économie',
-        settingsHeading: 'Extension save-money',
-        showBalance: 'Afficher le solde',
-        modelApplyTitle: 'Appliquer aux modèles (coché = suspendre pendant les fenêtres ; décoché = exempté)',
-        modelApplyHint: 'Les modèles non reconnus ou non listés (ex. autres tiers) sont toujours exemptés',
-        applyOfficialFlash: 'API flash officielle',
-        applyOfficialPro: 'API pro officielle',
-        applyOpencodeFlash: 'API flash opencode go/zen',
-        applyOpencodePro: 'API pro opencode go/zen',
-        spendH1: 'dépensé 1h',
-        spendM10: 'dépensé 10m',
-        spendH24: 'dépensé 24h',
-        barsTitle: 'Dépenses 8 dernières h (par 10 min)',
-        barsHint: 'barres vertes = solde rechargé ; 0 = aucune dépense',
-        barsExternal: ' · aucune activité locale dans cette fenêtre ; variation peut venir d\u2019ailleurs',
-        barsDisclaimer: 'Estimation à partir d\u2019échantillons ; la facturation officielle fait foi',
-    },
-    es: {
-        badgeDisabled: 'Desactivado',
-        badgePaused: 'En pausa',
-        badgeWarn: 'Pausa próxima',
-        badgeWorking: 'En funcionamiento',
-        bannerPaused: '⛔ En pausa: solicitudes al modelo suspendidas, sin coste.',
-        bannerAutoResume: ' se reanuda automáticamente',
-        bannerWarn: '⏳ Pausa en ',
-        bannerMinutes: ' min',
-        bannerMoment: 'un momento',
-        endThisWindow: 'Terminar este ahorro',
-        endWindowActive: '✅ Ha terminado este ahorro: ventana {a}-{b} omitida, se reanuda a las {c} (desactive y vuelva a activar «Activar» para restablecer).',
-        statusPrefix: 'Estado: ',
-        windowSuffix: ' ({a}-{b})',
-        pausedNote: 'Todas las solicitudes al modelo se suspenden antes de enviarse durante la ventana de pausa (sin coste) y se reanudan automáticamente al terminar; el contexto no se ve afectado. Pulse « Terminar este ahorro » para reanudar de inmediato omitiendo solo esta ventana.',
-        deepseekPreset: 'Ahorro DeepSeek con un clic',
-        presetExists: 'Las dos ventanas DeepSeek (margen de 2 min) ya existen; no se añadieron de nuevo. Marque « Activar ».',
-        presetUpgraded: '{n} ventana(s) antigua(s) actualizada(s) con margen; ',
-        presetAdded: '{n} ventana(s) DeepSeek añadida(s) (sin activar – marque « Activar »).',
-        applyFailed: 'Error al aplicar: ',
-        savedMsg: '{n} ventana(s) guardada(s).',
-        enable: 'Activar',
-        timezone: 'Zona horaria',
-        language: 'Idioma',
-        langAuto: 'Automático (navegador)',
-        langZh: 'Chino (simplificado)',
-        langZhTw: 'Chino (tradicional)',
-        langEn: 'Inglés',
-        langDe: 'Alemán',
-        langFr: 'Francés',
-        langEs: 'Español',
-        langIt: 'Italiano',
-        langPt: 'Portugués',
-        langJa: 'Japonés',
-        langKo: 'Coreano',
-        windowsTitle: 'Ventanas de pausa ({tz} hora local, {n} en total)',
-        pause: 'Pausa',
-        resume: 'Reanudar',
-        removeTitle: 'Eliminar esta ventana',
-        addWindow: '+ Añadir ventana',
-        save: 'Guardar',
-        settingsTitle: 'Ajustes del ahorro',
-        headerTitle: 'save-money: {status} (clic para ajustes)',
-        badgeLabel: 'Ahorro · {symbol} {text}',
-        sectionLabel: 'Ahorro',
-        settingsHeading: 'Extensión save-money',
-        showBalance: 'Mostrar saldo',
-        modelApplyTitle: 'Aplicar a modelos (marcado = pausar en ventanas; desmarcado = exento)',
-        modelApplyHint: 'Los modelos no reconocidos o no listados (p. ej. otros terceros) siempre están exentos',
-        applyOfficialFlash: 'API flash oficial',
-        applyOfficialPro: 'API pro oficial',
-        applyOpencodeFlash: 'API flash opencode go/zen',
-        applyOpencodePro: 'API pro opencode go/zen',
-        spendH1: 'gastado 1h',
-        spendM10: 'gastado 10m',
-        spendH24: 'gastado 24h',
-        barsTitle: 'Gasto últimas 8 h (por 10 min)',
-        barsHint: 'barras verdes = saldo recargado; 0 = sin gasto',
-        barsExternal: ' · sin actividad local en este tramo; el cambio puede venir de otro sitio',
-        barsDisclaimer: 'Estimado a partir de muestras; la facturación oficial es la referencia',
-    },
-    it: {
-        badgeDisabled: 'Disattivato',
-        badgePaused: 'In pausa',
-        badgeWarn: 'Pausa imminente',
-        badgeWorking: 'In funzione',
-        bannerPaused: '⛔ In pausa: richieste al modello sospese, nessun costo.',
-        bannerAutoResume: ' riprende automaticamente',
-        bannerWarn: '⏳ Pausa tra ',
-        bannerMinutes: ' min',
-        bannerMoment: 'un attimo',
-        endThisWindow: 'Termina questa modalità di risparmio',
-        endWindowActive: '✅ Hai terminato questa modalità di risparmio: finestra {a}-{b} saltata, riprende alle {c} (disattiva e riattiva «Attiva» per azzerare).',
-        statusPrefix: 'Stato: ',
-        windowSuffix: ' ({a}-{b})',
-        pausedNote: 'Tutte le richieste al modello vengono sospese prima dell\u2019invio nella finestra di pausa (nessun costo) e riprendono automaticamente alla fine; il contesto resta invariato. Clicca su « Termina questa modalità di risparmio » per riprendere subito saltando solo questa finestra.',
-        deepseekPreset: 'Risparmio DeepSeek con un clic',
-        presetExists: 'Le due finestre DeepSeek (margine 2 min) esistono già; non aggiunte di nuovo. Spunta « Attiva ».',
-        presetUpgraded: '{n} vecchia/e finestra/e aggiornata/e con margine; ',
-        presetAdded: '{n} finestra/e DeepSeek aggiunta/e (non attiva/e – spunta « Attiva »).',
-        applyFailed: 'Applicazione fallita: ',
-        savedMsg: '{n} finestra/e salvata/e.',
-        enable: 'Attiva',
-        timezone: 'Fuso orario',
-        language: 'Lingua',
-        langAuto: 'Automatico (browser)',
-        langZh: 'Cinese (semplificato)',
-        langZhTw: 'Cinese (tradizionale)',
-        langEn: 'Inglese',
-        langDe: 'Tedesco',
-        langFr: 'Francese',
-        langEs: 'Spagnolo',
-        langIt: 'Italiano',
-        langPt: 'Portoghese',
-        langJa: 'Giapponese',
-        langKo: 'Coreano',
-        windowsTitle: 'Finestre di pausa ({tz} ora locale, {n} in totale)',
-        pause: 'Pausa',
-        resume: 'Riprendi',
-        removeTitle: 'Rimuovi questa finestra',
-        addWindow: '+ Aggiungi finestra',
-        save: 'Salva',
-        settingsTitle: 'Impostazioni risparmio',
-        headerTitle: 'save-money: {status} (clic per impostazioni)',
-        badgeLabel: 'Risparmio · {symbol} {text}',
-        sectionLabel: 'Risparmio',
-        settingsHeading: 'Estensione save-money',
-        showBalance: 'Mostra saldo',
-        modelApplyTitle: 'Applica ai modelli (selezionato = pausa nelle finestre; deselezionato = esente)',
-        modelApplyHint: 'I modelli non riconosciuti o non elencati (es. altri terzi) sono sempre esenti',
-        applyOfficialFlash: 'API flash ufficiale',
-        applyOfficialPro: 'API pro ufficiale',
-        applyOpencodeFlash: 'API flash opencode go/zen',
-        applyOpencodePro: 'API pro opencode go/zen',
-        spendH1: 'speso 1h',
-        spendM10: 'speso 10m',
-        spendH24: 'speso 24h',
-        barsTitle: 'Spese ultime 8 h (per 10 min)',
-        barsHint: 'barre verdi = saldo ricaricato; 0 = nessuna spesa',
-        barsExternal: ' · nessuna attività locale in questo intervallo; variazione forse esterna',
-        barsDisclaimer: 'Stima da campionamenti; fa fede la fatturazione ufficiale',
-    },
-    pt: {
-        badgeDisabled: 'Desativado',
-        badgePaused: 'Em pausa',
-        badgeWarn: 'Pausa em breve',
-        badgeWorking: 'Em funcionamento',
-        bannerPaused: '⛔ Em pausa: solicitações ao modelo suspensas, sem custo.',
-        bannerAutoResume: ' retoma automaticamente',
-        bannerWarn: '⏳ Pausa em ',
-        bannerMinutes: ' min',
-        bannerMoment: 'um momento',
-        endThisWindow: 'Terminar este modo de economia',
-        endWindowActive: '✅ Você terminou este modo de economia: janela {a}-{b} ignorada, retoma às {c} (desative e reative «Ativar» para redefinir).',
-        statusPrefix: 'Estado: ',
-        windowSuffix: ' ({a}-{b})',
-        pausedNote: 'Todas as solicitações ao modelo são suspensas antes do envio na janela de pausa (sem custo) e retomam automaticamente no fim; o contexto é preservado. Clique em « Terminar este modo de economia » para retomar imediatamente ignorando apenas esta janela.',
-        deepseekPreset: 'Economia DeepSeek com um clique',
-        presetExists: 'As duas janelas DeepSeek (margem de 2 min) já existem; não foram adicionadas de novo. Marque « Ativar ».',
-        presetUpgraded: '{n} janela(s) antiga(s) atualizada(s) com margem; ',
-        presetAdded: '{n} janela(s) DeepSeek adicionada(s) (sem ativar – marque « Ativar »).',
-        applyFailed: 'Falha ao aplicar: ',
-        savedMsg: '{n} janela(s) salva(s).',
-        enable: 'Ativar',
-        timezone: 'Fuso horário',
-        language: 'Idioma',
-        langAuto: 'Automático (navegador)',
-        langZh: 'Chinês (simplificado)',
-        langZhTw: 'Chinês (tradicional)',
-        langEn: 'Inglês',
-        langDe: 'Alemão',
-        langFr: 'Francês',
-        langEs: 'Espanhol',
-        langIt: 'Italiano',
-        langPt: 'Português',
-        langJa: 'Japonês',
-        langKo: 'Coreano',
-        windowsTitle: 'Janelas de pausa ({tz} hora local, {n} no total)',
-        pause: 'Pausa',
-        resume: 'Retomar',
-        removeTitle: 'Remover esta janela',
-        addWindow: '+ Adicionar janela',
-        save: 'Salvar',
-        settingsTitle: 'Configurações da economia',
-        headerTitle: 'save-money: {status} (clique para configurações)',
-        badgeLabel: 'Economia · {symbol} {text}',
-        sectionLabel: 'Economia',
-        settingsHeading: 'Extensão save-money',
-        showBalance: 'Mostrar saldo',
-        modelApplyTitle: 'Aplicar a modelos (marcado = pausar nas janelas; desmarcado = isento)',
-        modelApplyHint: 'Modelos não reconhecidos ou não listados (ex. outros terceiros) estão sempre isentos',
-        applyOfficialFlash: 'API flash oficial',
-        applyOfficialPro: 'API pro oficial',
-        applyOpencodeFlash: 'API flash opencode go/zen',
-        applyOpencodePro: 'API pro opencode go/zen',
-        spendH1: 'gasto 1h',
-        spendM10: 'gasto 10m',
-        spendH24: 'gasto 24h',
-        barsTitle: 'Gastos últimas 8 h (por 10 min)',
-        barsHint: 'barras verdes = saldo recarregado; 0 = sem gasto',
-        barsExternal: ' · sem atividade local neste trecho; variação pode vir de outro lugar',
-        barsDisclaimer: 'Estimativa baseada em amostras; a cobrança oficial prevalece',
-    },
-    ja: {
-        badgeDisabled: '無効',
-        badgePaused: '一時停止中',
-        badgeWarn: 'まもなく一時停止',
-        badgeWorking: '稼働中',
-        bannerPaused: '⛔ 一時停止中:モデルへのリクエストを保留中、費用は発生しません。',
-        bannerAutoResume: ' 自動で再開',
-        bannerWarn: '⏳ 一時停止まであと ',
-        bannerMinutes: ' 分',
-        bannerMoment: 'もうすぐ',
-        endThisWindow: '今回の節約モードを終了',
-        endWindowActive: '✅ 今回の節約モードを終了しました:ウィンドウ {a}-{b} をスキップ、{c} に自動再開（「有効」をオフ→オンでリセット）。',
-        statusPrefix: '状態: ',
-        windowSuffix: ' （{a}-{b}）',
-        pausedNote: '一時停止ウィンドウ中は、すべてのモデルリクエストが送信前に保留されます（費用は発生しません）。ウィンドウ終了時に自動で再開され、コンテキストは影響を受けません。「今回の節約モードを終了」をクリックすると、このウィンドウだけをスキップしてすぐに再開します。',
-        deepseekPreset: 'ワンクリック DeepSeek 分時料金節約',
-        presetExists: 'DeepSeek プリセットの 2 ウィンドウ（2 分の余裕込み）は既に存在します。重複追加はしません。「有効」にチェックしてください。',
-        presetUpgraded: '旧ウィンドウ {n} 件を余裕付きにアップグレードしました。',
-        presetAdded: 'DeepSeek プリセットウィンドウを {n} 件追加しました（未有効。ご自身で「有効」にチェックしてください）。',
-        applyFailed: '適用に失敗しました:',
-        savedMsg: '{n} 個のウィンドウを保存しました。',
-        enable: '有効',
-        timezone: 'タイムゾーン',
-        language: '言語',
-        langAuto: '自動（ブラウザに従う）',
-        langZh: '中国語（簡体字）',
-        langZhTw: '中国語（繁体字）',
-        langEn: '英語',
-        langDe: 'ドイツ語',
-        langFr: 'フランス語',
-        langEs: 'スペイン語',
-        langIt: 'イタリア語',
-        langPt: 'ポルトガル語',
-        langJa: '日本語',
-        langKo: '韓国語',
-        windowsTitle: '一時停止ウィンドウ（{tz} 現地時間、全 {n} 件）',
-        pause: '一時停止',
-        resume: '再開',
-        removeTitle: 'このウィンドウを削除',
-        addWindow: '+ ウィンドウを追加',
-        save: '保存',
-        settingsTitle: '節約プラグイン設定',
-        headerTitle: 'save-money：{status}（クリックで設定）',
-        badgeLabel: '節約 · {symbol} {text}',
-        sectionLabel: '節約プラグイン',
-        settingsHeading: 'save-money 節約プラグイン',
-        showBalance: '残高を表示',
-        modelApplyTitle: '適用モデル（チェック = ウィンドウ内で一時停止;外す = 対象外）',
-        modelApplyHint: '認識できない・一覧にないモデル（他社など）は常に対象外',
-        applyOfficialFlash: '公式 flash API',
-        applyOfficialPro: '公式 pro API',
-        applyOpencodeFlash: 'opencode go/zen flash API',
-        applyOpencodePro: 'opencode go/zen pro API',
-        spendH1: '1h 消費',
-        spendM10: '10m 消費',
-        spendH24: '24h 消費',
-        barsTitle: '最近8時間の消費（10分ごと）',
-        barsHint: '緑のバー=残高チャージ、0=消費なし',
-        barsExternal: ' · この区間にローカル活動なし、変動は他環境の可能性',
-        barsDisclaimer: 'サンプルから推定した参考値です。公式の請求が優先されます',
-    },
-    ko: {
-        badgeDisabled: '비활성화됨',
-        badgePaused: '일시중지됨',
-        badgeWarn: '곧 일시중지',
-        badgeWorking: '작동 중',
-        bannerPaused: '⛔ 일시중지됨: 모델 요청이 보류되어 비용이 발생하지 않습니다.',
-        bannerAutoResume: ' 자동 재개',
-        bannerWarn: '⏳ 일시중지까지 ',
-        bannerMinutes: ' 분',
-        bannerMoment: '곧',
-        endThisWindow: '이번 절약 모드 종료',
-        endWindowActive: '✅ 이번 절약 모드를 종료했습니다: 창 {a}-{b} 건너뜀, {c}에 자동 재개（「활성화」를 껐다 켜면 초기화）.',
-        statusPrefix: '상태: ',
-        windowSuffix: ' ({a}-{b})',
-        pausedNote: '일시중지 창 동안 모든 모델 요청은 전송 전에 보류됩니다(비용 없음). 창이 끝나면 자동으로 재개되며 컨텍스트는 영향을 받지 않습니다. 「이번 절약 모드 종료」를 클릭하면 이 창만 건너뛰고 즉시 재개합니다.',
-        deepseekPreset: '원클릭 DeepSeek 시간대별 절약',
-        presetExists: 'DeepSeek 프리셋 창 2개(2분 여유 포함)가 이미 있습니다. 중복 추가하지 않았습니다. 「활성화」를 체크하세요.',
-        presetUpgraded: '이전 창 {n}개를 여유 포함 버전으로 업그레이드했습니다. ',
-        presetAdded: 'DeepSeek 프리셋 창 {n}개를 추가했습니다(비활성화 상태. 「활성화」를 직접 체크하세요).',
-        applyFailed: '적용 실패:',
-        savedMsg: '창 {n}개를 저장했습니다.',
-        enable: '활성화',
-        timezone: '시간대',
-        language: '언어',
-        langAuto: '자동(브라우저 따름)',
-        langZh: '중국어(간체)',
-        langZhTw: '중국어(번체)',
-        langEn: '영어',
-        langDe: '독일어',
-        langFr: '프랑스어',
-        langEs: '스페인어',
-        langIt: '이탈리아어',
-        langPt: '포르투갈어',
-        langJa: '일본어',
-        langKo: '한국어',
-        windowsTitle: '일시중지 창({tz} 현지 시간, 총 {n}개)',
-        pause: '일시중지',
-        resume: '재개',
-        removeTitle: '이 창 삭제',
-        addWindow: '+ 창 추가',
-        save: '저장',
-        settingsTitle: '절약 플러그인 설정',
-        headerTitle: 'save-money: {status}(클릭하여 설정)',
-        badgeLabel: '절약 · {symbol} {text}',
-        sectionLabel: '절약 플러그인',
-        settingsHeading: 'save-money 절약 플러그인',
-        showBalance: '잔액 표시',
-        modelApplyTitle: '적용 모델 (체크 = 창 내 일시중지; 해제 = 면제)',
-        modelApplyHint: '인식되지 않거나 목록에 없는 모델(예: 기타 제3자)은 항상 면제',
-        applyOfficialFlash: '공식 flash API',
-        applyOfficialPro: '공식 pro API',
-        applyOpencodeFlash: 'opencode go/zen flash API',
-        applyOpencodePro: 'opencode go/zen pro API',
-        spendH1: '1h 소비',
-        spendM10: '10m 소비',
-        spendH24: '24h 소비',
-        barsTitle: '최근 8시간 소비(10분 단위)',
-        barsHint: '초록 막대=잔액 충전, 0=소비 없음',
-        barsExternal: ' · 이 구간에 로컬 활동 없음, 변동은 다른 환경 가능성',
-        barsDisclaimer: '샘플 기반 추정치이며, 공식 청구 내역이 우선합니다',
-    },
-    'zh-TW': {
-        badgeDisabled: '未啟用',
-        badgePaused: '已暫停',
-        badgeWarn: '即將暫停',
-        badgeWorking: '運作中',
-        bannerPaused: '⛔ 已暫停：模型請求已掛起，不產生費用。',
-        bannerAutoResume: ' 自動繼續',
-        bannerWarn: '⏳ 距離暫停還有 ',
-        bannerMinutes: ' 分鐘',
-        bannerMoment: '片刻',
-        endThisWindow: '結束本次省錢模式',
-        endWindowActive: '✅ 您已結束本次省錢模式：視窗 {a}-{b} 已跳過，{c} 自動恢復省錢（重新關閉再勾選「啟用」可重設）。',
-        statusPrefix: '狀態：',
-        windowSuffix: '（{a}-{b}）',
-        pausedNote: '暫停視窗內所有模型請求在發出前被掛起（不產生費用），視窗結束自動繼續，上下文不受影響；點「結束本次省錢模式」可立即恢復並跳過本視窗（只影響目前視窗，下一視窗照常生效）。',
-        deepseekPreset: '一鍵 DeepSeek 分時計價省錢策略',
-        presetExists: 'DeepSeek 預設兩組視窗（含 2 分鐘餘量）已存在，未重複新增。勾選「啟用」即可生效。',
-        presetUpgraded: '已升級 {n} 組舊視窗為帶餘量視窗；',
-        presetAdded: '已新增 {n} 組 DeepSeek 預設視窗（未啟用，請自行勾選「啟用」）。',
-        applyFailed: '一鍵套用失敗：',
-        savedMsg: '已儲存 {n} 組視窗。',
-        enable: '啟用',
-        timezone: '時區',
-        language: '語言',
-        langAuto: '自動（跟隨瀏覽器）',
-        langZh: '中文（簡體）',
-        langZhTw: '中文（繁體）',
-        langEn: '英文',
-        langDe: '德文',
-        langFr: '法文',
-        langEs: '西班牙文',
-        langIt: '義大利文',
-        langPt: '葡萄牙文',
-        langJa: '日文',
-        langKo: '韓文',
-        windowsTitle: '暫停視窗（{tz} 牆上時間，共 {n} 組）',
-        pause: '暫停',
-        resume: '繼續',
-        removeTitle: '刪除該組',
-        addWindow: '+ 新增視窗',
-        save: '儲存',
-        settingsTitle: '省錢外掛設定',
-        headerTitle: 'save-money：{status}（點擊進入設定）',
-        badgeLabel: '省錢 · {symbol} {text}',
-        sectionLabel: '省錢外掛',
-        settingsHeading: 'save-money 省錢外掛',
-        showBalance: '顯示餘額',
-        modelApplyTitle: '適用模型（勾選 = 視窗內暫停；不勾選 = 豁免）',
-        modelApplyHint: '識別失敗或未列出的模型（如其他第三方）一律豁免',
-        applyOfficialFlash: '官方 flash API',
-        applyOfficialPro: '官方 pro API',
-        applyOpencodeFlash: 'opencode go/zen flash API',
-        applyOpencodePro: 'opencode go/zen pro API',
-        spendH1: '近1小時消費',
-        spendM10: '近10分鐘消費',
-        spendH24: '近24小時消費',
-        barsTitle: '最近 8 小時消費（每 10 分鐘）',
-        barsHint: '綠色柱=餘額回升，數值為 0 表示無消費',
-        barsExternal: ' · 本窗口無本環境活動，變動可能來自其他環境',
-        barsDisclaimer: '數據為採樣計算獲得僅供參考，實際以官方數據為準',
-    },
-};
-function detectLang() {
-    try {
-        const l = (typeof navigator !== 'undefined' && navigator && navigator.language) || '';
-        const tag = l.toLowerCase().replace(/_/g, '-');
-        if (/^zh/.test(tag)) {
-            // Traditional Chinese: zh-TW / zh-HK / zh-MO / zh-Hant* ; simplified otherwise
-            if (/zh-(tw|hk|mo|hant)/.test(tag))
-                return 'zh-TW';
-            return 'zh';
-        }
-        if (/^de/.test(tag))
-            return 'de';
-        if (/^fr/.test(tag))
-            return 'fr';
-        if (/^es/.test(tag))
-            return 'es';
-        if (/^it/.test(tag))
-            return 'it';
-        if (/^pt/.test(tag))
-            return 'pt';
-        if (/^ja/.test(tag))
-            return 'ja';
-        if (/^ko/.test(tag))
-            return 'ko';
-    }
-    catch (e) { /* fall through to en */ }
-    return 'en';
-}
 // Language is reactive: currentLang starts from browser detection and is
 // overridden by the persisted config choice ('zh'/'zh-TW'/'en'/...) or kept on
 // 'auto' (follow the browser) — see refresh() below and the settings dropdown.
 let currentLang = detectLang();
 // Plugin name + version shown next to the Save button in the settings popover.
-// '1.4.1' is replaced at build time (scripts/build.js) with the real
+// '1.4.2' is replaced at build time (scripts/build.js) with the real
 // version from package.json — never edit this literal by hand.
-const PLUGIN_VERSION = '1.4.1';
-const resolveLang = (cfgLang) => {
-    if (cfgLang === 'zh' || cfgLang === 'zh-TW' || cfgLang === 'de' || cfgLang === 'fr' ||
-        cfgLang === 'es' || cfgLang === 'it' || cfgLang === 'pt' || cfgLang === 'ja' || cfgLang === 'ko') {
-        return cfgLang;
-    }
-    if (cfgLang === 'en')
-        return 'en';
-    return detectLang();
-};
-const t = (key, vars) => {
-    let s = (I18N[currentLang] && I18N[currentLang][key]) || I18N.en[key] || key;
-    if (vars) {
-        for (const k of Object.keys(vars))
-            s = s.split('{' + k + '}').join(String(vars[k]));
-    }
-    return s;
-};
-const ALL_TIMEZONES = (() => {
-    const ZONES = [
-        'Pacific/Pago_Pago', 'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles',
-        'America/Denver', 'America/Chicago', 'America/New_York', 'America/Halifax',
-        'America/Sao_Paulo', 'Atlantic/South_Georgia', 'Atlantic/Azores', 'UTC',
-        'Europe/London', 'Europe/Paris', 'Europe/Athens', 'Europe/Moscow',
-        'Asia/Dubai', 'Asia/Karachi', 'Asia/Dhaka', 'Asia/Bangkok',
-        'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Brisbane', 'Pacific/Auckland',
-    ];
-    const now = new Date();
-    return ZONES.map((n) => {
-        try {
-            return { name: n, off: utcOffsetMinutes(n, now) * 60000 };
-        }
-        catch (e) {
-            return { name: n, off: NaN };
-        }
-    });
-})();
-const TZ_OFF = new Map(ALL_TIMEZONES.map((x) => [x.name, x.off]));
-const fmtOff = (ms) => {
-    const m = ms / 60000;
-    const sign = m >= 0 ? '+' : '-';
-    const a = Math.abs(m);
-    const h = Math.floor(a / 60);
-    const mm = a % 60;
-    return 'UTC' + sign + h + (mm > 0 ? ':' + String(mm).padStart(2, '0') : '');
-};
+const PLUGIN_VERSION = '1.4.2';
+// Local translator bound to the reactive language.
+const translate = (key, vars) => t(currentLang, key, vars);
 /**
  * dsh-save-money — Pure scheduling/time logic (single source of truth).
  *
@@ -935,11 +252,13 @@ function pickBalance(raw) {
     const b = raw.balance[0];
     if (!b || typeof b !== 'object')
         return null;
+    // `?? ''` (not `|| ''`): a literal 0 / empty string is a valid value and
+    // must not be replaced by the fallback.
     return {
-        currency: String(b.currency || ''),
-        total: String(b.total || ''),
-        granted: String(b.granted || ''),
-        toppedUp: String(b.toppedUp || ''),
+        currency: String(b.currency ?? ''),
+        total: String(b.total ?? ''),
+        granted: String(b.granted ?? ''),
+        toppedUp: String(b.toppedUp ?? ''),
     };
 }
 /** Currency symbol for the balance display (CNY → ¥, USD → $, …); unknown → $ fallback. */
@@ -959,7 +278,7 @@ function fmtSpend(v, sym) {
     const n = Number(v);
     if (!Number.isFinite(n))
         return '\u2013';
-    // 正数=花掉(显示 "¥1.23"),负数=余额回升(显示 "+¥1.23")
+    // Positive = spent (shows "¥1.23"); negative = balance recovered (shows "+¥1.23")
     return (n >= 0 ? '' : '+') + sym + Math.abs(n).toFixed(2);
 }
 /**
@@ -968,11 +287,11 @@ function fmtSpend(v, sym) {
  * window — 10m / 1h / 24h — always present so the user can see the features
  * exist. A window whose history is not yet sampled (first ~5 minutes after
  * enabling the display) shows "–" instead of a value; `labels` provides the
- * i18n texts (e.g. '近1h消费').
+ * i18n texts (e.g. the localized "Last 1h spend").
  *
  * `ranges` (when supplied) carries the wall-clock start instants of each
  * window (m10 / h1 / h24, ms). The client renders them as a time suffix so
- * the rolling spend windows are explicit — e.g. "近1h消费 07:00–08:00 ¥1.25" —
+ * the rolling spend windows are explicit — e.g. "Last 1h spend 07:00–08:00 ¥1.25" —
  * matching the bar chart's explicit "07:40–07:50" windows instead of leaving
  * two different "10 minutes" unlabeled and confusing.
  *
@@ -1024,6 +343,1512 @@ function renderBalanceElement(balance, React) {
         },
     }, currencySymbol(b.currency) + b.total);
 }
+const zh = {
+    badgeDisabled: '未启用',
+    badgePaused: '已经暂停',
+    badgeWarn: '即将暂停',
+    badgeWorking: '工作中',
+    bannerPaused: '⛔ 已暂停：模型请求已挂起，不产生费用。',
+    bannerAutoResume: ' 自动继续',
+    bannerWarn: '⏳ 距离暂停还有 ',
+    bannerMinutes: ' 分钟',
+    bannerMoment: '片刻',
+    endThisWindow: '结束本次省钱模式',
+    endWindowActive: '✅ 您已结束本次省钱模式：窗口 {a}-{b} 已跳过，{c} 自动恢复省钱（重新关闭再勾选「启用」可重置）',
+    statusPrefix: '状态：',
+    windowSuffix: '（{a}-{b}）',
+    pausedNote: '暂停窗口内所有模型请求在发出前被挂起（不产生费用），窗口结束自动继续，上下文不受影响；点「结束本次省钱模式」可立即恢复并跳过本窗口（只影响当前窗口，下一窗口照常生效）。',
+    deepseekPreset: '一键 DeepSeek 分时计价省钱策略',
+    presetExists: 'DeepSeek 预设两组窗口（含 2 分钟余量）已存在，未重复添加。勾选「启用」即可生效。',
+    presetUpgraded: '已升级 {n} 组旧窗口为带余量窗口；',
+    presetAdded: '已添加 {n} 组 DeepSeek 预设窗口（未启用，请自行勾选「启用」）。',
+    applyFailed: '一键应用失败：',
+    savedMsg: '已保存 {n} 组窗口。',
+    enable: '启用',
+    timezone: '时区',
+    language: '语言',
+    langAuto: '自动（跟随浏览器）',
+    langZh: '中文',
+    langZhTw: '中文（繁體）',
+    langEn: 'English',
+    langDe: 'Deutsch',
+    langFr: 'Français',
+    langEs: 'Español',
+    langIt: 'Italiano',
+    langPt: 'Português',
+    langJa: '日本語',
+    langKo: '한국어',
+    windowsTitle: '暂停窗口（{tz} 墙上时间，共 {n} 组）',
+    pause: '暂停',
+    resume: '继续',
+    removeTitle: '删除该组',
+    addWindow: '+ 添加窗口',
+    save: '保存',
+    settingsTitle: '省钱插件设置',
+    headerTitle: 'save-money：{status}（点击进入设置）',
+    badgeLabel: '省钱 · {symbol} {text}',
+    sectionLabel: '省钱插件',
+    settingsHeading: 'save-money 省钱插件',
+    showBalance: '显示余额',
+    modelApplyTitle: '适用模型（勾选 = 窗口内暂停；不勾选 = 豁免）',
+    modelApplyHint: '识别失败或未列出的模型（如其他第三方）一律豁免',
+    applyOfficial: '官方 API',
+    applyOpencode: 'opencode go/zen API',
+    spendH1: '近1h消费',
+    spendM10: '近10m消费',
+    spendH24: '近24h消费',
+    barsTitle: '最近 8 小时消费(每 10 分钟)',
+    barsHint: '数值为 0 表示无消费；余额回升窗口不显示（悬停可见）',
+    barsExternal: ' · 本窗口无本环境活动,变动可能来自其他环境',
+    barsTopUp: '余额回升(充值/退款),未计入消费分析',
+    barsDisclaimer: '数据为采样计算获得仅供参考,实际以官方数据为准',
+};
+
+const en = {
+    badgeDisabled: 'Disabled',
+    badgePaused: 'Paused',
+    badgeWarn: 'Pausing soon',
+    badgeWorking: 'Working',
+    bannerPaused: '⛔ Paused: model requests suspended, no cost.',
+    bannerAutoResume: ' auto-resumes',
+    bannerWarn: '⏳ Pause in ',
+    bannerMinutes: ' min',
+    bannerMoment: 'a moment',
+    endThisWindow: 'End this save mode',
+    endWindowActive: '✅ You ended this save mode: window {a}-{b} skipped, saving resumes at {c} (toggle Enable off/on to reset)',
+    statusPrefix: 'Status: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'All model requests are suspended before being sent (no cost). They resume automatically when the window ends; context is unaffected. Click "End this save mode" to resume now and skip only this window (the next window still takes effect).',
+    deepseekPreset: 'One-click DeepSeek peak/off-peak savings',
+    presetExists: 'DeepSeek preset windows (2-min margin) already present; not re-added. Check "Enable" to activate.',
+    presetUpgraded: 'Upgraded {n} window(s) to the margin version; ',
+    presetAdded: 'Added {n} DeepSeek preset window(s) (not enabled — check "Enable" to activate).',
+    applyFailed: 'One-click failed: ',
+    savedMsg: 'Saved {n} window(s).',
+    enable: 'Enable',
+    timezone: 'Timezone',
+    language: 'Language',
+    langAuto: 'Auto (browser)',
+    langZh: '中文',
+    langZhTw: '中文（繁體）',
+    langEn: 'English',
+    langDe: 'Deutsch',
+    langFr: 'Français',
+    langEs: 'Español',
+    langIt: 'Italiano',
+    langPt: 'Português',
+    langJa: '日本語',
+    langKo: '한국어',
+    windowsTitle: 'Pause windows ({tz} wall-clock, {n} total)',
+    pause: 'Pause',
+    resume: 'Resume',
+    removeTitle: 'Remove this window',
+    addWindow: '+ Add window',
+    save: 'Save',
+    settingsTitle: 'Save-money settings',
+    headerTitle: 'save-money: {status} (click for settings)',
+    badgeLabel: 'Save · {symbol} {text}',
+    sectionLabel: 'Save-money',
+    settingsHeading: 'save-money plugin',
+    showBalance: 'Show balance',
+    modelApplyTitle: 'Apply to models (checked = pause in windows; unchecked = exempt)',
+    modelApplyHint: 'Models not recognized or not listed (e.g. other third parties) are always exempt',
+    applyOfficial: 'Official API',
+    applyOpencode: 'opencode go/zen API',
+    spendH1: '1h spent',
+    spendM10: '10m spent',
+    spendH24: '24h spent',
+    barsTitle: 'Last 8h spend (per 10 min)',
+    barsHint: '0 = no spend; top-up windows are hidden (hover to see)',
+    barsExternal: ' · no local activity in this window; change may come from elsewhere',
+    barsTopUp: 'Balance topped up (recharge/refund) — not counted as spend',
+    barsDisclaimer: 'Estimated from sampled data; official billing takes precedence',
+};
+
+const de = {
+    badgeDisabled: 'Deaktiviert',
+    badgePaused: 'Pausiert',
+    badgeWarn: 'Bald pausiert',
+    badgeWorking: 'Aktiv',
+    bannerPaused: '⛔ Pausiert: Modellanfragen werden angehalten, keine Kosten.',
+    bannerAutoResume: ' setzt automatisch fort',
+    bannerWarn: '⏳ Pause in ',
+    bannerMinutes: ' Min.',
+    bannerMoment: 'einem Moment',
+    endThisWindow: 'Diese Sparphase beenden',
+    endWindowActive: '✅ Sie haben diese Sparphase beendet: Fenster {a}-{b} übersprungen, Sparmodus setzt um {c} automatisch fort (Ein/Aus schalten setzt zurück).',
+    statusPrefix: 'Status: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'Alle Modellanfragen werden im Pausefenster vor dem Senden angehalten (keine Kosten). Sie werden automatisch fortgesetzt, wenn das Fenster endet; der Kontext bleibt unverändert. Klicken Sie auf „Diese Sparphase beenden“, um sofort fortzufahren und nur dieses Fenster zu überspringen.',
+    deepseekPreset: 'DeepSeek-Spartarif mit einem Klick',
+    presetExists: 'Die beiden DeepSeek-Fenster (mit 2 Min. Rand) sind bereits vorhanden und wurden nicht erneut hinzugefügt. Aktivieren Sie „Aktiviert“.',
+    presetUpgraded: '{n} alte Fenster wurden auf die Version mit Rand aktualisiert; ',
+    presetAdded: '{n} DeepSeek-Fenster hinzugefügt (nicht aktiviert – bitte „Aktiviert“ ankreuzen).',
+    applyFailed: 'Ein-Klick fehlgeschlagen: ',
+    savedMsg: '{n} Fenster gespeichert.',
+    enable: 'Aktiviert',
+    timezone: 'Zeitzone',
+    language: 'Sprache',
+    langAuto: 'Automatisch (Browser)',
+    langZh: 'Chinesisch (vereinfacht)',
+    langZhTw: 'Chinesisch (traditionell)',
+    langEn: 'Englisch',
+    langDe: 'Deutsch',
+    langFr: 'Französisch',
+    langEs: 'Spanisch',
+    langIt: 'Italienisch',
+    langPt: 'Portugiesisch',
+    langJa: 'Japanisch',
+    langKo: 'Koreanisch',
+    windowsTitle: 'Pausefenster ({tz} Ortszeit, {n} gesamt)',
+    pause: 'Pause',
+    resume: 'Fortsetzen',
+    removeTitle: 'Fenster entfernen',
+    addWindow: '+ Fenster hinzufügen',
+    save: 'Speichern',
+    settingsTitle: 'Sparmodus-Einstellungen',
+    headerTitle: 'save-money: {status} (klicken für Einstellungen)',
+    badgeLabel: 'Sparen · {symbol} {text}',
+    sectionLabel: 'Sparmodus',
+    settingsHeading: 'save-money Sparmodus',
+    showBalance: 'Guthaben anzeigen',
+    modelApplyTitle: 'Gilt für Modelle (aktiviert = in Fenstern pausieren; deaktiviert = ausgenommen)',
+    modelApplyHint: 'Nicht erkannte oder nicht aufgeführte Modelle (z. B. andere Drittanbieter) sind immer ausgenommen',
+    applyOfficial: 'Offizielle API',
+    applyOpencode: 'opencode go/zen API',
+    spendH1: 'Verbrauch 1h',
+    spendM10: 'Verbrauch 10m',
+    spendH24: 'Verbrauch 24h',
+    barsTitle: 'Verbrauch letzte 8h (pro 10 Min.)',
+    barsHint: '0 = kein Verbrauch; Aufladungsfenster sind ausgeblendet (hover zeigt Details)',
+    barsExternal: ' · in diesem Fenster keine lokale Aktivität; Änderung evtl. von anderswo',
+    barsTopUp: 'Guthaben aufgestockt (Aufladung/Erstattung) — nicht als Verbrauch gezählt',
+    barsDisclaimer: 'Aus Stichproben geschätzt; maßgeblich ist die offizielle Abrechnung',
+};
+
+const fr = {
+    badgeDisabled: 'Désactivé',
+    badgePaused: 'En pause',
+    badgeWarn: 'Pause imminente',
+    badgeWorking: 'En cours',
+    bannerPaused: '⛔ En pause : requêtes modèle suspendues, aucun coût.',
+    bannerAutoResume: ' reprend automatiquement',
+    bannerWarn: '⏳ Pause dans ',
+    bannerMinutes: ' min',
+    bannerMoment: 'un instant',
+    endThisWindow: 'Terminer cette économie',
+    endWindowActive: '✅ Vous avez terminé cette économie : fenêtre {a}-{b} ignorée, reprise automatique à {c} (désactivez puis réactivez « Activer » pour réinitialiser).',
+    statusPrefix: 'État : ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'Toutes les requêtes modèle sont suspendues avant envoi dans la fenêtre de pause (aucun coût) et reprennent automatiquement à la fin de la fenêtre ; le contexte est préservé. Cliquez sur « Terminer cette économie » pour reprendre immédiatement en ignorant uniquement cette fenêtre.',
+    deepseekPreset: 'Économies DeepSeek en un clic',
+    presetExists: 'Les deux fenêtres DeepSeek (marge de 2 min) existent déjà, rien n\u2019a été ajouté. Cochez « Activer ».',
+    presetUpgraded: '{n} ancienne(s) fenêtre(s) mise(s) à niveau avec marge ; ',
+    presetAdded: '{n} fenêtre(s) DeepSeek ajoutée(s) (non activée(s) – cochez « Activer »).',
+    applyFailed: 'Échec de l\u2019application : ',
+    savedMsg: '{n} fenêtre(s) enregistrée(s).',
+    enable: 'Activer',
+    timezone: 'Fuseau horaire',
+    language: 'Langue',
+    langAuto: 'Automatique (navigateur)',
+    langZh: 'Chinois (simplifié)',
+    langZhTw: 'Chinois (traditionnel)',
+    langEn: 'Anglais',
+    langDe: 'Allemand',
+    langFr: 'Français',
+    langEs: 'Espagnol',
+    langIt: 'Italien',
+    langPt: 'Portugais',
+    langJa: 'Japonais',
+    langKo: 'Coréen',
+    windowsTitle: 'Fenêtres de pause ({tz} heure locale, {n} au total)',
+    pause: 'Pause',
+    resume: 'Reprendre',
+    removeTitle: 'Supprimer cette fenêtre',
+    addWindow: '+ Ajouter une fenêtre',
+    save: 'Enregistrer',
+    settingsTitle: 'Paramètres de l\u2019économie',
+    headerTitle: 'save-money : {status} (cliquer pour les paramètres)',
+    badgeLabel: 'Économie · {symbol} {text}',
+    sectionLabel: 'Économie',
+    settingsHeading: 'Extension save-money',
+    showBalance: 'Afficher le solde',
+    modelApplyTitle: 'Appliquer aux modèles (coché = suspendre pendant les fenêtres ; décoché = exempté)',
+    modelApplyHint: 'Les modèles non reconnus ou non listés (ex. autres tiers) sont toujours exemptés',
+    applyOfficial: 'API officielle',
+    applyOpencode: 'API opencode go/zen',
+    spendH1: 'dépensé 1h',
+    spendM10: 'dépensé 10m',
+    spendH24: 'dépensé 24h',
+    barsTitle: 'Dépenses 8 dernières h (par 10 min)',
+    barsHint: '0 = aucune dépense ; recharges masquées (survol pour voir)',
+    barsExternal: ' · aucune activité locale dans cette fenêtre ; variation peut venir d\u2019ailleurs',
+    barsTopUp: 'Solde rechargé (recharge/remboursement) — non compté comme dépense',
+    barsDisclaimer: 'Estimation à partir d\u2019échantillons ; la facturation officielle fait foi',
+};
+
+const es = {
+    badgeDisabled: 'Desactivado',
+    badgePaused: 'En pausa',
+    badgeWarn: 'Pausa próxima',
+    badgeWorking: 'En funcionamiento',
+    bannerPaused: '⛔ En pausa: solicitudes al modelo suspendidas, sin coste.',
+    bannerAutoResume: ' se reanuda automáticamente',
+    bannerWarn: '⏳ Pausa en ',
+    bannerMinutes: ' min',
+    bannerMoment: 'un momento',
+    endThisWindow: 'Terminar este ahorro',
+    endWindowActive: '✅ Ha terminado este ahorro: ventana {a}-{b} omitida, se reanuda a las {c} (desactive y vuelva a activar «Activar» para restablecer).',
+    statusPrefix: 'Estado: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'Todas las solicitudes al modelo se suspenden antes de enviarse durante la ventana de pausa (sin coste) y se reanudan automáticamente al terminar; el contexto no se ve afectado. Pulse « Terminar este ahorro » para reanudar de inmediato omitiendo solo esta ventana.',
+    deepseekPreset: 'Ahorro DeepSeek con un clic',
+    presetExists: 'Las dos ventanas DeepSeek (margen de 2 min) ya existen; no se añadieron de nuevo. Marque « Activar ».',
+    presetUpgraded: '{n} ventana(s) antigua(s) actualizada(s) con margen; ',
+    presetAdded: '{n} ventana(s) DeepSeek añadida(s) (sin activar – marque « Activar »).',
+    applyFailed: 'Error al aplicar: ',
+    savedMsg: '{n} ventana(s) guardada(s).',
+    enable: 'Activar',
+    timezone: 'Zona horaria',
+    language: 'Idioma',
+    langAuto: 'Automático (navegador)',
+    langZh: 'Chino (simplificado)',
+    langZhTw: 'Chino (tradicional)',
+    langEn: 'Inglés',
+    langDe: 'Alemán',
+    langFr: 'Francés',
+    langEs: 'Español',
+    langIt: 'Italiano',
+    langPt: 'Portugués',
+    langJa: 'Japonés',
+    langKo: 'Coreano',
+    windowsTitle: 'Ventanas de pausa ({tz} hora local, {n} en total)',
+    pause: 'Pausa',
+    resume: 'Reanudar',
+    removeTitle: 'Eliminar esta ventana',
+    addWindow: '+ Añadir ventana',
+    save: 'Guardar',
+    settingsTitle: 'Ajustes del ahorro',
+    headerTitle: 'save-money: {status} (clic para ajustes)',
+    badgeLabel: 'Ahorro · {symbol} {text}',
+    sectionLabel: 'Ahorro',
+    settingsHeading: 'Extensión save-money',
+    showBalance: 'Mostrar saldo',
+    modelApplyTitle: 'Aplicar a modelos (marcado = pausar en ventanas; desmarcado = exento)',
+    modelApplyHint: 'Los modelos no reconocidos o no listados (p. ej. otros terceros) siempre están exentos',
+    applyOfficial: 'API oficial',
+    applyOpencode: 'API opencode go/zen',
+    spendH1: 'gastado 1h',
+    spendM10: 'gastado 10m',
+    spendH24: 'gastado 24h',
+    barsTitle: 'Gasto últimas 8 h (por 10 min)',
+    barsHint: '0 = sin gasto; recargas ocultas (pasa el cursor para ver)',
+    barsExternal: ' · sin actividad local en este tramo; el cambio puede venir de otro sitio',
+    barsTopUp: 'Saldo recargado (recarga/reembolso) — no se cuenta como gasto',
+    barsDisclaimer: 'Estimado a partir de muestras; la facturación oficial es la referencia',
+};
+
+const it = {
+    badgeDisabled: 'Disattivato',
+    badgePaused: 'In pausa',
+    badgeWarn: 'Pausa imminente',
+    badgeWorking: 'In funzione',
+    bannerPaused: '⛔ In pausa: richieste al modello sospese, nessun costo.',
+    bannerAutoResume: ' riprende automaticamente',
+    bannerWarn: '⏳ Pausa tra ',
+    bannerMinutes: ' min',
+    bannerMoment: 'un attimo',
+    endThisWindow: 'Termina questa modalità di risparmio',
+    endWindowActive: '✅ Hai terminato questa modalità di risparmio: finestra {a}-{b} saltata, riprende alle {c} (disattiva e riattiva «Attiva» per azzerare).',
+    statusPrefix: 'Stato: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'Tutte le richieste al modello vengono sospese prima dell\u2019invio nella finestra di pausa (nessun costo) e riprendono automaticamente alla fine; il contesto resta invariato. Clicca su « Termina questa modalità di risparmio » per riprendere subito saltando solo questa finestra.',
+    deepseekPreset: 'Risparmio DeepSeek con un clic',
+    presetExists: 'Le due finestre DeepSeek (margine 2 min) esistono già; non aggiunte di nuovo. Spunta « Attiva ».',
+    presetUpgraded: '{n} vecchia/e finestra/e aggiornata/e con margine; ',
+    presetAdded: '{n} finestra/e DeepSeek aggiunta/e (non attiva/e – spunta « Attiva »).',
+    applyFailed: 'Applicazione fallita: ',
+    savedMsg: '{n} finestra/e salvata/e.',
+    enable: 'Attiva',
+    timezone: 'Fuso orario',
+    language: 'Lingua',
+    langAuto: 'Automatico (browser)',
+    langZh: 'Cinese (semplificato)',
+    langZhTw: 'Cinese (tradizionale)',
+    langEn: 'Inglese',
+    langDe: 'Tedesco',
+    langFr: 'Francese',
+    langEs: 'Spagnolo',
+    langIt: 'Italiano',
+    langPt: 'Portoghese',
+    langJa: 'Giapponese',
+    langKo: 'Coreano',
+    windowsTitle: 'Finestre di pausa ({tz} ora locale, {n} in totale)',
+    pause: 'Pausa',
+    resume: 'Riprendi',
+    removeTitle: 'Rimuovi questa finestra',
+    addWindow: '+ Aggiungi finestra',
+    save: 'Salva',
+    settingsTitle: 'Impostazioni risparmio',
+    headerTitle: 'save-money: {status} (clic per impostazioni)',
+    badgeLabel: 'Risparmio · {symbol} {text}',
+    sectionLabel: 'Risparmio',
+    settingsHeading: 'Estensione save-money',
+    showBalance: 'Mostra saldo',
+    modelApplyTitle: 'Applica ai modelli (selezionato = pausa nelle finestre; deselezionato = esente)',
+    modelApplyHint: 'I modelli non riconosciuti o non elencati (es. altri terzi) sono sempre esenti',
+    applyOfficial: 'API ufficiale',
+    applyOpencode: 'API opencode go/zen',
+    spendH1: 'speso 1h',
+    spendM10: 'speso 10m',
+    spendH24: 'speso 24h',
+    barsTitle: 'Spese ultime 8 h (per 10 min)',
+    barsHint: '0 = nessuna spesa; ricariche nascoste (passa il mouse per vedere)',
+    barsExternal: ' · nessuna attività locale in questo intervallo; variazione forse esterna',
+    barsTopUp: 'Saldo ricaricato (ricarica/rimborso) — non conteggiato come spesa',
+    barsDisclaimer: 'Stima da campionamenti; fa fede la fatturazione ufficiale',
+};
+
+const pt = {
+    badgeDisabled: 'Desativado',
+    badgePaused: 'Em pausa',
+    badgeWarn: 'Pausa em breve',
+    badgeWorking: 'Em funcionamento',
+    bannerPaused: '⛔ Em pausa: solicitações ao modelo suspensas, sem custo.',
+    bannerAutoResume: ' retoma automaticamente',
+    bannerWarn: '⏳ Pausa em ',
+    bannerMinutes: ' min',
+    bannerMoment: 'um momento',
+    endThisWindow: 'Terminar este modo de economia',
+    endWindowActive: '✅ Você terminou este modo de economia: janela {a}-{b} ignorada, retoma às {c} (desative e reative «Ativar» para redefinir).',
+    statusPrefix: 'Estado: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: 'Todas as solicitações ao modelo são suspensas antes do envio na janela de pausa (sem custo) e retomam automaticamente no fim; o contexto é preservado. Clique em « Terminar este modo de economia » para retomar imediatamente ignorando apenas esta janela.',
+    deepseekPreset: 'Economia DeepSeek com um clique',
+    presetExists: 'As duas janelas DeepSeek (margem de 2 min) já existem; não foram adicionadas de novo. Marque « Ativar ».',
+    presetUpgraded: '{n} janela(s) antiga(s) atualizada(s) com margem; ',
+    presetAdded: '{n} janela(s) DeepSeek adicionada(s) (sem ativar – marque « Ativar »).',
+    applyFailed: 'Falha ao aplicar: ',
+    savedMsg: '{n} janela(s) salva(s).',
+    enable: 'Ativar',
+    timezone: 'Fuso horário',
+    language: 'Idioma',
+    langAuto: 'Automático (navegador)',
+    langZh: 'Chinês (simplificado)',
+    langZhTw: 'Chinês (tradicional)',
+    langEn: 'Inglês',
+    langDe: 'Alemão',
+    langFr: 'Francês',
+    langEs: 'Espanhol',
+    langIt: 'Italiano',
+    langPt: 'Português',
+    langJa: 'Japonês',
+    langKo: 'Coreano',
+    windowsTitle: 'Janelas de pausa ({tz} hora local, {n} no total)',
+    pause: 'Pausa',
+    resume: 'Retomar',
+    removeTitle: 'Remover esta janela',
+    addWindow: '+ Adicionar janela',
+    save: 'Salvar',
+    settingsTitle: 'Configurações da economia',
+    headerTitle: 'save-money: {status} (clique para configurações)',
+    badgeLabel: 'Economia · {symbol} {text}',
+    sectionLabel: 'Economia',
+    settingsHeading: 'Extensão save-money',
+    showBalance: 'Mostrar saldo',
+    modelApplyTitle: 'Aplicar a modelos (marcado = pausar nas janelas; desmarcado = isento)',
+    modelApplyHint: 'Modelos não reconhecidos ou não listados (ex. outros terceiros) estão sempre isentos',
+    applyOfficial: 'API oficial',
+    applyOpencode: 'API opencode go/zen',
+    spendH1: 'gasto 1h',
+    spendM10: 'gasto 10m',
+    spendH24: 'gasto 24h',
+    barsTitle: 'Gastos últimas 8 h (por 10 min)',
+    barsHint: '0 = sem gasto; recargas ocultas (passe o mouse para ver)',
+    barsExternal: ' · sem atividade local neste trecho; variação pode vir de outro lugar',
+    barsTopUp: 'Saldo recarregado (recarga/reembolso) — não contado como gasto',
+    barsDisclaimer: 'Estimativa baseada em amostras; a cobrança oficial prevalece',
+};
+
+const ja = {
+    badgeDisabled: '無効',
+    badgePaused: '一時停止中',
+    badgeWarn: 'まもなく一時停止',
+    badgeWorking: '稼働中',
+    bannerPaused: '⛔ 一時停止中:モデルへのリクエストを保留中、費用は発生しません。',
+    bannerAutoResume: ' 自動で再開',
+    bannerWarn: '⏳ 一時停止まであと ',
+    bannerMinutes: ' 分',
+    bannerMoment: 'もうすぐ',
+    endThisWindow: '今回の節約モードを終了',
+    endWindowActive: '✅ 今回の節約モードを終了しました:ウィンドウ {a}-{b} をスキップ、{c} に自動再開（「有効」をオフ→オンでリセット）。',
+    statusPrefix: '状態: ',
+    windowSuffix: ' （{a}-{b}）',
+    pausedNote: '一時停止ウィンドウ中は、すべてのモデルリクエストが送信前に保留されます（費用は発生しません）。ウィンドウ終了時に自動で再開され、コンテキストは影響を受けません。「今回の節約モードを終了」をクリックすると、このウィンドウだけをスキップしてすぐに再開します。',
+    deepseekPreset: 'ワンクリック DeepSeek 分時料金節約',
+    presetExists: 'DeepSeek プリセットの 2 ウィンドウ（2 分の余裕込み）は既に存在します。重複追加はしません。「有効」にチェックしてください。',
+    presetUpgraded: '旧ウィンドウ {n} 件を余裕付きにアップグレードしました。',
+    presetAdded: 'DeepSeek プリセットウィンドウを {n} 件追加しました（未有効。ご自身で「有効」にチェックしてください）。',
+    applyFailed: '適用に失敗しました:',
+    savedMsg: '{n} 個のウィンドウを保存しました。',
+    enable: '有効',
+    timezone: 'タイムゾーン',
+    language: '言語',
+    langAuto: '自動（ブラウザに従う）',
+    langZh: '中国語（簡体字）',
+    langZhTw: '中国語（繁体字）',
+    langEn: '英語',
+    langDe: 'ドイツ語',
+    langFr: 'フランス語',
+    langEs: 'スペイン語',
+    langIt: 'イタリア語',
+    langPt: 'ポルトガル語',
+    langJa: '日本語',
+    langKo: '韓国語',
+    windowsTitle: '一時停止ウィンドウ（{tz} 現地時間、全 {n} 件）',
+    pause: '一時停止',
+    resume: '再開',
+    removeTitle: 'このウィンドウを削除',
+    addWindow: '+ ウィンドウを追加',
+    save: '保存',
+    settingsTitle: '節約プラグイン設定',
+    headerTitle: 'save-money：{status}（クリックで設定）',
+    badgeLabel: '節約 · {symbol} {text}',
+    sectionLabel: '節約プラグイン',
+    settingsHeading: 'save-money 節約プラグイン',
+    showBalance: '残高を表示',
+    modelApplyTitle: '適用モデル（チェック = ウィンドウ内で一時停止;外す = 対象外）',
+    modelApplyHint: '認識できない・一覧にないモデル（他社など）は常に対象外',
+    applyOfficial: '公式 API',
+    applyOpencode: 'opencode go/zen API',
+    spendH1: '1h 消費',
+    spendM10: '10m 消費',
+    spendH24: '24h 消費',
+    barsTitle: '最近8時間の消費（10分ごと）',
+    barsHint: '0=消費なし、チャージ窓は非表示（ホバーで確認）',
+    barsExternal: ' · この区間にローカル活動なし、変動は他環境の可能性',
+    barsTopUp: '残高チャージ（入金/返金）— 消費として計上しません',
+    barsDisclaimer: 'サンプルから推定した参考値です。公式の請求が優先されます',
+};
+
+const ko = {
+    badgeDisabled: '비활성화됨',
+    badgePaused: '일시중지됨',
+    badgeWarn: '곧 일시중지',
+    badgeWorking: '작동 중',
+    bannerPaused: '⛔ 일시중지됨: 모델 요청이 보류되어 비용이 발생하지 않습니다.',
+    bannerAutoResume: ' 자동 재개',
+    bannerWarn: '⏳ 일시중지까지 ',
+    bannerMinutes: ' 분',
+    bannerMoment: '곧',
+    endThisWindow: '이번 절약 모드 종료',
+    endWindowActive: '✅ 이번 절약 모드를 종료했습니다: 창 {a}-{b} 건너뜀, {c}에 자동 재개（「활성화」를 껐다 켜면 초기화）.',
+    statusPrefix: '상태: ',
+    windowSuffix: ' ({a}-{b})',
+    pausedNote: '일시중지 창 동안 모든 모델 요청은 전송 전에 보류됩니다(비용 없음). 창이 끝나면 자동으로 재개되며 컨텍스트는 영향을 받지 않습니다. 「이번 절약 모드 종료」를 클릭하면 이 창만 건너뛰고 즉시 재개합니다.',
+    deepseekPreset: '원클릭 DeepSeek 시간대별 절약',
+    presetExists: 'DeepSeek 프리셋 창 2개(2분 여유 포함)가 이미 있습니다. 중복 추가하지 않았습니다. 「활성화」를 체크하세요.',
+    presetUpgraded: '이전 창 {n}개를 여유 포함 버전으로 업그레이드했습니다. ',
+    presetAdded: 'DeepSeek 프리셋 창 {n}개를 추가했습니다(비활성화 상태. 「활성화」를 직접 체크하세요).',
+    applyFailed: '적용 실패:',
+    savedMsg: '창 {n}개를 저장했습니다.',
+    enable: '활성화',
+    timezone: '시간대',
+    language: '언어',
+    langAuto: '자동(브라우저 따름)',
+    langZh: '중국어(간체)',
+    langZhTw: '중국어(번체)',
+    langEn: '영어',
+    langDe: '독일어',
+    langFr: '프랑스어',
+    langEs: '스페인어',
+    langIt: '이탈리아어',
+    langPt: '포르투갈어',
+    langJa: '일본어',
+    langKo: '한국어',
+    windowsTitle: '일시중지 창({tz} 현지 시간, 총 {n}개)',
+    pause: '일시중지',
+    resume: '재개',
+    removeTitle: '이 창 삭제',
+    addWindow: '+ 창 추가',
+    save: '저장',
+    settingsTitle: '절약 플러그인 설정',
+    headerTitle: 'save-money: {status}(클릭하여 설정)',
+    badgeLabel: '절약 · {symbol} {text}',
+    sectionLabel: '절약 플러그인',
+    settingsHeading: 'save-money 절약 플러그인',
+    showBalance: '잔액 표시',
+    modelApplyTitle: '적용 모델 (체크 = 창 내 일시중지; 해제 = 면제)',
+    modelApplyHint: '인식되지 않거나 목록에 없는 모델(예: 기타 제3자)은 항상 면제',
+    applyOfficial: '공식 API',
+    applyOpencode: 'opencode go/zen API',
+    spendH1: '1h 소비',
+    spendM10: '10m 소비',
+    spendH24: '24h 소비',
+    barsTitle: '최근 8시간 소비(10분 단위)',
+    barsHint: '0=소비 없음, 충전 창은 숨김(호버로 확인)',
+    barsExternal: ' · 이 구간에 로컬 활동 없음, 변동은 다른 환경 가능성',
+    barsTopUp: '잔액 충전(입금/환불) — 소비로 집계하지 않음',
+    barsDisclaimer: '샘플 기반 추정치이며, 공식 청구 내역이 우선합니다',
+};
+
+const zhTW = {
+    badgeDisabled: '未啟用',
+    badgePaused: '已暫停',
+    badgeWarn: '即將暫停',
+    badgeWorking: '運作中',
+    bannerPaused: '⛔ 已暫停：模型請求已掛起，不產生費用。',
+    bannerAutoResume: ' 自動繼續',
+    bannerWarn: '⏳ 距離暫停還有 ',
+    bannerMinutes: ' 分鐘',
+    bannerMoment: '片刻',
+    endThisWindow: '結束本次省錢模式',
+    endWindowActive: '✅ 您已結束本次省錢模式：視窗 {a}-{b} 已跳過，{c} 自動恢復省錢（重新關閉再勾選「啟用」可重設）。',
+    statusPrefix: '狀態：',
+    windowSuffix: '（{a}-{b}）',
+    pausedNote: '暫停視窗內所有模型請求在發出前被掛起（不產生費用），視窗結束自動繼續，上下文不受影響；點「結束本次省錢模式」可立即恢復並跳過本視窗（只影響目前視窗，下一視窗照常生效）。',
+    deepseekPreset: '一鍵 DeepSeek 分時計價省錢策略',
+    presetExists: 'DeepSeek 預設兩組視窗（含 2 分鐘餘量）已存在，未重複新增。勾選「啟用」即可生效。',
+    presetUpgraded: '已升級 {n} 組舊視窗為帶餘量視窗；',
+    presetAdded: '已新增 {n} 組 DeepSeek 預設視窗（未啟用，請自行勾選「啟用」）。',
+    applyFailed: '一鍵套用失敗：',
+    savedMsg: '已儲存 {n} 組視窗。',
+    enable: '啟用',
+    timezone: '時區',
+    language: '語言',
+    langAuto: '自動（跟隨瀏覽器）',
+    langZh: '中文（簡體）',
+    langZhTw: '中文（繁體）',
+    langEn: '英文',
+    langDe: '德文',
+    langFr: '法文',
+    langEs: '西班牙文',
+    langIt: '義大利文',
+    langPt: '葡萄牙文',
+    langJa: '日文',
+    langKo: '韓文',
+    windowsTitle: '暫停視窗（{tz} 牆上時間，共 {n} 組）',
+    pause: '暫停',
+    resume: '繼續',
+    removeTitle: '刪除該組',
+    addWindow: '+ 新增視窗',
+    save: '儲存',
+    settingsTitle: '省錢外掛設定',
+    headerTitle: 'save-money：{status}（點擊進入設定）',
+    badgeLabel: '省錢 · {symbol} {text}',
+    sectionLabel: '省錢外掛',
+    settingsHeading: 'save-money 省錢外掛',
+    showBalance: '顯示餘額',
+    modelApplyTitle: '適用模型（勾選 = 視窗內暫停；不勾選 = 豁免）',
+    modelApplyHint: '識別失敗或未列出的模型（如其他第三方）一律豁免',
+    applyOfficial: '官方 API',
+    applyOpencode: 'opencode go/zen API',
+    spendH1: '近1小時消費',
+    spendM10: '近10分鐘消費',
+    spendH24: '近24小時消費',
+    barsTitle: '最近 8 小時消費（每 10 分鐘）',
+    barsHint: '數值為 0 表示無消費；餘額回升視窗不顯示（懸停可見）',
+    barsExternal: ' · 本視窗無本環境活動，變動可能來自其他環境',
+    barsTopUp: '餘額回升（儲值/退款），未計入消費分析',
+    barsDisclaimer: '數據為採樣計算獲得僅供參考，實際以官方數據為準',
+};
+
+/**
+ * dsh-save-money — i18n index: dictionary aggregation + language helpers.
+ *
+ * Each locale lives in its own file (i18n/zh.ts, i18n/en.ts, …) exporting a
+ * Dict; this module merges them and provides detectLang / resolveLang / t().
+ * Inlined into the Client plugin body at build time (scripts/build.js) — the
+ * locale modules are transpiled and concatenated BEFORE this file, so the
+ * dictionaries below resolve as same-scope consts (no ESM imports survive the
+ * inline pass).
+ */
+const I18N = { zh, 'zh-TW': zhTW, en, de, fr, es, it, pt, ja, ko };
+/** Detect the browser locale (zh* → zh / zh-TW, else a supported language). */
+function detectLang() {
+    try {
+        const l = (typeof navigator !== 'undefined' && navigator && navigator.language) || '';
+        const tag = l.toLowerCase().replace(/_/g, '-');
+        if (/^zh/.test(tag)) {
+            // Traditional Chinese: zh-TW / zh-HK / zh-MO / zh-Hant* ; simplified otherwise
+            if (/zh-(tw|hk|mo|hant)/.test(tag))
+                return 'zh-TW';
+            return 'zh';
+        }
+        if (/^de/.test(tag))
+            return 'de';
+        if (/^fr/.test(tag))
+            return 'fr';
+        if (/^es/.test(tag))
+            return 'es';
+        if (/^it/.test(tag))
+            return 'it';
+        if (/^pt/.test(tag))
+            return 'pt';
+        if (/^ja/.test(tag))
+            return 'ja';
+        if (/^ko/.test(tag))
+            return 'ko';
+    }
+    catch (e) { /* fall through to en */ }
+    return 'en';
+}
+/** Resolve the configured language: explicit locale, else browser detection. */
+function resolveLang(cfgLang) {
+    if (cfgLang === 'zh' || cfgLang === 'zh-TW' || cfgLang === 'de' || cfgLang === 'fr' ||
+        cfgLang === 'es' || cfgLang === 'it' || cfgLang === 'pt' || cfgLang === 'ja' || cfgLang === 'ko') {
+        return cfgLang;
+    }
+    if (cfgLang === 'en')
+        return 'en';
+    return detectLang();
+}
+/** Translate a key with optional {var} substitution; falls back to English. */
+function t(currentLang, key, vars) {
+    let s = (I18N[currentLang] && I18N[currentLang][key]) || I18N.en[key] || key;
+    if (vars) {
+        for (const k of Object.keys(vars))
+            s = s.split('{' + k + '}').join(String(vars[k]));
+    }
+    return s;
+}
+
+/**
+ * dsh-save-money — Client UI: status badge (src/ui/badge.tsx)
+ *
+ * The badge (color / text / symbol) reflects the current save-mode snapshot:
+ * disabled (grey), working (green), warning (amber, pause upcoming) or paused
+ * (red).
+ *
+ * Inlined into the client plugin body at build time (scripts/build.js): no
+ * imports survive, so cross-module references are `declare`d for standalone
+ * type-checking and resolve to the inlined scope at runtime.
+ */
+/** Factory: build the status-badge helper bound to a translator. */
+function createBadgeInfo(deps) {
+    const t = deps.t;
+    return (st) => {
+        const color = !st.enabled ? '#9E9E9E' : st.state === 'PAUSED' ? '#E53935' : st.state === 'WARN' ? '#F9A825' : '#4CAF50';
+        const text = !st.enabled ? t('badgeDisabled') : st.state === 'PAUSED' ? t('badgePaused') : st.state === 'WARN' ? t('badgeWarn') : t('badgeWorking');
+        const symbol = !st.enabled ? '⚪' : st.state === 'PAUSED' ? '🔴' : st.state === 'WARN' ? '🟡' : '🟢';
+        return { color, text, symbol };
+    };
+}
+
+/**
+ * dsh-save-money — Client UI: floating banner (src/ui/banner.tsx)
+ *
+ * Registered in the session-header utilities slot (a normal layout chain) and
+ * floated with position:fixed — the shell.overlay container is
+ * pointer-events:none (click-through) and its slot anchor is display:contents,
+ * which broke button hit-testing. Visible only while a pause window is active
+ * (WARN = upcoming, PAUSED = in effect). The "End this save mode" button is a
+ * one-shot end for the CURRENT window only (in-memory, not persisted; the
+ * persistent enabled flag is untouched, so future windows keep saving money).
+ */
+/** Factory: build the FloatingBanner component bound to a translator. */
+function createFloatingBanner(deps) {
+    const t = deps.t;
+    const FloatingBanner = (props) => {
+        const st = props.st;
+        const doEndWindow = props.doEndWindow;
+        const isWarn = st.state === 'WARN';
+        const isPaused = st.state === 'PAUSED';
+        if (!isWarn && !isPaused)
+            return null;
+        return React.createElement('div', {
+            style: {
+                position: 'fixed', top: '12px', left: '50%', transform: 'translateX(-50%)',
+                background: 'var(--dsw-alias-bg-layer-2)',
+                color: isPaused ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)',
+                padding: '8px 18px', borderRadius: '999px', fontSize: '13px', fontWeight: 600,
+                zIndex: 9999, boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+                display: 'flex', alignItems: 'center', gap: '10px',
+                border: '1px solid var(--dsw-alias-border-l1)',
+                pointerEvents: 'auto',
+            },
+        }, React.createElement('span', { style: { pointerEvents: 'none' } }, isPaused
+            ? t('bannerPaused') + (st.window ? ' ' + st.window.resumeAt + t('bannerAutoResume') : '')
+            : t('bannerWarn') + (st.minutesToPause != null ? st.minutesToPause + t('bannerMinutes') : t('bannerMoment'))), React.createElement('button', {
+            style: {
+                border: 'none', background: isPaused ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)', color: '#fff',
+                borderRadius: '999px', padding: '3px 12px', cursor: 'pointer', fontSize: '12px',
+                pointerEvents: 'auto',
+            },
+            onClick: () => void doEndWindow(),
+        }, t('endThisWindow')));
+    };
+    return FloatingBanner;
+}
+
+/**
+ * dsh-save-money — Client UI: settings panel (src/ui/settings.tsx)
+ *
+ * The full settings view shared by the header popover and the system settings
+ * page: enable switch, balance display switch, per-model-tier apply
+ * checkboxes, timezone picker, language picker, pause-window editor, the
+ * one-click DeepSeek preset and a single Save button at the bottom.
+ *
+ * Inlined into the client plugin body at build time (scripts/build.js): no
+ * imports survive; cross-module references (core time helpers, badge) are
+ * `declare`d for standalone type-checking and resolve at runtime.
+ */
+const ALL_TIMEZONES = (() => {
+    const ZONES = [
+        'Pacific/Pago_Pago', 'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles',
+        'America/Denver', 'America/Chicago', 'America/New_York', 'America/Halifax',
+        'America/Sao_Paulo', 'Atlantic/South_Georgia', 'Atlantic/Azores', 'UTC',
+        'Europe/London', 'Europe/Paris', 'Europe/Athens', 'Europe/Moscow',
+        'Asia/Dubai', 'Asia/Karachi', 'Asia/Dhaka', 'Asia/Bangkok',
+        'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Brisbane', 'Pacific/Auckland',
+    ];
+    const now = new Date();
+    return ZONES.map((n) => {
+        try {
+            return { name: n, off: utcOffsetMinutes(n, now) * 60000 };
+        }
+        catch (e) {
+            return { name: n, off: NaN };
+        }
+    });
+})();
+const TZ_OFF = new Map(ALL_TIMEZONES.map((x) => [x.name, x.off]));
+const fmtOff = (ms) => {
+    const m = ms / 60000;
+    const sign = m >= 0 ? '+' : '-';
+    const a = Math.abs(m);
+    const h = Math.floor(a / 60);
+    const mm = a % 60;
+    return 'UTC' + sign + h + (mm > 0 ? ':' + String(mm).padStart(2, '0') : '');
+};
+/** Factory: build the SettingsView component bound to client deps. */
+function createSettingsView(deps) {
+    const t = deps.t;
+    const detectedTz = deps.detectedTz;
+    const DSHButton = deps.DSHButton;
+    const badgeInfo = deps.badgeInfo;
+    const SettingsView = (props) => {
+        const st = props.st;
+        const doConfigure = props.doConfigure;
+        const doEndWindow = props.doEndWindow || (async () => { });
+        const cfg = st.config || {};
+        const [tz, setTz] = React.useState(cfg.timezone || detectedTz);
+        // Default windows shown when none are configured (fresh install / all
+        // windows deleted) — matches the one-click DeepSeek preset (2-minute
+        // boundary margin): 08:58–12:02, 13:58–18:02.
+        const DEFAULT_WINS = [
+            { pauseAt: '08:58', resumeAt: '12:02' },
+            { pauseAt: '13:58', resumeAt: '18:02' },
+        ];
+        const [wins, setWins] = React.useState(DEFAULT_WINS.map((w) => ({ ...w })));
+        const [msg, setMsg] = React.useState('');
+        const [langSel, setLangSel] = React.useState(cfg.lang || 'auto');
+        const prevWinKey = React.useRef('');
+        const prevTz = React.useRef(null);
+        const prevLang = React.useRef(null);
+        React.useEffect(() => {
+            // Sync only when the config actually changed (the 30s poll must not
+            // interrupt in-progress edits)
+            if (cfg.timezone && cfg.timezone !== prevTz.current) {
+                prevTz.current = cfg.timezone;
+                setTz(cfg.timezone);
+            }
+            const cl = cfg.lang || 'auto';
+            if (cl !== prevLang.current) {
+                prevLang.current = cl;
+                setLangSel(cl);
+                currentLang = resolveLang(cl);
+            }
+            const ws = cfg.windows || [];
+            const key = JSON.stringify(ws);
+            if (key !== prevWinKey.current) {
+                prevWinKey.current = key;
+                setWins(ws.length > 0
+                    // Carry days / per-window timezone through the row state: the UI
+                    // only edits pauseAt/resumeAt, but Save must not strip the other
+                    // fields the user configured.
+                    ? ws.map((w) => ({ pauseAt: w.pauseAt, resumeAt: w.resumeAt, ...(w.days !== undefined ? { days: w.days } : {}), ...(w.timezone !== undefined ? { timezone: w.timezone } : {}) }))
+                    : DEFAULT_WINS.map((w) => ({ ...w })));
+            }
+        }, [st]);
+        const row = (label, children) => React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' } }, React.createElement('span', { style: { minWidth: '80px', fontSize: '13px' } }, label), children);
+        const input = (value, setter, width) => React.createElement('input', {
+            value, onChange: (e) => setter(e.target.value),
+            style: {
+                width: width || '72px', padding: '3px 6px', fontSize: '13px',
+                background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
+            },
+        });
+        const btn = (text, fn, primary) => DSHButton
+            ? React.createElement(DSHButton, {
+                variant: 'outline',
+                size: 'sm',
+                onClick: fn,
+            }, text)
+            : React.createElement('button', {
+                onClick: fn,
+                style: {
+                    padding: '6px 14px', cursor: 'pointer', fontSize: '13px',
+                    background: primary ? 'var(--dsw-alias-button-primary-fill)' : 'var(--dsw-alias-bg-layer-2)',
+                    color: primary ? 'var(--dsw-alias-label-primary-foreground)' : 'var(--dsw-alias-label-primary)',
+                    border: primary ? 'none' : '1px solid var(--dsw-alias-border-l1)',
+                    borderRadius: '6px',
+                },
+            }, text);
+        // One compact switch: label + checkbox in a row (used for the enable /
+        // balance-display switches that now share one line).
+        const switchRow = (label, checked, onChange) => React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: '16px' } }, React.createElement('span', { style: { fontSize: '13px' } }, label), React.createElement('input', {
+            type: 'checkbox', checked,
+            onChange: (e) => onChange(e.target.checked),
+            style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
+        }));
+        // One model-tier group row: group label + one checkbox per tier
+        // (flash / pro) side by side. The two tier checkboxes are wrapped in a
+        // nowrap unit so they always stay on one line together (a lone wrap of
+        // "pro" would look misaligned).
+        const tierRow = (label, prefix) => React.createElement('div', { style: { margin: '4px 0', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } }, React.createElement('span', { style: { minWidth: '110px', fontSize: '13px' } }, label), React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap' } }, tierCheck(prefix + '-flash', 'flash'), tierCheck(prefix + '-pro', 'pro')));
+        const tierCheck = (key, label) => React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px', lineHeight: '15px' } }, React.createElement('span', { style: { fontSize: '12px' } }, label), React.createElement('input', {
+            type: 'checkbox', checked: !!(cfg.modelApply && cfg.modelApply[key] === true),
+            onChange: (e) => void doConfigure({ modelApply: { ...cfg.modelApply, [key]: e.target.checked } }),
+            style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
+        }));
+        // Window add/remove/edit
+        const setWin = (i, key, val) => setWins(wins.map((w, j) => (j === i ? { ...w, [key]: val } : w)));
+        const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02' }]);
+        const delWin = (i) => setWins(wins.filter((_, j) => j !== i));
+        // One-click apply = dedupe-append (does NOT auto-enable; the user checks
+        // the Enable box themselves). The DeepSeek preset windows carry a 2-minute
+        // boundary margin — pause 2 min early, resume 2 min late
+        // (08:58–12:02, 13:58–18:02, avoiding clock-skew requests slipping
+        // through or releasing early at peak boundaries).
+        const DEEPSEEK_PRESET = [
+            { pauseAt: '08:58', resumeAt: '12:02', timezone: 'Asia/Shanghai' },
+            { pauseAt: '13:58', resumeAt: '18:02', timezone: 'Asia/Shanghai' },
+        ];
+        // Legacy DeepSeek windows (no margin) — removed first on one-click so the
+        // overlap validation does not reject the new ones.
+        const DEEPSEEK_LEGACY = [
+            { pauseAt: '09:00', resumeAt: '12:00', timezone: 'Asia/Shanghai' },
+            { pauseAt: '14:00', resumeAt: '18:00', timezone: 'Asia/Shanghai' },
+        ];
+        const applyDeepSeekPreset = async () => {
+            try {
+                // WYSIWYG: work from the window list the user currently SEES in the
+                // UI (wins), not from whatever was last persisted on the host — so
+                // edits made but not yet saved are respected.
+                const curTz = (st.config && st.config.timezone) || 'Asia/Shanghai';
+                const key = (w) => String(w.pauseAt) + '|' + String(w.resumeAt) + '|' + (w.timezone || curTz);
+                const legacyKeys = new Set(DEEPSEEK_LEGACY.map(key));
+                const cleaned = wins.filter((w) => !legacyKeys.has(key(w))); // upgrade legacy windows
+                const existing = new Set(cleaned.map(key));
+                const add = DEEPSEEK_PRESET.filter((p) => !existing.has(key(p)));
+                if (add.length === 0) {
+                    setMsg(t('presetExists'));
+                    return;
+                }
+                const merged = cleaned.concat(add);
+                setWins(merged); // reflect the result in the UI immediately
+                await doConfigure({ windows: merged }); // windows only, enabled untouched
+                const upgraded = wins.length - cleaned.length;
+                setMsg((upgraded > 0 ? t('presetUpgraded', { n: upgraded }) : '') + t('presetAdded', { n: add.length }));
+            }
+            catch (e) {
+                setMsg(t('applyFailed') + String((e && e.message) || e));
+            }
+        };
+        // Unified Save at the bottom (replaces the old "apply windows" button).
+        // Carries days / per-window timezone through; the dropdown timezone only
+        // applies to windows without an explicit one.
+        const saveAll = () => {
+            const clean = wins
+                .map((w) => ({
+                pauseAt: String(w.pauseAt || '').trim(),
+                resumeAt: String(w.resumeAt || '').trim(),
+                ...(w.days !== undefined ? { days: w.days } : {}),
+                ...(w.timezone !== undefined ? { timezone: w.timezone } : { timezone: tz }),
+            }))
+                .filter((w) => w.pauseAt !== '' && w.resumeAt !== '');
+            void doConfigure({ windows: clean });
+            setMsg(t('savedMsg', { n: clean.length }));
+        };
+        const b = badgeInfo(st);
+        return React.createElement('div', { style: { padding: '12px' } }, 
+        // Top: status text + end-this-window button (kept near the top; shown
+        // only when a window is active — WARN or PAUSED)
+        React.createElement('div', { style: { margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, React.createElement('span', { style: { fontSize: '13px', fontWeight: 600, color: b.color } }, t('statusPrefix') + b.text + (st.state === 'PAUSED' && st.window ? t('windowSuffix', { a: st.window.pauseAt, b: st.window.resumeAt }) : '')), (st.state === 'WARN' || st.state === 'PAUSED')
+            ? btn(t('endThisWindow'), () => void doEndWindow(), st.state === 'PAUSED')
+            : null, st.state === 'PAUSED' ? React.createElement('div', { style: { margin: '6px 0', fontSize: '12px', color: 'var(--dsw-alias-state-error-primary)' } }, t('pausedNote')) : null), 
+        // Green status line while "end this save mode" is in effect for the
+        // current window (in-memory, one-shot): tells the user what happened
+        // and how to reset it.
+        st.endWindowUntil ? React.createElement('div', { style: { margin: '6px 0 10px', fontSize: '12px', color: 'var(--dsw-alias-state-success-primary)', fontWeight: 600 } }, t('endWindowActive', { a: st.window ? st.window.pauseAt : '', b: st.window ? st.window.resumeAt : '', c: st.window ? st.window.resumeAt : '' })) : null, msg ? React.createElement('div', { style: { margin: '8px 0', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, msg) : null, 
+        // Enable + balance display share one row (two compact switches).
+        React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' } }, switchRow(t('enable'), !!st.enabled, (v) => void doConfigure({ enabled: v })), switchRow(t('showBalance'), !!cfg.showBalance, (v) => void doConfigure({ showBalance: v }))), 
+        // Model tiers: checked = this tier pauses inside windows; unchecked =
+        // exempt. Two rows — official / opencode — each with flash + pro
+        // checkboxes side by side. Default is the two official tiers only;
+        // after the user edits, the persisted choice is respected.
+        // Unrecognized/unsupported models are always exempt.
+        React.createElement('div', { style: { margin: '10px 0 2px', fontSize: '13px', fontWeight: 600 } }, t('modelApplyTitle')), tierRow(t('applyOfficial'), 'official'), tierRow(t('applyOpencode'), 'opencode'), React.createElement('div', { style: { margin: '0 0 8px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } }, t('modelApplyHint')), row(t('timezone'), React.createElement('select', {
+            value: tz,
+            onChange: (e) => {
+                const v = e.target.value;
+                if (!v || v === tz)
+                    return;
+                const oldTz = tz;
+                setTz(v);
+                // WYSIWYG: convert every window from the old timezone to the new
+                // one (real timezone rules, DST-aware; e.g. Beijing 08:58 ->
+                // London 01:58 in summer, 00:58 in winter). NOT saved yet — the
+                // bottom Save button persists timezone + converted times together.
+                setWins(wins.map((w) => {
+                    const p = parseHHMM(String(w.pauseAt));
+                    const r = parseHHMM(String(w.resumeAt));
+                    return {
+                        pauseAt: p === null ? String(w.pauseAt || '') : formatHHMM(convertHHMM(oldTz, v, p)),
+                        resumeAt: r === null ? String(w.resumeAt || '') : formatHHMM(convertHHMM(oldTz, v, r)),
+                    };
+                }));
+            },
+            style: {
+                padding: '3px 6px', fontSize: '13px', maxWidth: '240px',
+                background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
+            },
+        }, 
+        // Current timezone first, then the full IANA list sorted by offset
+        // (offset computed with today's rules, so DST zones move correctly).
+        [tz].concat(ALL_TIMEZONES.filter((x) => x.name !== tz).map((x) => x.name))
+            .map((n) => {
+            const off = TZ_OFF.get(n);
+            return React.createElement('option', { key: n, value: n }, n + (off !== undefined && !Number.isNaN(off) ? ' (' + fmtOff(off) + ')' : ''));
+        }))), 
+        // Language: auto (follow the browser) by default; manual choices are
+        // persisted into the host config (save-money.config.json, `lang` field)
+        // so they survive refresh/restart in every plugin form.
+        row(t('language'), React.createElement('select', {
+            value: langSel,
+            onChange: (e) => {
+                const v = e.target.value;
+                setLangSel(v);
+                currentLang = resolveLang(v);
+                void doConfigure({ lang: v });
+            },
+            style: {
+                padding: '3px 6px', fontSize: '13px',
+                background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
+            },
+        }, React.createElement('option', { value: 'auto' }, t('langAuto')), React.createElement('option', { value: 'zh' }, t('langZh')), React.createElement('option', { value: 'zh-TW' }, t('langZhTw')), React.createElement('option', { value: 'en' }, t('langEn')), React.createElement('option', { value: 'de' }, t('langDe')), React.createElement('option', { value: 'fr' }, t('langFr')), React.createElement('option', { value: 'es' }, t('langEs')), React.createElement('option', { value: 'it' }, t('langIt')), React.createElement('option', { value: 'pt' }, t('langPt')), React.createElement('option', { value: 'ja' }, t('langJa')), React.createElement('option', { value: 'ko' }, t('langKo')))), 
+        // One-click DeepSeek preset button: sits right above the window list
+        // (it is the windows' quick action)
+        React.createElement('div', { style: { margin: '10px 0 4px' } }, btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true)), React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } }, t('windowsTitle', { tz, n: wins.length })), wins.map((w, i) => React.createElement('div', { key: i, style: { margin: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'), React.createElement('span', { style: { fontSize: '12px' } }, t('pause')), input(w.pauseAt, (v) => setWin(i, 'pauseAt', v)), React.createElement('span', { style: { fontSize: '12px' } }, t('resume')), input(w.resumeAt, (v) => setWin(i, 'resumeAt', v)), React.createElement('button', {
+            onClick: () => delWin(i),
+            style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-state-error-primary)', padding: '2px 4px' },
+            title: t('removeTitle'),
+        }, '✕'))), React.createElement('div', { style: { margin: '8px 0' } }, btn(t('addWindow'), () => addWin(), false)), 
+        // Bottom: plugin name + version on the left, unified Save button
+        React.createElement('div', { style: { margin: '10px 0 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }, React.createElement('span', {
+            style: {
+                fontSize: '11px', color: 'var(--dsw-alias-label-secondary)',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            },
+        }, 'save-money v' + PLUGIN_VERSION), btn(t('save'), () => saveAll(), true)));
+    };
+    return SettingsView;
+}
+
+/**
+ * dsh-save-money — Client UI: spend bar chart (src/ui/barchart.tsx)
+ *
+ * Last-8h spend per 10 minutes, rendered with plain divs (no chart library,
+ * theme tokens only). Positive bars (spend) use the error/primary color
+ * upward; balance top-ups (recharges/refunds) are NOT drawn — the axis is
+ * positive-only and the negative window shows a "top-up" note on hover, so
+ * large recharges never crush the spend bars into invisibility and the
+ * plugin only analyses consumption (the official site shows top-ups).
+ * Bars with null history (not yet sampled) are drawn as a faint dot so the
+ * feature is visible from the start.
+ *
+ * The hover tooltip is a CUSTOM floating card (same as the header balance
+ * card): instant (no native-title delay), follows the mouse, clamped to the
+ * viewport. It exposes the window time range, the amount, and the
+ * external-spend warning.
+ */
+/** Factory: build the BarChart component bound to client deps. */
+function createBarChart(deps) {
+    const t = deps.t;
+    const detectedTz = deps.detectedTz;
+    const BarChart = (props) => {
+        const bars = props.bars;
+        const sym = props.symbol;
+        const tzShow = props.timezone || detectedTz;
+        const tipInit = null;
+        const [tip, setTip] = React.useState(tipInit);
+        if (!Array.isArray(bars) || bars.length === 0) {
+            return React.createElement('div', { style: { padding: '24px 8px', textAlign: 'center', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, '–');
+        }
+        // bars[0] = most recent; render newest on the right → reverse to oldest first
+        const ordered = bars.slice().reverse();
+        const HEIGHT = 120;
+        // ---- Axis data ----
+        // Spend only: positive values (spend) define the axis range; balance
+        // top-ups (negative) take no part in the axis and draw no bar (a large
+        // recharge would crush the spend bars into invisibility; the official
+        // site shows top-ups, the plugin only analyses consumption, and hiding
+        // them also avoids exposing balance movements). Negative windows are
+        // annotated "top-up" on hover.
+        let maxPos = 0;
+        for (const b of ordered) {
+            if (b && typeof b.spent === 'number' && Number.isFinite(b.spent) && b.spent > 0 && b.spent > maxPos)
+                maxPos = b.spent;
+        }
+        // Y axis: 1/2/5×10^n key-point step (easy integer/half-integer values),
+        // upper bound = the next key-point multiple above the highest bar
+        // (slightly above it, leaving headroom). At most 5 ticks, fewer allowed —
+        // grid lines, labels and bar heights all share this unified upper bound.
+        const axis = (() => {
+            const span = Math.max(maxPos, 0.001);
+            const mag = Math.pow(10, Math.floor(Math.log10(span)));
+            let step = 0;
+            for (const m of [1, 2, 5, 10]) {
+                const s = m * mag;
+                if (Math.ceil(span / s) <= 4) {
+                    step = s;
+                    break;
+                } // step spacing ≤4 → ≤5 ticks
+            }
+            if (step === 0)
+                step = 10 * mag;
+            const topMax = Math.ceil(span / step) * step; // bound slightly above the max
+            const ticks = [];
+            for (let v = 0; v <= topMax + 1e-9; v += step) {
+                const clean = step >= 1 ? Math.round(v) : Math.round(v * 1000) / 1000;
+                if (clean !== ticks[ticks.length - 1])
+                    ticks.push(clean);
+            }
+            return { step, topMax, ticks };
+        })();
+        const yTicks = axis.ticks;
+        const yMax = axis.topMax; // tick bound (≥ maxPos)
+        // The 0 baseline sits at the bottom: only the positive (spend) direction
+        const zeroY = HEIGHT;
+        // Bar height in pixels, normalised against yMax
+        const barH = (v) => {
+            if (v > 0)
+                return yMax > 0 ? Math.max(2, Math.round(v / yMax * zeroY)) : 2;
+            return 2;
+        };
+        // Spend bars only: positive bars (spend) use the error color upward; 0
+        // values (no spend) use a neutral color; null (unsampled) is a faint
+        // short dot; a positive bar whose window has no local activity
+        // (activity=false) uses the warn color — the drop may come from another
+        // environment. Negative values (balance top-up) return null → not drawn
+        // (spend analysis only, top-ups are hidden).
+        const barStyle = (b) => {
+            const spent = b ? b.spent : null;
+            const finite = typeof spent === 'number' && Number.isFinite(spent);
+            const value = finite ? spent : 0;
+            if (finite && value < 0)
+                return null; // balance top-up → no bar
+            const zero = finite && value === 0;
+            const external = finite && value > 0 && !(b && b.activity);
+            return {
+                position: 'absolute',
+                left: '0',
+                right: '0',
+                bottom: '0',
+                height: barH(value) + 'px',
+                margin: '0 1px',
+                background: !finite
+                    ? 'var(--dsw-alias-border-l1)' // faint placeholder for unsampled
+                    : zero
+                        ? 'var(--dsw-alias-border-l1)' // truly zero spend → neutral
+                        : external
+                            ? 'var(--dsw-alias-state-warn-primary)' // spend without local activity → warn
+                            : 'var(--dsw-alias-state-error-primary)',
+                opacity: finite ? (zero ? 0.4 : 0.92) : 0.5,
+                borderRadius: '1px',
+            };
+        };
+        const formatBar = (spent) => {
+            if (!(typeof spent === 'number' && Number.isFinite(spent)))
+                return '–';
+            const abs = Math.abs(spent).toFixed(2);
+            return spent >= 0 ? sym + abs : '+' + sym + abs;
+        };
+        // Wall-clock "HH:mm–HH:mm" range for a bar window, in the configured
+        // timezone (the same one used to align the bar boundaries — the user sees
+        // whole windows in the timezone they configured). Fallback: browser tz.
+        const fmtWindow = (at, ms) => {
+            try {
+                const f = (tt) => {
+                    try {
+                        const wc = wallClock(tzShow, new Date(tt));
+                        return String(Math.floor(wc.minutes / 60)).padStart(2, '0') + ':' + String(wc.minutes % 60).padStart(2, '0');
+                    }
+                    catch (e2) {
+                        const d = new Date(tt);
+                        return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+                    }
+                };
+                return f(at) + '–' + f(at + ms);
+            }
+            catch (e) {
+                return '';
+            }
+        };
+        // Floating card positioning: follows the mouse, right edge 12px left of
+        // the cursor, clamped inside the viewport
+        const updateTip = (e, b) => {
+            const vw = typeof window !== 'undefined' && window && typeof window.innerWidth === 'number' ? window.innerWidth : 1024;
+            const vh = typeof window !== 'undefined' && window && typeof window.innerHeight === 'number' ? window.innerHeight : 768;
+            const x = typeof e.clientX === 'number' ? e.clientX : vw;
+            const y = typeof e.clientY === 'number' ? e.clientY : 0;
+            const right = Math.max(8, Math.min(vw - 8, vw - x + 12));
+            const top = Math.max(8, Math.min(y + 14, vh - 120));
+            setTip({ right, top, b });
+        };
+        const BAR_MS = 10 * 60 * 1000;
+        const tipCard = tip && tip.b
+            ? React.createElement('div', {
+                style: {
+                    position: 'fixed', right: tip.right, top: tip.top, zIndex: 10001,
+                    background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                    borderRadius: '8px', border: '1px solid var(--dsw-alias-border-l1)',
+                    boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
+                    padding: '6px 10px', fontSize: '12px', lineHeight: '1.6',
+                    maxWidth: 'min(340px, calc(100vw - 24px))',
+                    whiteSpace: 'normal', overflowWrap: 'break-word',
+                    pointerEvents: 'none',
+                },
+            }, React.createElement('div', { style: { fontWeight: 700 } }, '10min ' + fmtWindow(tip.b.at, BAR_MS)), (tip.b && typeof tip.b.spent === 'number' && Number.isFinite(tip.b.spent) && tip.b.spent < 0)
+                ? React.createElement('div', { style: { color: 'var(--dsw-alias-state-success-primary)' } }, t('barsTopUp'))
+                : React.createElement('div', null, (tip.b && tip.b.spent !== null && tip.b.spent !== undefined ? formatBar(tip.b.spent) : '–')), (tip.b && tip.b.spent !== null && tip.b.spent !== undefined && tip.b.spent >= 0 && !tip.b.activity)
+                ? React.createElement('div', { style: { color: 'var(--dsw-alias-state-warn-primary)', marginTop: '2px' } }, t('barsExternal'))
+                : null)
+            : null;
+        const nowLabel = t('barsHint');
+        const fmtTick = (tt) => {
+            try {
+                const wc = wallClock(tzShow, new Date(tt));
+                return String(Math.floor(wc.minutes / 60)).padStart(2, '0') + ':' + String(wc.minutes % 60).padStart(2, '0');
+            }
+            catch (e) {
+                const d = new Date(tt);
+                return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+            }
+        };
+        const fmtTickVal = (v) => {
+            // Float cleanup: values near an integer (e.g. 0.6000000000000001) are
+            // shown as integers
+            const cleaned = Math.abs(v - Math.round(v)) < 1e-9 ? Math.round(v) : v;
+            const abs = Math.abs(cleaned);
+            const s = abs >= 1000 ? abs.toFixed(0) : abs >= 100 ? abs.toFixed(1) : abs.toFixed(2);
+            return (cleaned < 0 ? '-' : '') + s;
+        };
+        // Y tick position: value v maps to pixel top = zeroY - (v/yMax)*zeroY.
+        // Larger values sit higher, 0 lands exactly on the baseline — visually
+        // consistent with the bars (all normalised by yMax).
+        const yTop = (v) => {
+            if (yMax <= 0)
+                return zeroY;
+            return Math.round(zeroY - (v / yMax) * zeroY);
+        };
+        // X axis: whole-hour ticks. Find every hour boundary (HH:00) inside the
+        // bar-covered time range, converted to a percentage position by bar index
+        // — easier to read than arbitrary spaced moments and comparable with the
+        // official per-hour billing. At most 8 ticks.
+        const BAR_MS_X = 10 * 60 * 1000;
+        const oldestAt = ordered[0] ? ordered[0].at : 0;
+        const newestEnd = ordered[ordered.length - 1] ? ordered[ordered.length - 1].at + BAR_MS_X : 0;
+        const xTicks = [];
+        if (newestEnd > 0 && ordered.length > 0) {
+            const firstHour = Math.floor(oldestAt / 3600000) * 3600000;
+            const spanMs = newestEnd - oldestAt;
+            for (let t = firstHour; t <= newestEnd; t += 3600000) {
+                if (t < oldestAt)
+                    continue;
+                const leftPct = spanMs > 0 ? ((t - oldestAt) / spanMs) * 100 : 0;
+                xTicks.push({ at: t, leftPct });
+                if (xTicks.length >= 8)
+                    break;
+            }
+        }
+        // Layout: left column with Y ticks + right column (plot area + X axis)
+        return React.createElement('div', { style: { padding: '10px 12px 8px' } }, React.createElement('div', { style: { display: 'flex', alignItems: 'stretch' } }, 
+        // Y tick column (amounts, absolutely positioned to align with bars)
+        React.createElement('div', {
+            style: {
+                position: 'relative', width: '44px', marginRight: '6px',
+                fontSize: '10px', color: 'var(--dsw-alias-label-secondary)', textAlign: 'right',
+                height: HEIGHT + 'px', flexShrink: 0,
+            },
+        }, yTicks.map((v, i) => React.createElement('span', {
+            key: i,
+            style: {
+                position: 'absolute', right: '0',
+                top: yTop(v) + 'px',
+                transform: 'translateY(-50%)',
+                whiteSpace: 'nowrap',
+            },
+        }, sym + fmtTickVal(v)))), 
+        // Plot area + X axis
+        React.createElement('div', { style: { flex: '1 1 0', minWidth: 0 } }, React.createElement('div', {
+            style: {
+                position: 'relative',
+                height: HEIGHT + 'px',
+                borderBottom: '1px solid var(--dsw-alias-border-l1)',
+            },
+        }, 
+        // Horizontal grid lines (one per Y tick, dashed; the 0 baseline
+        // solid) — the v===0 grid line doubles as the baseline.
+        yTicks.map((v, i) => React.createElement('div', {
+            key: 'g' + i,
+            style: {
+                position: 'absolute', left: '0', right: '0',
+                top: yTop(v) + 'px', height: '1px',
+                borderTop: v === 0
+                    ? '1px solid var(--dsw-alias-border-l1)'
+                    : '1px dashed var(--dsw-alias-border-l1)',
+                opacity: v === 0 ? 1 : 0.45,
+                pointerEvents: 'none',
+            },
+        })), 
+        // Bars (each occupies 1/48 of the width)
+        ordered.map((b, i) => {
+            const innerStyle = barStyle(b);
+            // Negative (top-up) bars are not drawn, but the hover target
+            // stays so the "top-up" note can show. The outer placeholder
+            // container always renders to keep the 48 slots aligned.
+            return React.createElement('div', {
+                key: i,
+                style: {
+                    position: 'absolute', top: '0', bottom: '0',
+                    left: (i / ordered.length * 100) + '%',
+                    width: (100 / ordered.length) + '%',
+                },
+                onMouseEnter: (e) => updateTip(e, b),
+                onMouseMove: (e) => updateTip(e, b),
+                onMouseLeave: () => setTip(null),
+            }, innerStyle
+                ? React.createElement('div', { style: innerStyle })
+                : null);
+        })), 
+        // X tick labels (whole hours)
+        React.createElement('div', {
+            style: {
+                position: 'relative', height: '16px', marginTop: '2px',
+                fontSize: '10px', color: 'var(--dsw-alias-label-secondary)',
+            },
+        }, xTicks.map((tk, i) => React.createElement('span', {
+            key: i,
+            style: {
+                position: 'absolute',
+                left: tk.leftPct + '%',
+                transform: 'translateX(-50%)',
+                whiteSpace: 'nowrap',
+            },
+        }, fmtTick(tk.at)))))), React.createElement('div', { style: { marginTop: '4px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } }, nowLabel), React.createElement('div', { style: { marginTop: '2px', fontSize: '10px', color: 'var(--dsw-alias-label-secondary)', opacity: 0.8 } }, t('barsDisclaimer')), tipCard);
+    };
+    return BarChart;
+}
+
+/**
+ * dsh-save-money — Client UI: session-header entry (src/ui/header.tsx)
+ *
+ * The single persistent header entry (next to the Session log): the status
+ * text, the account balance with its hover detail card, the settings popover,
+ * the spend bar-chart popover and the floating pause banner. Registered in the
+ * conversation.session.header.utilities slot by the client body; this file
+ * only renders — data and actions flow in through props.
+ *
+ * The balance hover card and the bar-chart tooltip are custom floating cards
+ * (fixed + zIndex 10001): native `title` tooltips get clipped at the viewport
+ * edge and cannot wrap, so the long text was invisible. Cards follow the
+ * mouse and extend LEFT from the cursor (the balance sits at the right edge
+ * of the header), clamped so they never leave the viewport.
+ */
+/** Factory: build the HeaderEntry component bound to client deps + UI pieces. */
+function createHeaderEntry(deps, subs) {
+    const t = deps.t;
+    const detectedTz = deps.detectedTz;
+    const badgeInfo = deps.badgeInfo;
+    const { SettingsView, FloatingBanner, BarChart } = subs;
+    const HeaderEntry = (props) => {
+        const st = props.st;
+        const actions = props.actions;
+        const onRefresh = props.onRefresh || (() => { });
+        const [open, setOpen] = React.useState(false);
+        const [barsOpen, setBarsOpen] = React.useState(false);
+        const b = badgeInfo(st);
+        // "Save" + symbol + status text all use the state color
+        const text = React.createElement('span', {
+            onClick: () => setOpen(!open),
+            style: {
+                color: b.color, fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap',
+                padding: '4px 8px', cursor: 'pointer', borderRadius: '6px',
+                border: '1px solid ' + b.color, marginRight: '8px',
+                pointerEvents: 'auto',
+            },
+            title: t('headerTitle', { status: b.text }),
+        }, t('badgeLabel', { symbol: b.symbol, text: b.text }));
+        // Account balance (DeepSeek /user/balance) next to the status text —
+        // hidden when unavailable (no credential / request failed / not the
+        // official DeepSeek API). Implemented in src/balance-client.ts.
+        const balTipInit = null;
+        const [balTip, setBalTip] = React.useState(balTipInit);
+        const updateBalTip = (e) => {
+            const vw = typeof window !== 'undefined' && window && typeof window.innerWidth === 'number' ? window.innerWidth : 1024;
+            const vh = typeof window !== 'undefined' && window && typeof window.innerHeight === 'number' ? window.innerHeight : 768;
+            const x = typeof e.clientX === 'number' ? e.clientX : vw;
+            const y = typeof e.clientY === 'number' ? e.clientY : 0;
+            // Card right edge sits 12px left of the cursor and extends left;
+            // clamped so it never leaves the viewport on either side.
+            const right = Math.max(8, Math.min(vw - 8, vw - x + 12));
+            const top = Math.max(8, Math.min(y + 14, vh - 180));
+            setBalTip({ right, top });
+        };
+        // Balance visibility follows the MOST RECENT model request (dynamic
+        // multi-provider setups): show only while the latest actual request ran
+        // on the official DeepSeek provider. A provider switch hides the balance
+        // WITHOUT clearing the sampled history, so switching back to DeepSeek
+        // re-shows it immediately. `provider` is null before any request (fresh
+        // session) — show then too, the official account is queryable.
+        const balVisible = !!(st.balance && typeof st.balance === 'object'
+            && st.balance.ok === true
+            && (st.balance.provider === null || st.balance.provider === undefined || st.balance.provider === 'deepseek-official'));
+        const balanceEl = balVisible ? renderBalanceElement(st.balance, React) : null;
+        const balCard = (() => {
+            if (!balTip || !balanceEl)
+                return null;
+            const lines = balanceDetailLines(st.balance, { h1: t('spendH1'), m10: t('spendM10'), h24: t('spendH24') });
+            if (!lines)
+                return null;
+            // Append the exact wall-clock window to the m10/h1 lines (same source
+            // and alignment as the bar chart): "Last 1h spend 07:00–08:00 ¥1.25".
+            // h24 spans days, so it gets no range to avoid ambiguity.
+            const sa = st.balance && st.balance.spendAt;
+            if (sa && typeof sa.m10 === 'number' && typeof sa.h1 === 'number') {
+                try {
+                    const tzShow = (st.config && typeof st.config.timezone === 'string' && st.config.timezone.length > 0)
+                        ? st.config.timezone
+                        : detectedTz;
+                    const fmt = (tt) => {
+                        const wc = wallClock(tzShow, new Date(tt));
+                        return String(Math.floor(wc.minutes / 60)).padStart(2, '0') + ':' + String(wc.minutes % 60).padStart(2, '0');
+                    };
+                    if (lines.length >= 2)
+                        lines[1] += ' ' + fmt(sa.h1) + '–' + fmt(sa.h1 + 60 * 60 * 1000);
+                    if (lines.length >= 3)
+                        lines[2] += ' ' + fmt(sa.m10) + '–' + fmt(sa.m10 + 10 * 60 * 1000);
+                }
+                catch (e) { /* keep the unlabelled lines on any tz error */ }
+            }
+            return React.createElement('div', {
+                style: {
+                    position: 'fixed', right: balTip.right, top: balTip.top, zIndex: 10001,
+                    background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                    borderRadius: '8px', border: '1px solid var(--dsw-alias-border-l1)',
+                    boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
+                    padding: '6px 10px', fontSize: '12px', lineHeight: '1.6',
+                    maxWidth: 'min(340px, calc(100vw - 24px))',
+                    whiteSpace: 'normal', overflowWrap: 'break-word',
+                    pointerEvents: 'none',
+                },
+            }, lines.map((ln, i) => React.createElement('div', {
+                key: i,
+                style: i === 0 ? { fontWeight: 700 } : { color: 'var(--dsw-alias-label-secondary)' },
+            }, ln)));
+        })();
+        const pop = open
+            ? React.createElement('div', {
+                style: {
+                    position: 'fixed', right: '16px', top: '56px', width: '380px',
+                    // bg-layer-2: pure white in light themes, coordinated dark in dark
+                    // themes — follows the theme automatically
+                    background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                    borderRadius: '10px',
+                    boxShadow: '0 6px 24px rgba(0,0,0,0.35)', padding: '4px 8px 8px',
+                    zIndex: 10000, border: '1px solid var(--dsw-alias-border-l1)', maxHeight: '70vh', overflowY: 'auto',
+                    pointerEvents: 'auto',
+                },
+            }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 6px 0' } }, React.createElement('span', { style: { fontSize: '13px', fontWeight: 700 } }, t('settingsTitle')), React.createElement('button', {
+                onClick: () => setOpen(false),
+                style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-label-secondary)', pointerEvents: 'auto' },
+            }, '✕')), React.createElement(SettingsView, { st, ...actions }))
+            : null;
+        // Spend bar-chart popup (click the balance): last 8h per 10 min.
+        const chartPopup = barsOpen && balanceEl
+            ? React.createElement('div', {
+                style: {
+                    position: 'fixed', right: '16px', top: '56px', width: '420px',
+                    background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                    borderRadius: '10px',
+                    boxShadow: '0 6px 24px rgba(0,0,0,0.35)', padding: '4px 8px 8px',
+                    zIndex: 10000, border: '1px solid var(--dsw-alias-border-l1)', pointerEvents: 'auto',
+                },
+            }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 6px 0' } }, React.createElement('span', { style: { fontSize: '13px', fontWeight: 700 } }, t('barsTitle')), React.createElement('button', {
+                onClick: () => setBarsOpen(false),
+                style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-label-secondary)', pointerEvents: 'auto' },
+            }, '✕')), React.createElement(BarChart, {
+                bars: st.balance && st.balance.bars,
+                timezone: st.config && st.config.timezone,
+                symbol: (st.balance && st.balance.balance && st.balance.balance[0])
+                    ? currencySymbol(String(st.balance.balance[0].currency || ''))
+                    : '¥',
+            }))
+            : null;
+        return React.createElement('div', { style: { display: 'contents' } }, text, balanceEl
+            ? React.createElement('div', {
+                style: { display: 'contents', cursor: 'pointer' },
+                onMouseEnter: updateBalTip,
+                onMouseMove: updateBalTip,
+                onMouseLeave: () => setBalTip(null),
+                onClick: (e) => {
+                    e.stopPropagation();
+                    setBalTip(null); // clear the hover card so it cannot cover the popup
+                    setBarsOpen((v) => {
+                        const opening = !v;
+                        if (opening) {
+                            // Force one refresh when opening so the chart reflects the
+                            // newest samples (the host 5-min sampler does not push).
+                            onRefresh();
+                        }
+                        return !v;
+                    }); // clicking again closes (toggle)
+                },
+            }, balanceEl, balCard)
+            : null, pop, chartPopup, React.createElement(FloatingBanner, { st, doEndWindow: actions.doEndWindow }));
+    };
+    return HeaderEntry;
+}
+
+/**
+ * dsh-save-money — Client UI composition root (src/ui/index.tsx)
+ *
+ * createUi(deps) wires every client UI piece into one object consumed by the
+ * client plugin body. `deps` carries the shared client dependencies (the
+ * reactive translator, the detected browser timezone and the DSH button
+ * component); the badge helper is folded back into deps so both the settings
+ * panel and the header entry can reach it.
+ *
+ * Inlined into the client plugin body at build time (scripts/build.js): the
+ * sub-factories are declared here for standalone type-checking and resolve to
+ * the inlined scope at runtime (inline order: badge → banner → settings →
+ * barchart → header → index).
+ */
+/** Compose the full client UI from the shared dependencies. */
+function createUi(deps) {
+    const badgeInfo = createBadgeInfo(deps);
+    const uiDeps = { ...deps, badgeInfo };
+    const SettingsView = createSettingsView(uiDeps);
+    const FloatingBanner = createFloatingBanner(uiDeps);
+    const BarChart = createBarChart(uiDeps);
+    const HeaderEntry = createHeaderEntry(uiDeps, { SettingsView, FloatingBanner, BarChart });
+    return { badgeInfo, SettingsView, HeaderEntry };
+}
 
 return {
     inject: ['timer'],
@@ -1034,9 +1859,11 @@ return {
             console.error('[save-money] client apply aborted');
             return;
         }
-        // DSH 系统按钮组件(ui-primitives):圆润胶囊、token 自动适配亮/暗主题。
-        // require 由 ModuleLoader 提供;同步 require 跳过异步加载分支,若该模块
-        // 的 script 尚未注册,require 会抛错——捕获后退回自绘按钮,UI 永不挂。
+        // DSH system button component (ui-primitives): rounded capsule, tokens
+        // adapt to light/dark themes automatically. `require` comes from
+        // ModuleLoader; the synchronous require skips the async-load branch, and
+        // if that module's script is not registered yet it throws — caught below,
+        // falling back to hand-drawn buttons so the UI never hangs.
         let DSHButton = undefined;
         try {
             DSHButton = (require('@deepseek-ai/dsh-client-ui-primitives') || {}).Button;
@@ -1069,9 +1896,12 @@ return {
                 detectedTz = tz;
         }
         catch (e) { /* fall back to Beijing time */ }
+        // Client UI bound to the shared deps: the reactive translator reads
+        // currentLang at call time, so UI text follows the persisted language.
+        const ui = createUi({ t: translate, detectedTz, DSHButton });
         let snapshot = { enabled: false, state: 'NORMAL', reason: null, window: null, minutesToPause: null, endWindowUntil: null, pauseRecord: null, config: null, balance: null };
         // Last successful balance fetch (ms) — the balance is refreshed on user
-        // messages or every 10 minutes, not on every 30s poll.
+        // messages or every 5 minutes, not on every 30s poll.
         let lastBalanceAt = 0;
         // Backoff gate (ms epoch): after a balance failure/timeout we wait this
         // long before trying again, so a failing upstream is never hammered every
@@ -1103,10 +1933,8 @@ return {
                 console.error('[save-money] status poll failed: ' + String((e && e.message) || e));
             }
             // Balance updates: on user messages (host sets balanceDirty when a
-            // llm/stream request arrives) or every 10 minutes — not on every poll.
+            // llm/stream request arrives) or every 5 minutes — not on every poll.
             // The host also gates the endpoint when the display is off.
-            // 余额刷新:用户发消息(host 置 balanceDirty)立即更新一次;否则每 5 分钟
-            // 自动更新一次(定时刷新,不是每次 30s 轮询都打接口)。
             const BALANCE_MS = 5 * 60 * 1000;
             const nowMs = Date.now();
             const due = (!lastBalanceAt || nowMs - lastBalanceAt > BALANCE_MS) && nowMs >= nextBalanceAttemptAt;
@@ -1115,7 +1943,7 @@ return {
                     const b = await balanceWithTimeout(callHost('save-money/balance'), 4000, 'balance call timeout');
                     // Only a successful response counts as "fetched": a failure keeps the
                     // previous value (or null) and leaves lastBalanceAt stale, so the next
-                    // poll retries instead of waiting 10 minutes for the next refresh.
+                    // poll retries instead of waiting 5 minutes for the next refresh.
                     if (b && typeof b === 'object' && b.ok === true) {
                         snapshot.balance = b;
                         lastBalanceAt = Date.now();
@@ -1134,14 +1962,16 @@ return {
             else if (!(snapshot.config && snapshot.config.showBalance === true)) {
                 snapshot.balance = null;
                 // Re-enabling the display must fetch immediately, not wait for the next
-                // 10-minute or message-driven refresh: reset the staleness marker here,
+                // 5-minute or message-driven refresh: reset the staleness marker here,
                 // otherwise `due` stays false and the balance never reappears.
                 lastBalanceAt = 0;
                 nextBalanceAttemptAt = 0;
             }
         };
         void refresh();
-        ctx.effect(() => timer.interval(() => { void refresh(); }, 30000));
+        // Polling happens per mounted component (useSnap below, 30s) — the header
+        // entry is always mounted, so the snapshot stays fresh without an extra
+        // apply-level interval (which would double/triple the status traffic).
         // useSnap returns [st, setSt]: components can refresh manually (button
         // clicks reflect the new state immediately)
         const useSnap = () => {
@@ -1189,692 +2019,25 @@ return {
                 setSt({ ...snapshot });
             },
         });
-        // ---------- Status badge color / text / symbol ----------
-        const badgeInfo = (st) => {
-            const color = !st.enabled ? '#9E9E9E' : st.state === 'PAUSED' ? '#E53935' : st.state === 'WARN' ? '#F9A825' : '#4CAF50';
-            const text = !st.enabled ? t('badgeDisabled') : st.state === 'PAUSED' ? t('badgePaused') : st.state === 'WARN' ? t('badgeWarn') : t('badgeWorking');
-            const symbol = !st.enabled ? '⚪' : st.state === 'PAUSED' ? '🔴' : st.state === 'WARN' ? '🟡' : '🟢';
-            return { color, text, symbol };
-        };
-        // ---------- Settings panel (ignore on top, single Save at the bottom) ----------
-        const SettingsView = (props) => {
-            const st = props.st;
-            const doConfigure = props.doConfigure;
-            const doEndWindow = props.doEndWindow || (async () => { });
-            const cfg = st.config || {};
-            const [tz, setTz] = React.useState(cfg.timezone || detectedTz);
-            // Default windows shown when none are configured (fresh install / all
-            // windows deleted) — matches the one-click DeepSeek preset (2-minute
-            // boundary margin): 08:58–12:02, 13:58–18:02.
-            const DEFAULT_WINS = [
-                { pauseAt: '08:58', resumeAt: '12:02' },
-                { pauseAt: '13:58', resumeAt: '18:02' },
-            ];
-            const [wins, setWins] = React.useState(DEFAULT_WINS.map((w) => ({ ...w })));
-            const [msg, setMsg] = React.useState('');
-            const [langSel, setLangSel] = React.useState(cfg.lang || 'auto');
-            const prevWinKey = React.useRef('');
-            const prevTz = React.useRef(null);
-            const prevLang = React.useRef(null);
-            React.useEffect(() => {
-                // Sync only when the config actually changed (the 30s poll must not
-                // interrupt in-progress edits)
-                if (cfg.timezone && cfg.timezone !== prevTz.current) {
-                    prevTz.current = cfg.timezone;
-                    setTz(cfg.timezone);
-                }
-                const cl = cfg.lang || 'auto';
-                if (cl !== prevLang.current) {
-                    prevLang.current = cl;
-                    setLangSel(cl);
-                    currentLang = resolveLang(cl);
-                }
-                const ws = cfg.windows || [];
-                const key = JSON.stringify(ws);
-                if (key !== prevWinKey.current) {
-                    prevWinKey.current = key;
-                    setWins(ws.length > 0
-                        ? ws.map((w) => ({ pauseAt: w.pauseAt, resumeAt: w.resumeAt }))
-                        : DEFAULT_WINS.map((w) => ({ ...w })));
-                }
-            }, [st]);
-            const row = (label, children) => React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' } }, React.createElement('span', { style: { minWidth: '80px', fontSize: '13px' } }, label), children);
-            const input = (value, setter, width) => React.createElement('input', {
-                value, onChange: (e) => setter(e.target.value),
-                style: {
-                    width: width || '72px', padding: '3px 6px', fontSize: '13px',
-                    background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
-                    border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
-                },
-            });
-            const btn = (text, fn, primary) => DSHButton
-                ? React.createElement(DSHButton, {
-                    variant: 'outline',
-                    size: 'sm',
-                    onClick: fn,
-                }, text)
-                : React.createElement('button', {
-                    onClick: fn,
-                    style: {
-                        padding: '6px 14px', cursor: 'pointer', fontSize: '13px',
-                        background: primary ? 'var(--dsw-alias-button-primary-fill)' : 'var(--dsw-alias-bg-layer-2)',
-                        color: primary ? 'var(--dsw-alias-label-primary-foreground)' : 'var(--dsw-alias-label-primary)',
-                        border: primary ? 'none' : '1px solid var(--dsw-alias-border-l1)',
-                        borderRadius: '6px',
-                    },
-                }, text);
-            // Window add/remove/edit
-            const setWin = (i, key, val) => setWins(wins.map((w, j) => (j === i ? { ...w, [key]: val } : w)));
-            const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02' }]);
-            const delWin = (i) => setWins(wins.filter((_, j) => j !== i));
-            // One-click apply = dedupe-append (does NOT auto-enable; the user checks
-            // the Enable box themselves). The DeepSeek preset windows carry a 2-minute
-            // boundary margin — pause 2 min early, resume 2 min late
-            // (08:58–12:02, 13:58–18:02, avoiding clock-skew requests slipping
-            // through or releasing early at peak boundaries).
-            const DEEPSEEK_PRESET = [
-                { pauseAt: '08:58', resumeAt: '12:02', timezone: 'Asia/Shanghai' },
-                { pauseAt: '13:58', resumeAt: '18:02', timezone: 'Asia/Shanghai' },
-            ];
-            // Legacy DeepSeek windows (no margin) — removed first on one-click so the
-            // overlap validation does not reject the new ones.
-            const DEEPSEEK_LEGACY = [
-                { pauseAt: '09:00', resumeAt: '12:00', timezone: 'Asia/Shanghai' },
-                { pauseAt: '14:00', resumeAt: '18:00', timezone: 'Asia/Shanghai' },
-            ];
-            const applyDeepSeekPreset = async () => {
-                try {
-                    // WYSIWYG: work from the window list the user currently SEES in the
-                    // UI (wins), not from whatever was last persisted on the host — so
-                    // edits made but not yet saved are respected.
-                    const curTz = (st.config && st.config.timezone) || 'Asia/Shanghai';
-                    const key = (w) => String(w.pauseAt) + '|' + String(w.resumeAt) + '|' + (w.timezone || curTz);
-                    const legacyKeys = new Set(DEEPSEEK_LEGACY.map(key));
-                    const cleaned = wins.filter((w) => !legacyKeys.has(key(w))); // upgrade legacy windows
-                    const existing = new Set(cleaned.map(key));
-                    const add = DEEPSEEK_PRESET.filter((p) => !existing.has(key(p)));
-                    if (add.length === 0) {
-                        setMsg(t('presetExists'));
-                        return;
-                    }
-                    const merged = cleaned.concat(add);
-                    setWins(merged); // reflect the result in the UI immediately
-                    await doConfigure({ windows: merged }); // windows only, enabled untouched
-                    const upgraded = wins.length - cleaned.length;
-                    setMsg((upgraded > 0 ? t('presetUpgraded', { n: upgraded }) : '') + t('presetAdded', { n: add.length }));
-                }
-                catch (e) {
-                    setMsg(t('applyFailed') + String((e && e.message) || e));
-                }
-            };
-            // Unified Save at the bottom (replaces the old "apply windows" button)
-            const saveAll = () => {
-                const clean = wins
-                    .map((w) => ({ pauseAt: String(w.pauseAt || '').trim(), resumeAt: String(w.resumeAt || '').trim() }))
-                    .filter((w) => w.pauseAt !== '' && w.resumeAt !== '');
-                void doConfigure({ windows: clean.map((w) => ({ ...w, timezone: tz })) });
-                setMsg(t('savedMsg', { n: clean.length }));
-            };
-            const b = badgeInfo(st);
-            return React.createElement('div', { style: { padding: '12px' } }, 
-            // Top: status text + end-this-window button (kept near the top; shown
-            // only when a window is active — WARN or PAUSED)
-            React.createElement('div', { style: { margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, React.createElement('span', { style: { fontSize: '13px', fontWeight: 600, color: b.color } }, t('statusPrefix') + b.text + (st.state === 'PAUSED' && st.window ? t('windowSuffix', { a: st.window.pauseAt, b: st.window.resumeAt }) : '')), (st.state === 'WARN' || st.state === 'PAUSED')
-                ? btn(t('endThisWindow'), () => void doEndWindow(), st.state === 'PAUSED')
-                : null, st.state === 'PAUSED' ? React.createElement('div', { style: { margin: '6px 0', fontSize: '12px', color: 'var(--dsw-alias-state-error-primary)' } }, t('pausedNote')) : null), 
-            // Green status line while "end this save mode" is in effect for the
-            // current window (in-memory, one-shot): tells the user what happened
-            // and how to reset it.
-            st.endWindowUntil ? React.createElement('div', { style: { margin: '6px 0 10px', fontSize: '12px', color: 'var(--dsw-alias-state-success-primary)', fontWeight: 600 } }, t('endWindowActive', { a: st.window ? st.window.pauseAt : '', b: st.window ? st.window.resumeAt : '', c: st.window ? st.window.resumeAt : '' })) : null, msg ? React.createElement('div', { style: { margin: '8px 0', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, msg) : null, row(t('enable'), React.createElement('input', {
-                type: 'checkbox', checked: !!st.enabled,
-                onChange: (e) => void doConfigure({ enabled: e.target.checked }),
-                style: { accentColor: 'var(--dsw-alias-brand-primary)', width: 16, height: 16, cursor: 'pointer' },
-            })), row(t('showBalance'), React.createElement('input', {
-                type: 'checkbox', checked: !!cfg.showBalance,
-                onChange: (e) => void doConfigure({ showBalance: e.target.checked }),
-                style: { accentColor: 'var(--dsw-alias-brand-primary)', width: 16, height: 16, cursor: 'pointer' },
-            })), 
-            // 适用模型:勾选 = 该档位在窗口内暂停;不勾选 = 豁免。默认只勾官方
-            // 两项;用户改过后尊重持久化值。识别失败/未列出的模型一律豁免。
-            React.createElement('div', { style: { margin: '10px 0 2px', fontSize: '13px', fontWeight: 600 } }, t('modelApplyTitle')), ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro'].map((key) => {
-                const label = key === 'official-flash' ? t('applyOfficialFlash')
-                    : key === 'official-pro' ? t('applyOfficialPro')
-                        : key === 'opencode-flash' ? t('applyOpencodeFlash')
-                            : t('applyOpencodePro');
-                const checked = !!(cfg.modelApply && cfg.modelApply[key] === true);
-                return row(label, React.createElement('input', {
-                    type: 'checkbox', checked,
-                    onChange: (e) => void doConfigure({ modelApply: { ...cfg.modelApply, [key]: e.target.checked } }),
-                    style: { accentColor: 'var(--dsw-alias-brand-primary)', width: 16, height: 16, cursor: 'pointer' },
-                }));
-            }), React.createElement('div', { style: { margin: '0 0 8px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } }, t('modelApplyHint')), row(t('timezone'), React.createElement('select', {
-                value: tz,
-                onChange: (e) => {
-                    const v = e.target.value;
-                    if (!v || v === tz)
-                        return;
-                    const oldTz = tz;
-                    setTz(v);
-                    // WYSIWYG: convert every window from the old timezone to the new
-                    // one (real timezone rules, DST-aware; e.g. Beijing 08:58 ->
-                    // London 01:58 in summer, 00:58 in winter). NOT saved yet — the
-                    // bottom Save button persists timezone + converted times together.
-                    setWins(wins.map((w) => {
-                        const p = parseHHMM(String(w.pauseAt));
-                        const r = parseHHMM(String(w.resumeAt));
-                        return {
-                            pauseAt: p === null ? String(w.pauseAt || '') : formatHHMM(convertHHMM(oldTz, v, p)),
-                            resumeAt: r === null ? String(w.resumeAt || '') : formatHHMM(convertHHMM(oldTz, v, r)),
-                        };
-                    }));
-                },
-                style: {
-                    padding: '3px 6px', fontSize: '13px', maxWidth: '240px',
-                    background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
-                    border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
-                },
-            }, 
-            // Current timezone first, then the full IANA list sorted by offset
-            // (offset computed with today's rules, so DST zones move correctly).
-            [tz].concat(ALL_TIMEZONES.filter((x) => x.name !== tz).map((x) => x.name))
-                .map((n) => {
-                const off = TZ_OFF.get(n);
-                return React.createElement('option', { key: n, value: n }, n + (off !== undefined && !Number.isNaN(off) ? ' (' + fmtOff(off) + ')' : ''));
-            }))), 
-            // Language: auto (follow the browser) by default; manual zh/en choice is
-            // persisted into the host config (save-money.config.json, `lang` field)
-            // so it survives refresh/restart in every plugin form.
-            row(t('language'), React.createElement('select', {
-                value: langSel,
-                onChange: (e) => {
-                    const v = e.target.value;
-                    setLangSel(v);
-                    currentLang = resolveLang(v);
-                    void doConfigure({ lang: v });
-                },
-                style: {
-                    padding: '3px 6px', fontSize: '13px',
-                    background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
-                    border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
-                },
-            }, React.createElement('option', { value: 'auto' }, t('langAuto')), React.createElement('option', { value: 'zh' }, t('langZh')), React.createElement('option', { value: 'zh-TW' }, t('langZhTw')), React.createElement('option', { value: 'en' }, t('langEn')), React.createElement('option', { value: 'de' }, t('langDe')), React.createElement('option', { value: 'fr' }, t('langFr')), React.createElement('option', { value: 'es' }, t('langEs')), React.createElement('option', { value: 'it' }, t('langIt')), React.createElement('option', { value: 'pt' }, t('langPt')), React.createElement('option', { value: 'ja' }, t('langJa')), React.createElement('option', { value: 'ko' }, t('langKo')))), 
-            // 一键 DeepSeek 预设按钮:紧邻暂停窗口标题上方(它是窗口的快捷操作)
-            React.createElement('div', { style: { margin: '10px 0 4px' } }, btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true)), React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } }, t('windowsTitle', { tz, n: wins.length })), wins.map((w, i) => React.createElement('div', { key: i, style: { margin: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'), React.createElement('span', { style: { fontSize: '12px' } }, t('pause')), input(w.pauseAt, (v) => setWin(i, 'pauseAt', v)), React.createElement('span', { style: { fontSize: '12px' } }, t('resume')), input(w.resumeAt, (v) => setWin(i, 'resumeAt', v)), React.createElement('button', {
-                onClick: () => delWin(i),
-                style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-state-error-primary)', padding: '2px 4px' },
-                title: t('removeTitle'),
-            }, '✕'))), React.createElement('div', { style: { margin: '8px 0' } }, btn(t('addWindow'), () => addWin(), false)), 
-            // Bottom: plugin name + version on the left, unified Save button
-            React.createElement('div', { style: { margin: '10px 0 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }, React.createElement('span', {
-                style: {
-                    fontSize: '11px', color: 'var(--dsw-alias-label-secondary)',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                },
-            }, 'save-money v' + PLUGIN_VERSION), btn(t('save'), () => saveAll(), true)));
-        };
-        // ---------- Top floating banner (registered in the header slot,
-        //            position:fixed) ----------
-        // The button is "End this save mode" — one-shot end for the current
-        // window only (in-memory, not persisted; the persistent enabled flag is
-        // untouched, so future windows keep saving money).
-        const FloatingBanner = (props) => {
-            const st = props.st;
-            const doEndWindow = props.doEndWindow;
-            const isWarn = st.state === 'WARN';
-            const isPaused = st.state === 'PAUSED';
-            if (!isWarn && !isPaused)
-                return null;
-            return React.createElement('div', {
-                style: {
-                    position: 'fixed', top: '12px', left: '50%', transform: 'translateX(-50%)',
-                    background: 'var(--dsw-alias-bg-layer-2)',
-                    color: isPaused ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)',
-                    padding: '8px 18px', borderRadius: '999px', fontSize: '13px', fontWeight: 600,
-                    zIndex: 9999, boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    border: '1px solid var(--dsw-alias-border-l1)',
-                    pointerEvents: 'auto',
-                },
-            }, React.createElement('span', { style: { pointerEvents: 'none' } }, isPaused
-                ? t('bannerPaused') + (st.window ? ' ' + st.window.resumeAt + t('bannerAutoResume') : '')
-                : t('bannerWarn') + (st.minutesToPause != null ? st.minutesToPause + t('bannerMinutes') : t('bannerMoment'))), React.createElement('button', {
-                style: {
-                    border: 'none', background: isPaused ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)', color: '#fff',
-                    borderRadius: '999px', padding: '3px 12px', cursor: 'pointer', fontSize: '12px',
-                    pointerEvents: 'auto',
-                },
-                onClick: () => void doEndWindow(),
-            }, t('endThisWindow')));
-        };
-        // ---- Bar chart: last 8h spend per 10 minutes (click the balance) ----
-        // Rendered with plain divs (no chart library, theme tokens only). Positive
-        // bars (spent) use the error/primary color upward, negative (top-up) use
-        // the success color downward. Bars with null history (not yet sampled) are
-        // drawn as a faint dot so the feature is visible from the start.
-        // Hover tooltip is a CUSTOM floating card (same as the header balance
-        // card): instant (no native-title delay), follows the mouse, clamped to the
-        // viewport. Bars expose the window time range, the amount, and the
-        // external-spend warning.
-        const BarChart = (props) => {
-            const bars = props.bars;
-            const sym = props.symbol;
-            const tzShow = props.timezone || detectedTz;
-            const tipInit = null;
-            const [tip, setTip] = React.useState(tipInit);
-            if (!Array.isArray(bars) || bars.length === 0) {
-                return React.createElement('div', { style: { padding: '24px 8px', textAlign: 'center', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, '–');
-            }
-            // bars[0] = most recent; render newest on the right → reverse to oldest first
-            const ordered = bars.slice().reverse();
-            const HEIGHT = 120;
-            // ---- 坐标轴数据 ----
-            // 正负最大值(绝对值),决定 0 基线与 Y 轴刻度范围
-            let maxPos = 0;
-            let maxNeg = 0;
-            for (const b of ordered) {
-                if (b && typeof b.spent === 'number' && Number.isFinite(b.spent)) {
-                    if (b.spent > 0 && b.spent > maxPos)
-                        maxPos = b.spent;
-                    if (b.spent < 0 && -b.spent > maxNeg)
-                        maxNeg = -b.spent;
-                }
-            }
-            // Y 轴:用 1/2/5×10^n 关键点步长(用户易读的整数/半整数),上限取覆盖
-            // 数据最高点的下一个关键点倍数(略高于最高柱、留白)。刻度数 ≤ 5,
-            // 允许更少 —— 网格线、标签、柱高都基于这个统一的上限,读图直观。
-            const axis = (() => {
-                const span = Math.max(maxPos, maxNeg, 0.001);
-                const mag = Math.pow(10, Math.floor(Math.log10(span)));
-                let step = 0;
-                for (const m of [1, 2, 5, 10]) {
-                    const s = m * mag;
-                    if (Math.ceil(span / s) <= 4) {
-                        step = s;
-                        break;
-                    } // 间隔≤4 → 刻度≤5
-                }
-                if (step === 0)
-                    step = 10 * mag;
-                const topMax = Math.ceil(span / step) * step; // 上限略高于最高点
-                const ticks = [];
-                for (let v = 0; v <= topMax + 1e-9; v += step) {
-                    const clean = step >= 1 ? Math.round(v) : Math.round(v * 1000) / 1000;
-                    if (clean !== ticks[ticks.length - 1])
-                        ticks.push(clean);
-                }
-                return { step, topMax, ticks };
-            })();
-            const yTicks = axis.ticks;
-            const yMax = axis.topMax; // 刻度上限(≥ maxPos)
-            // 0 基线位置(距顶部像素):正负按各自刻度上限各占比例
-            const zeroY = maxNeg === 0 ? HEIGHT : Math.round(maxNeg / (yMax + maxNeg) * HEIGHT);
-            // 每根柱的高度(像素):正柱占 0 线上方空间,负柱占下方,统一按 yMax 归一
-            const barH = (v) => {
-                if (v > 0)
-                    return yMax > 0 ? Math.max(2, Math.round(v / yMax * zeroY)) : 2;
-                if (v < 0)
-                    return maxNeg > 0 ? Math.max(2, Math.round(-v / maxNeg * (HEIGHT - zeroY))) : 2;
-                return 2;
-            };
-            // 正柱(消费)用 error 色向上;负柱(回升)用 success 色向下;
-            // 0 值(确实没消费)用中性边框色,避免与"有消费"混淆;
-            // null(未采样)为半透明浅色短点;
-            // 正柱且本窗口无本环境活动(activity=false)用 warn 警示色——
-            // 下降可能来自其他环境(本机未用却扣款),不当作本环境消费。
-            const barStyle = (b) => {
-                const spent = b ? b.spent : null;
-                const finite = typeof spent === 'number' && Number.isFinite(spent);
-                const value = finite ? spent : 0;
-                const zero = finite && value === 0;
-                const positive = value > 0;
-                const external = finite && positive && !(b && b.activity);
-                return {
-                    position: 'absolute',
-                    left: '0',
-                    right: '0',
-                    bottom: positive ? '0' : undefined,
-                    top: positive ? undefined : '0',
-                    height: barH(value) + 'px',
-                    margin: '0 1px',
-                    background: !finite
-                        ? 'var(--dsw-alias-border-l1)' // faint placeholder for unsampled
-                        : zero
-                            ? 'var(--dsw-alias-border-l1)' // truly zero spend → neutral
-                            : external
-                                ? 'var(--dsw-alias-state-warn-primary)' // spend without local activity → warn
-                                : positive
-                                    ? 'var(--dsw-alias-state-error-primary)'
-                                    : 'var(--dsw-alias-state-success-primary)',
-                    opacity: finite ? (zero ? 0.4 : 0.92) : 0.5,
-                    borderRadius: '1px',
-                };
-            };
-            const formatBar = (spent) => {
-                if (!(typeof spent === 'number' && Number.isFinite(spent)))
-                    return '–';
-                const abs = Math.abs(spent).toFixed(2);
-                return spent >= 0 ? sym + abs : '+' + sym + abs;
-            };
-            // 柱窗口的墙钟起止 "HH:mm–HH:mm",按配置时区显示(与柱边界对齐使用的
-            // 时区一致——用户配置哪个时区,看到的就是哪个时区的整数窗口)。
-            // fallback:浏览器本地时区。
-            const fmtWindow = (at, ms) => {
-                try {
-                    const f = (t) => {
-                        try {
-                            const wc = wallClock(tzShow, new Date(t));
-                            return String(Math.floor(wc.minutes / 60)).padStart(2, '0') + ':' + String(wc.minutes % 60).padStart(2, '0');
-                        }
-                        catch (e2) {
-                            const d = new Date(t);
-                            return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-                        }
-                    };
-                    return f(at) + '–' + f(at + ms);
-                }
-                catch (e) {
-                    return '';
-                }
-            };
-            // 浮动框定位:跟随鼠标,右缘贴鼠标左侧 12px,clamp 在视口内
-            const updateTip = (e, b) => {
-                const vw = typeof window !== 'undefined' && window && typeof window.innerWidth === 'number' ? window.innerWidth : 1024;
-                const vh = typeof window !== 'undefined' && window && typeof window.innerHeight === 'number' ? window.innerHeight : 768;
-                const x = typeof e.clientX === 'number' ? e.clientX : vw;
-                const y = typeof e.clientY === 'number' ? e.clientY : 0;
-                const right = Math.max(8, Math.min(vw - 8, vw - x + 12));
-                const top = Math.max(8, Math.min(y + 14, vh - 120));
-                setTip({ right, top, b });
-            };
-            const BAR_MS = 10 * 60 * 1000;
-            const tipCard = tip && tip.b
-                ? React.createElement('div', {
-                    style: {
-                        position: 'fixed', right: tip.right, top: tip.top, zIndex: 10001,
-                        background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
-                        borderRadius: '8px', border: '1px solid var(--dsw-alias-border-l1)',
-                        boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
-                        padding: '6px 10px', fontSize: '12px', lineHeight: '1.6',
-                        maxWidth: 'min(340px, calc(100vw - 24px))',
-                        whiteSpace: 'normal', overflowWrap: 'break-word',
-                        pointerEvents: 'none',
-                    },
-                }, React.createElement('div', { style: { fontWeight: 700 } }, '10min ' + fmtWindow(tip.b.at, BAR_MS)), React.createElement('div', null, (tip.b && tip.b.spent !== null && tip.b.spent !== undefined ? formatBar(tip.b.spent) : '–')), (tip.b && tip.b.spent !== null && tip.b.spent !== undefined && tip.b.spent >= 0 && !tip.b.activity)
-                    ? React.createElement('div', { style: { color: 'var(--dsw-alias-state-warn-primary)', marginTop: '2px' } }, t('barsExternal'))
-                    : null)
-                : null;
-            const nowLabel = t('barsHint');
-            const fmtTick = (t) => {
-                try {
-                    const wc = wallClock(tzShow, new Date(t));
-                    return String(Math.floor(wc.minutes / 60)).padStart(2, '0') + ':' + String(wc.minutes % 60).padStart(2, '0');
-                }
-                catch (e) {
-                    const d = new Date(t);
-                    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-                }
-            };
-            const fmtTickVal = (v) => {
-                // 浮点清洗:接近整数的值(如 0.6000000000000001)按整数显示
-                const cleaned = Math.abs(v - Math.round(v)) < 1e-9 ? Math.round(v) : v;
-                const abs = Math.abs(cleaned);
-                const s = abs >= 1000 ? abs.toFixed(0) : abs >= 100 ? abs.toFixed(1) : abs.toFixed(2);
-                return (cleaned < 0 ? '-' : '') + s;
-            };
-            // Y 轴刻度定位:刻度值 v 的像素 top = zeroY - (v/yMax)*zeroY。
-            // 值越大越靠上,0 恰落在基线上 —— 与柱体视觉一致(统一按 yMax 归一)。
-            const yTop = (v) => {
-                if (yMax <= 0)
-                    return zeroY;
-                return Math.round(zeroY - (v / yMax) * zeroY);
-            };
-            // X 轴:整点小时刻度。在柱覆盖的时间范围内找所有整点时刻
-            // (HH:00),按柱索引换算成百分比位置 —— 比均匀分布的任意时刻更易读、
-            // 与官方后台按整点计费可比。最多取 8 个。
-            const BAR_MS_X = 10 * 60 * 1000;
-            const oldestAt = ordered[0] ? ordered[0].at : 0;
-            const newestEnd = ordered[ordered.length - 1] ? ordered[ordered.length - 1].at + BAR_MS_X : 0;
-            const xTicks = [];
-            if (newestEnd > 0 && ordered.length > 0) {
-                const firstHour = Math.floor(oldestAt / 3600000) * 3600000;
-                const spanMs = newestEnd - oldestAt;
-                for (let t = firstHour; t <= newestEnd; t += 3600000) {
-                    if (t < oldestAt)
-                        continue;
-                    const leftPct = spanMs > 0 ? ((t - oldestAt) / spanMs) * 100 : 0;
-                    xTicks.push({ at: t, leftPct });
-                    if (xTicks.length >= 8)
-                        break;
-                }
-            }
-            // 布局:左列 Y 轴刻度 + 右列(绘图区 + X 轴)
-            return React.createElement('div', { style: { padding: '10px 12px 8px' } }, React.createElement('div', { style: { display: 'flex', alignItems: 'stretch' } }, 
-            // Y 轴刻度列(金额,绝对定位对齐柱高)
-            React.createElement('div', {
-                style: {
-                    position: 'relative', width: '44px', marginRight: '6px',
-                    fontSize: '10px', color: 'var(--dsw-alias-label-secondary)', textAlign: 'right',
-                    height: HEIGHT + 'px', flexShrink: 0,
-                },
-            }, yTicks.map((v, i) => React.createElement('span', {
-                key: i,
-                style: {
-                    position: 'absolute', right: '0',
-                    top: yTop(v) + 'px',
-                    transform: 'translateY(-50%)',
-                    whiteSpace: 'nowrap',
-                },
-            }, sym + fmtTickVal(v)))), 
-            // 绘图区 + X 轴
-            React.createElement('div', { style: { flex: '1 1 0', minWidth: 0 } }, React.createElement('div', {
-                style: {
-                    position: 'relative',
-                    height: HEIGHT + 'px',
-                    borderBottom: '1px solid var(--dsw-alias-border-l1)',
-                },
-            }, 
-            // 水平网格线(Y 轴每个刻度一条,虚线;0 基线实线)已在下方渲染,
-            // 不再单独画 0 基线(由 v===0 的网格线承担)。
-            yTicks.map((v, i) => React.createElement('div', {
-                key: 'g' + i,
-                style: {
-                    position: 'absolute', left: '0', right: '0',
-                    top: yTop(v) + 'px', height: '1px',
-                    borderTop: v === 0
-                        ? '1px solid var(--dsw-alias-border-l1)'
-                        : '1px dashed var(--dsw-alias-border-l1)',
-                    opacity: v === 0 ? 1 : 0.45,
-                    pointerEvents: 'none',
-                },
-            })), 
-            // 柱(每个占 1/48 宽度)
-            ordered.map((b, i) => {
-                return React.createElement('div', {
-                    key: i,
-                    style: {
-                        position: 'absolute', top: '0', bottom: '0',
-                        left: (i / ordered.length * 100) + '%',
-                        width: (100 / ordered.length) + '%',
-                    },
-                }, React.createElement('div', {
-                    style: barStyle(b),
-                    onMouseEnter: (e) => updateTip(e, b),
-                    onMouseMove: (e) => updateTip(e, b),
-                    onMouseLeave: () => setTip(null),
-                }));
-            })), 
-            // X 轴刻度(整点小时)
-            React.createElement('div', {
-                style: {
-                    position: 'relative', height: '16px', marginTop: '2px',
-                    fontSize: '10px', color: 'var(--dsw-alias-label-secondary)',
-                },
-            }, xTicks.map((tk, i) => React.createElement('span', {
-                key: i,
-                style: {
-                    position: 'absolute',
-                    left: tk.leftPct + '%',
-                    transform: 'translateX(-50%)',
-                    whiteSpace: 'nowrap',
-                },
-            }, fmtTick(tk.at)))))), React.createElement('div', { style: { marginTop: '4px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } }, nowLabel), React.createElement('div', { style: { marginTop: '2px', fontSize: '10px', color: 'var(--dsw-alias-label-secondary)', opacity: 0.8 } }, t('barsDisclaimer')), tipCard);
-        };
-        // ---- Main UI: session-header right-aligned area (status text + floating
-        //      banner in the same slot; the banner no longer uses shell.overlay) ----
+        // ---- Main UI: session-header right-aligned area (status text + balance
+        //      + popovers + floating banner; rendered by src/ui/header.tsx) ----
         slots.inject('conversation.session.header.utilities', () => slots.register({ name: 'conversation.session.header.utilities', id: 'save-money-status-text', order: 5 }, () => {
             const [st, setSt] = useSnap();
-            const [open, setOpen] = React.useState(false);
-            const [barsOpen, setBarsOpen] = React.useState(false);
             const actions = makeActions(setSt);
-            const b = badgeInfo(st);
-            // "Save" + symbol + status text all use the state color
-            const text = React.createElement('span', {
-                onClick: () => setOpen(!open),
-                style: {
-                    color: b.color, fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap',
-                    padding: '4px 8px', cursor: 'pointer', borderRadius: '6px',
-                    border: '1px solid ' + b.color, marginRight: '8px',
-                    pointerEvents: 'auto',
-                },
-                title: t('headerTitle', { status: b.text }),
-            }, t('badgeLabel', { symbol: b.symbol, text: b.text }));
-            // Account balance (DeepSeek /user/balance) next to the status text —
-            // hidden when unavailable (no credential / request failed / not the
-            // official DeepSeek API). Implemented in src/balance-client.ts.
-            // The full detail (balance + spend stats) is a custom hover card:
-            // native `title` tooltips get clipped at the viewport edge and cannot
-            // wrap, so the long text was invisible. The card follows the mouse and
-            // extends LEFT from the cursor (the balance sits at the right edge of
-            // the header), clamped so it never leaves the viewport.
-            const balTipInit = null;
-            const [balTip, setBalTip] = React.useState(balTipInit);
-            const updateBalTip = (e) => {
-                const vw = typeof window !== 'undefined' && window && typeof window.innerWidth === 'number' ? window.innerWidth : 1024;
-                const vh = typeof window !== 'undefined' && window && typeof window.innerHeight === 'number' ? window.innerHeight : 768;
-                const x = typeof e.clientX === 'number' ? e.clientX : vw;
-                const y = typeof e.clientY === 'number' ? e.clientY : 0;
-                // 卡片右缘贴在鼠标左侧 12px 处、向左延伸;用 clamp 保证右缘不会
-                // 超出视口右缘,鼠标靠近屏幕左侧时也不会跑到屏幕外。
-                const right = Math.max(8, Math.min(vw - 8, vw - x + 12));
-                const top = Math.max(8, Math.min(y + 14, vh - 180));
-                setBalTip({ right, top });
-            };
-            // Balance visibility follows the MOST RECENT model request (dynamic
-            // multi-provider setups): show only while the latest actual request ran
-            // on the official DeepSeek provider. A provider switch hides the
-            // balance WITHOUT clearing the sampled history, so switching back to
-            // DeepSeek re-shows it immediately. `provider` is null before any
-            // request (fresh session) — show then too, the official account is
-            // queryable.
-            const balVisible = !!(st.balance && typeof st.balance === 'object'
-                && st.balance.ok === true
-                && (st.balance.provider === null || st.balance.provider === undefined || st.balance.provider === 'deepseek-official'));
-            const balanceEl = balVisible ? renderBalanceElement(st.balance, React) : null;
-            const balCard = (() => {
-                if (!balTip || !balanceEl)
-                    return null;
-                const lines = balanceDetailLines(st.balance, { h1: t('spendH1'), m10: t('spendM10'), h24: t('spendH24') });
-                if (!lines)
-                    return null;
-                // 给 m10/h1 行追加精确时间窗口(与柱形图同源、同对齐基准):
-                // "近1h消费 07:00–08:00 ¥1.25"。h24 跨天,不加范围避免歧义。
-                const sa = st.balance && st.balance.spendAt;
-                if (sa && typeof sa.m10 === 'number' && typeof sa.h1 === 'number') {
-                    try {
-                        const tzShow = (st.config && typeof st.config.timezone === 'string' && st.config.timezone.length > 0)
-                            ? st.config.timezone
-                            : detectedTz;
-                        const fmt = (t) => {
-                            const wc = wallClock(tzShow, new Date(t));
-                            return String(Math.floor(wc.minutes / 60)).padStart(2, '0') + ':' + String(wc.minutes % 60).padStart(2, '0');
-                        };
-                        if (lines.length >= 2)
-                            lines[1] += ' ' + fmt(sa.h1) + '–' + fmt(sa.h1 + 60 * 60 * 1000);
-                        if (lines.length >= 3)
-                            lines[2] += ' ' + fmt(sa.m10) + '–' + fmt(sa.m10 + 10 * 60 * 1000);
-                    }
-                    catch (e) { /* keep the unlabelled lines on any tz error */ }
-                }
-                return React.createElement('div', {
-                    style: {
-                        position: 'fixed', right: balTip.right, top: balTip.top, zIndex: 10001,
-                        background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
-                        borderRadius: '8px', border: '1px solid var(--dsw-alias-border-l1)',
-                        boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
-                        padding: '6px 10px', fontSize: '12px', lineHeight: '1.6',
-                        maxWidth: 'min(340px, calc(100vw - 24px))',
-                        whiteSpace: 'normal', overflowWrap: 'break-word',
-                        pointerEvents: 'none',
-                    },
-                }, lines.map((ln, i) => React.createElement('div', {
-                    key: i,
-                    style: i === 0 ? { fontWeight: 700 } : { color: 'var(--dsw-alias-label-secondary)' },
-                }, ln)));
-            })();
-            const pop = open
-                ? React.createElement('div', {
-                    style: {
-                        position: 'fixed', right: '16px', top: '56px', width: '380px',
-                        // bg-layer-2:亮色=纯白,暗色=协调深色,随主题自动切换
-                        background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
-                        borderRadius: '10px',
-                        boxShadow: '0 6px 24px rgba(0,0,0,0.35)', padding: '4px 8px 8px',
-                        zIndex: 10000, border: '1px solid var(--dsw-alias-border-l1)', maxHeight: '70vh', overflowY: 'auto',
-                        pointerEvents: 'auto',
-                    },
-                }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 6px 0' } }, React.createElement('span', { style: { fontSize: '13px', fontWeight: 700 } }, t('settingsTitle')), React.createElement('button', {
-                    onClick: () => setOpen(false),
-                    style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-label-secondary)', pointerEvents: 'auto' },
-                }, '✕')), React.createElement(SettingsView, { st, ...actions }))
-                : null;
-            // Spend bar-chart popup (click the balance): last 8h per 10 min.
-            const chartPopup = barsOpen && balanceEl
-                ? React.createElement('div', {
-                    style: {
-                        position: 'fixed', right: '16px', top: '56px', width: '420px',
-                        background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
-                        borderRadius: '10px',
-                        boxShadow: '0 6px 24px rgba(0,0,0,0.35)', padding: '4px 8px 8px',
-                        zIndex: 10000, border: '1px solid var(--dsw-alias-border-l1)', pointerEvents: 'auto',
-                    },
-                }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 6px 0' } }, React.createElement('span', { style: { fontSize: '13px', fontWeight: 700 } }, t('barsTitle')), React.createElement('button', {
-                    onClick: () => setBarsOpen(false),
-                    style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-label-secondary)', pointerEvents: 'auto' },
-                }, '✕')), React.createElement(BarChart, {
-                    bars: st.balance && st.balance.bars,
-                    timezone: st.config && st.config.timezone,
-                    symbol: (st.balance && st.balance.balance && st.balance.balance[0])
-                        ? currencySymbol(String(st.balance.balance[0].currency || ''))
-                        : '¥',
-                }))
-                : null;
-            return React.createElement('div', { style: { display: 'contents' } }, text, balanceEl
-                ? React.createElement('div', {
-                    style: { display: 'contents', cursor: 'pointer' },
-                    onMouseEnter: updateBalTip,
-                    onMouseMove: updateBalTip,
-                    onMouseLeave: () => setBalTip(null),
-                    onClick: (e) => {
-                        e.stopPropagation();
-                        setBalTip(null); // 打开弹窗时清掉 hover 卡片,避免遮挡
-                        setBarsOpen((v) => {
-                            const opening = !v;
-                            if (opening) {
-                                // 打开柱形图时强制刷新一次,确保图表反映最新采样
-                                // (host 5 分钟定时器采样后不会主动推给 client)。
-                                void refresh();
-                            }
-                            return !v;
-                        }); // 再次点击关闭(toggle)
-                    },
-                }, balanceEl, balCard)
-                : null, pop, chartPopup, React.createElement(FloatingBanner, { st, doEndWindow: actions.doEndWindow }));
+            // The header entry owns its popovers (settings, bar chart, balance
+            // card); refresh is passed in so opening the chart forces a fresh
+            // balance sample (the host 5-min sampler does not push updates).
+            return React.createElement(ui.HeaderEntry, {
+                st,
+                actions,
+                onRefresh: () => { void refresh(); },
+            });
         }));
         // ---- System settings page (settings.section, kept) ----
-        slots.inject('settings.section', () => slots.register({ name: 'settings.section', id: 'save-money', order: 25, label: t('sectionLabel') }, () => {
+        slots.inject('settings.section', () => slots.register({ name: 'settings.section', id: 'save-money', order: 25, label: translate('sectionLabel') }, () => {
             const [st, setSt] = useSnap();
             const actions = makeActions(setSt);
-            return React.createElement('div', { style: { padding: '12px' } }, React.createElement('h3', { style: { margin: '0 0 12px', fontSize: '15px' } }, t('settingsHeading')), React.createElement(SettingsView, { st, ...actions }));
+            return React.createElement('div', { style: { padding: '12px' } }, React.createElement('h3', { style: { margin: '0 0 12px', fontSize: '15px' } }, translate('settingsHeading')), React.createElement(ui.SettingsView, { st, ...actions }));
         }));
     },
 };

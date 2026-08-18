@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { keyFingerprint } from '../dist/balance-host.js'
+import { keyFingerprint } from '../dist/balance-history.js'
 
 const require = createRequire(import.meta.url)
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -205,7 +205,7 @@ test('official client bundle: plugin/client.js is a __ModuleLoader__ factory exp
 
 test('official bundle manifest: package.json declares dsh.client + exports["./client"]', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'plugin', 'package.json'), 'utf8'))
-  assert.equal(pkg.version, '1.4.1')
+  assert.equal(pkg.version, '1.4.2')
   assert.equal(pkg.exports['./client'], './client.js')
   assert.equal(pkg.dsh.client.platform, 'web')
   assert.ok(pkg.files.includes('client.js'))
@@ -552,18 +552,49 @@ test('modelApply: configure updates tiers and validates booleans', async () => {
     await handler(req, res)
     return JSON.parse(res._body)
   }
-  // 更新:勾选 opencode-pro
+  // update: check opencode-pro
   const out = await call({ modelApply: { 'opencode-pro': true } })
   assert.equal(out.ok, true)
   assert.equal(out.config.modelApply['opencode-pro'], true)
   assert.equal(out.config.modelApply['official-flash'], true, 'other tiers untouched')
-  // 非法值被拒绝
+  // invalid value is rejected
   const bad = await call({ modelApply: { 'official-flash': 'yes' } })
   assert.equal(bad.ok, false)
   assert.match(bad.error, /boolean/)
-  // 非对象被拒绝
+  // non-object is rejected
   const bad2 = await call({ modelApply: 42 })
   assert.equal(bad2.ok, false)
+})
+
+test('configure: boolean fields are type-checked and unknown keys are dropped', async () => {
+  const { ctx, routes } = makeCtx({
+    sessions: { list: () => [], get: () => undefined },
+    agents: { currentInitiator: () => undefined, list: () => [] },
+    goals: { get: () => undefined },
+  })
+  await plugin.apply(ctx)
+  const handler = routes[0].handler
+  const call = async (patch) => {
+    const res = { writeHead(c, h) { this.code = c }, end(b) { this._body = b } }
+    const req = {
+      method: 'POST', url: '/save-money/configure',
+      async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(patch)) },
+    }
+    await handler(req, res)
+    return JSON.parse(res._body)
+  }
+  // string "yes" must not leak in as a truthy enabled
+  const bad = await call({ enabled: 'yes' })
+  assert.equal(bad.ok, false)
+  assert.match(bad.error, /enabled must be a boolean/)
+  const bad2 = await call({ reconcileOnStart: 'false' })
+  assert.equal(bad2.ok, false)
+  assert.match(bad2.error, /reconcileOnStart must be a boolean/)
+  // unknown keys are ignored, never merged into the config
+  const out = await call({ evil: 42, enabled: true })
+  assert.equal(out.ok, true)
+  assert.equal(out.config.enabled, true)
+  assert.equal(out.config.evil, undefined, 'unknown key is dropped')
 })
 
 /** Apply the plugin with a fake fs pre-seeded with a balance-history file. */
@@ -605,10 +636,11 @@ test('persistence: same key → history is loaded and continued across restarts'
   const oldHome = process.env.DSH_HOME
   process.env.DSH_HOME = home
   try {
-    // 第一次启动:无文件 → 空历史;balance 查询失败(无凭证其实有)→ 但加载空安全
+    // First start: no file → empty history; a balance query without a real
+    // upstream fails safely (ok:false), and the empty load never crashes.
     const first = await applyWithHistory({ home, key, historyJson: null })
-    // 构造一次 balanceQuery(会 record)→ 触发写盘
-    // 通过 HTTP /balance:showBalance 需先开启
+    // Run one balanceQuery (records a sample) → would trigger a write
+    // via HTTP /balance: showBalance must be enabled first
     const cfgRes = {
       writeHead(c, h) { this.code = c }, end(b) { this._body = b },
     }
@@ -619,9 +651,11 @@ test('persistence: same key → history is loaded and continued across restarts'
     await first.handler(cfgReq, cfgRes)
     await new Promise((r) => setTimeout(r, 20))
     const bal = await getBalance(first.handler)
-    // 无凭据时的 balance 返回 ok:false 或 ok:true?这里 credentials 有值但上游无真实响应 → ok:false(no balance_infos)
+    // With credentials present but no real upstream, balance returns ok:false
+    // (no balance_infos) — the boolean assertion is all we can check here.
     assert.equal(typeof bal.ok, 'boolean')
-    // 写盘定时器不会立即跑,但持久化逻辑已在加载路径执行过(无崩溃)
+    // The write throttle does not fire immediately; the persistence logic has
+    // already run on the load path without crashing.
     assert.equal(first.mem.writes.filter((w) => w.path.includes('balance.json')).length, 0, 'no history write until a sample lands')
   } finally {
     if (oldHome === undefined) delete process.env.DSH_HOME
@@ -633,13 +667,15 @@ test('persistence: different key → old history is discarded, fresh start', asy
   const home = join(process.cwd(), '..', 'fake-dsh-home-2')
   const oldKey = 'sk-old-key'
   const newKey = 'sk-new-key'
-  // 预置一份旧 key 的历史文件(内容不必真实,只要 keyId 不匹配)
+  // Pre-seed a history file for the OLD key (content need not be real; only
+  // the keyId must not match).
   const fakeOld = JSON.stringify({ keyId: 'aaaaaaaa', points: [{ at: 1, total: 100 }] })
   const oldHome = process.env.DSH_HOME
   process.env.DSH_HOME = home
   try {
     const { ctx, handler, mem } = await applyWithHistory({ home, key: newKey, historyJson: fakeOld })
-    // 新 key 的指纹 ≠ aaaaaaaa → 旧历史被丢弃;随后 balanceQuery 从空开始
+    // New key's fingerprint ≠ aaaaaaaa → old history discarded; balanceQuery
+    // then starts from empty.
     const bal = await getBalance(handler)
     assert.equal(typeof bal.ok, 'boolean', 'balance query still works after history discard')
     assert.equal(mem.files[join(home, 'dsh-save-money-balance.json')], fakeOld, 'old file untouched until overwritten')
@@ -647,6 +683,101 @@ test('persistence: different key → old history is discarded, fresh start', asy
     if (oldHome === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = oldHome
   }
+})
+
+test('persistence: the 5-min write throttle persists a recorded sample (regression)', async () => {
+  const home = join(process.cwd(), '..', 'fake-dsh-home-throttle')
+  const key = 'sk-throttle-key'
+  const oldHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  // The official form uses real Node fetch — stub it so the balance query
+  // succeeds locally instead of hitting the upstream.
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async () => ({
+    status: 200,
+    text: async () => JSON.stringify({
+      is_available: true,
+      balance_infos: [{ currency: 'CNY', total_balance: '42.00', granted_balance: '0', topped_up_balance: '42.00' }],
+    }),
+  })
+  try {
+    const { ctx, handler, mem } = await applyWithHistory({ home, key, historyJson: null })
+    // Record one sample: enable the display + query the balance.
+    const cfgRes = { writeHead(c, h) { this.code = c }, end(b) { this._body = b } }
+    const cfgReq = {
+      method: 'POST', url: '/save-money/configure',
+      async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ showBalance: true })) },
+    }
+    await handler(cfgReq, cfgRes)
+    await new Promise((r) => setTimeout(r, 20))
+    const bal = await getBalance(handler)
+    assert.equal(bal.ok, true, 'stubbed upstream makes the balance query succeed')
+    await new Promise((r) => setTimeout(r, 20))
+    assert.equal(mem.writes.filter((w) => w.path.includes('balance.json')).length, 0, 'no write before the throttle fires')
+    // Fire the 5-minute write throttle interval → the dirty flag must be
+    // visible on the shared state (regression: it lived on a local flag and
+    // both persist call sites were dead code).
+    for (const t of (ctx.timer._timers || [])) {
+      if (t.kind === 'interval' && t.ms === 300000) t.fn()
+    }
+    await new Promise((r) => setTimeout(r, 20))
+    const writes = mem.writes.filter((w) => w.path.includes('balance.json'))
+    assert.equal(writes.length, 1, 'the write throttle must persist the history')
+    const data = JSON.parse(mem.files[join(home, 'dsh-save-money-balance.json')])
+    assert.equal(data.keyId, keyFingerprint(key))
+    assert.ok(Array.isArray(data.points) && data.points.length >= 1, 'at least the just-recorded sample is on disk')
+  } finally {
+    globalThis.fetch = realFetch
+    if (oldHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = oldHome
+  }
+})
+
+test('persistence: a transient credential failure keeps the persisted history (regression)', async () => {
+  const home = join(process.cwd(), '..', 'fake-dsh-home-nokey')
+  const key = 'sk-nokey-key'
+  const fp = keyFingerprint(key)
+  const t0 = Date.now() - 5 * 60 * 1000
+  const seeded = JSON.stringify({ keyId: fp, points: [{ at: t0, total: 100 }] })
+  const files = {}
+  files[join(home, 'dsh-save-money-balance.json')] = seeded
+  const mem = makeMemFs(files)
+  const overrides = {
+    fs: mem,
+    sessions: { list: () => [], get: () => undefined },
+    agents: { currentInitiator: () => undefined, list: () => [] },
+    goals: { get: () => undefined },
+    sandboxPolicy: { workspaceRoot: join(process.cwd(), '..', 'deepseek-harness') },
+    // The credential service exists but resolving fails (transient) — the
+    // loader must NOT clear the persisted history.
+    credentials: { resolve: async () => { throw new Error('credential service down') } },
+  }
+  const { ctx, routes } = makeCtx(overrides)
+  await plugin.apply(ctx)
+  const boot = (ctx.timer._timers || []).find((t) => t.kind === 'timeout')
+  assert.ok(boot)
+  boot.fn()
+  await new Promise((r) => setTimeout(r, 20))
+  // Fire the write throttle: with no resolved key, persist must skip the
+  // write instead of overwriting the file with a placeholder fingerprint.
+  for (const t of (ctx.timer._timers || [])) {
+    if (t.kind === 'interval' && t.ms === 300000) t.fn()
+  }
+  await new Promise((r) => setTimeout(r, 20))
+  assert.equal(mem.writes.filter((w) => w.path.includes('balance.json')).length, 0, 'no history write without a resolved credential')
+  assert.equal(files[join(home, 'dsh-save-money-balance.json')], seeded, 'the persisted file is untouched')
+  // A later successful query (credential now resolving) still appends to the
+  // in-memory history instead of starting from empty.
+  const cfgRes = { writeHead(c, h) { this.code = c }, end(b) { this._body = b } }
+  const cfgReq = {
+    method: 'POST', url: '/save-money/configure',
+    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ showBalance: true })) },
+  }
+  await routes[0].handler(cfgReq, cfgRes)
+  await new Promise((r) => setTimeout(r, 20))
+  const bal = await getBalance(routes[0].handler)
+  assert.equal(typeof bal.ok, 'boolean', 'balance query works after the transient failure')
+  assert.equal(files[join(home, 'dsh-save-money-balance.json')], seeded, 'file still untouched (no key → no overwrite)')
 })
 
 test('persistence: matching key loads history; subsequent records append after it', async () => {
@@ -667,7 +798,8 @@ test('persistence: matching key loads history; subsequent records append after i
     const { ctx, handler, mem } = await applyWithHistory({ home, key, historyJson: seeded })
     // balance query records the CURRENT total at now → appends a fresh point
     const bal = await getBalance(handler)
-    // 无真实上游 → ok:false,但历史已加载(通过日志确认);查询本身不崩溃
+    // No real upstream → ok:false, but the history was loaded (visible in the
+    // logs); the query itself never crashes.
     assert.equal(typeof bal.ok, 'boolean')
   } finally {
     if (oldHome === undefined) delete process.env.DSH_HOME

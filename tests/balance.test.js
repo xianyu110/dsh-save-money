@@ -7,10 +7,12 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createBalanceService, createBalanceHistory, spendBars, alignWallClock, keyFingerprint, serializeBalanceHistory, parseBalanceHistory, classifyModel, modelApplyEnabled, SAMPLE_MS, HISTORY_LEN } from '../dist/balance-host.js'
+import { createBalanceService } from '../dist/balance-host.js'
+import { createBalanceHistory, keyFingerprint, serializeBalanceHistory, parseBalanceHistory, SAMPLE_MS, HISTORY_LEN } from '../dist/balance-history.js'
+import { spendBars, alignWallClock, classifyModel, modelApplyEnabled } from '../dist/balance-bars.js'
 
-/** 已对齐的基准时间:整除 5 分钟与 10 分钟(1699999800000 % 300000 == 0)。
- * 所有时间测试都从它出发,避免采样/柱对齐造成边界偏移。 */
+/** Aligned base time: divisible by 5 and 10 minutes (1699999800000 % 300000 == 0).
+ * All time tests start from it, avoiding boundary drift from sample/bar alignment. */
 const T0 = 1_699_999_800_000
 import { pickBalance, currencySymbol, balanceTitle, balanceDetailLines, renderBalanceElement } from '../dist/balance-client.js'
 
@@ -239,20 +241,20 @@ test('balance-host: totalAgo/spend with garbage ms/now return null (never throw,
 
 test('balance-host: spendBars aggregates 10-min windows from sampled points', () => {
   const now = T0
-  // 采样点:每 10 分钟一个,余额随 i 线性变化 → 每根柱 = 相邻采样差 2
+  // Sample points: one every 10 minutes, balance linear in i → each bar = adjacent sample difference of 2
   const points = []
   for (let i = 48; i >= 0; i--) points.push({ at: now - i * 10 * 60 * 1000, total: i * 2 })
   const bars = spendBars(points, now)
   assert.equal(bars.length, 48, 'always 48 bars')
   assert.equal(bars[0].spent, 2, 'most recent window: total(now-10m)=2 minus total(now)=0')
   assert.ok(bars.every((b) => b.spent === 2), 'linear decline → every window spends 2')
-  // 第 0 根是最新的(at 接近 now - 10min),越往后越旧
+  // Bar 0 is the newest (at near now - 10min), older further back
   assert.ok(bars[0].at > bars[47].at, 'newest first')
 })
 
 test('balance-host: spendBars returns null for unsampled windows and keeps length', () => {
   const now = T0
-  const points = [{ at: now - 10 * 60 * 1000, total: 50 }, { at: now, total: 40 }] // 只有最近 10 分钟
+  const points = [{ at: now - 10 * 60 * 1000, total: 50 }, { at: now, total: 40 }] // only the most recent 10 minutes
   const bars = spendBars(points, now)
   assert.equal(bars.length, 48)
   assert.equal(bars[0].spent, 10, 'the only sampled window reports its spend')
@@ -261,11 +263,11 @@ test('balance-host: spendBars returns null for unsampled windows and keeps lengt
 
 test('balance-host: spendBars never fabricates a zero when both ends resolve to the SAME sample (regression)', () => {
   const now = T0
-  // 只有一个旧采样点:柱窗口两端都取到它 → 必须 null,绝不能 0(无消费≠无数据)
+  // Only one old sample point: both ends of the bar window resolve to it → must be null, never 0 (no spend ≠ no data)
   const points = [{ at: now - 20 * 60 * 1000, total: 50 }]
   const bars = spendBars(points, now)
   assert.ok(bars.every((b) => b.spent === null), 'single old sample → every bar null, never 0')
-  // 两个采样点都在同一根柱窗口之外(覆盖不足)→ null,不是 0
+  // Both sample points lie outside the same bar window (history too thin) → null, not 0
   const points2 = [
     { at: now - 30 * 60 * 1000, total: 100 },
     { at: now - 25 * 60 * 1000, total: 95 },
@@ -379,7 +381,7 @@ test('balance-host: serialize/parse round-trips activity flags and survives garb
 
 test('balance-host: history.load accepts persisted data, dedupes, caps, and ignores garbage', () => {
   const h = createBalanceHistory()
-  const B = T0 // 对齐基准(整除 5 分钟)
+  const B = T0 // alignment base (divisible by 5 min)
   h.load([
     { at: B + 5 * 60000, total: 50, activity: true },
     { at: B + 0, total: 80 }, // out of order → sorted
@@ -389,8 +391,8 @@ test('balance-host: history.load accepts persisted data, dedupes, caps, and igno
     { at: NaN, total: 1 }, // garbage → skipped
   ])
   const pts = h.points()
-  // B+60000 对齐到 B(与 B+0 同刻,后者已存在且更新晚 → 但 60000 对齐到 0),
-  // 所以有效点:B+0(dup→79)、B+5min → 2 点;注意 load 的对齐后 B+60000 == B+0
+  // B+60000 aligns to B (same instant as B+0, which already exists and updates later → but 60000 aligns to 0),
+  // so the valid points are: B+0 (dup→79), B+5min → 2 points; note after load's alignment B+60000 == B+0
   assert.equal(pts.length, 2, 'aligned duplicates collapse')
   assert.equal(pts[0].at, B)
   assert.equal(pts[0].total, 99, 'later in-window value wins after alignment')
@@ -405,7 +407,7 @@ test('balance-host: history.load accepts persisted data, dedupes, caps, and igno
 
 test('balance-host: spendBars flags activity=true when any window sample had local activity', () => {
   const now = T0
-  // 采样:最近 10 分钟有活动,再往前 10 分钟无活动
+  // Samples: activity in the most recent 10 min, none in the 10 min before
   const points = [
     { at: now - 20 * 60000, total: 100 },
     { at: now - 10 * 60000, total: 95 }, // no activity
@@ -414,7 +416,7 @@ test('balance-host: spendBars flags activity=true when any window sample had loc
   const bars = spendBars(points, now)
   assert.equal(bars[0].spent, 5)
   assert.equal(bars[0].activity, true, 'window containing the activity sample is flagged')
-  // 柱1 窗口 [now-20min, now-10min] 覆盖两个无活动采样 → activity=false
+  // Bar 1 window [now-20min, now-10min] covers two no-activity samples → activity=false
   assert.equal(bars[1].activity, false, 'window without any activity sample is not flagged')
 })
 
@@ -434,16 +436,16 @@ test('balance-host: history.load preserves activity flags and caps at exactly HI
   const h = createBalanceHistory()
   const t0 = T0
   const pts = []
-  // 超过上限 300 个点,交替 activity
+  // Over the cap: 300 points, alternating activity
   for (let i = 0; i < 300; i++) pts.push({ at: t0 + i * SAMPLE_MS, total: 1000 - i, activity: i % 2 === 0 })
   h.load(pts)
   assert.equal(h.points().length, HISTORY_LEN, 'load caps at HISTORY_LEN exactly')
-  // 只保留最新的 288 个:第一个被裁掉的 at 是 t0 + (300-288)*SAMPLE_MS
+  // Only the newest 288 are kept: the first trimmed at is t0 + (300-288)*SAMPLE_MS
   const firstKept = t0 + (300 - HISTORY_LEN) * SAMPLE_MS
   assert.equal(h.points()[0].at, firstKept, 'oldest 12 points dropped, newest kept')
-  // 活动信号保留
+  // Activity flag preserved
   assert.equal(typeof h.points()[0].activity, 'boolean')
-  // latest() 是最后一个(最新)
+  // latest() is the last (newest) one
   assert.equal(h.latest(), 1000 - 299)
 })
 
@@ -455,7 +457,7 @@ test('balance-host: history.load keeps ordering and activity after in-window rec
     { at: t0 + 10 * 60 * 1000, total: 90, activity: false },
     { at: t0 + 20 * 60 * 1000, total: 95, activity: true },
   ])
-  // 之后继续 record:新点必须排在最后,且不能和已有点冲突
+  // Then keep recording: new points must come last and must not conflict with existing points
   h.record(88, t0 + 30 * 60 * 1000, true)
   h.record(85, t0 + 40 * 60 * 1000, false)
   const pts = h.points()
@@ -498,7 +500,7 @@ test('balance-host: spendBars marks positive spend WITHOUT activity as external,
 
 test('balance-host: spendBars window boundary exactly on a sample timestamp', () => {
   const now = T0
-  // 采样点恰好在柱边界上(now-10m, now-20m ...)
+  // Sample points sit exactly on bar boundaries (now-10m, now-20m ...)
   const points = [
     { at: now - 20 * 60000, total: 100 },
     { at: now - 10 * 60000, total: 80 },
@@ -507,14 +509,14 @@ test('balance-host: spendBars window boundary exactly on a sample timestamp', ()
   const bars = spendBars(points, now)
   assert.equal(bars[0].spent, 10, 'boundary sample at now-10m counts as end of window 0')
   assert.equal(bars[1].spent, 20, 'boundary sample at now-20m counts as end of window 1')
-  // 窗口 0:end=now,start=now-10m → startT 取 now-10m 采样(80),endT 取 now(70) → 10 ✓
+  // Window 0: end=now, start=now-10m → startT takes the now-10m sample (80), endT takes now (70) → 10 ✓
 })
 
 // ---- Senior-test coverage: spendBars activity across mixed windows ----
 
 test('balance-host: spendBars activity is window-scoped, not cumulative', () => {
   const now = T0
-  // 只有最旧窗口有活动
+  // Only the oldest window has activity
   const points = [
     { at: now - 30 * 60000, total: 100, activity: true },
     { at: now - 20 * 60000, total: 90, activity: false },
@@ -522,9 +524,9 @@ test('balance-host: spendBars activity is window-scoped, not cumulative', () => 
     { at: now, total: 80, activity: false },
   ]
   const bars = spendBars(points, now)
-  // 柱2 = [now-30m, now-20m] 含 activity=true 的采样 → activity true
+  // Bar 2 = [now-30m, now-20m] contains an activity=true sample → activity true
   assert.equal(bars[2].activity, true, 'oldest window has activity')
-  // 柱0/柱1 无活动
+  // Bars 0/1 have no activity
   assert.equal(bars[0].activity, false)
   assert.equal(bars[1].activity, false)
 })
@@ -533,30 +535,30 @@ test('balance-host: spendBars activity is window-scoped, not cumulative', () => 
 
 test('balance-host: record aligns sample times to integer 5-minute boundaries', () => {
   const h = createBalanceHistory()
-  const base = T0 // 整除 5 分钟
-  h.record(100, base + 42 * 1000 + 137) // 07:xx:42.137 → 对齐到 base
+  const base = T0 // divisible by 5 min
+  h.record(100, base + 42 * 1000 + 137) // 07:xx:42.137 → aligned to base
   assert.equal(h.points()[0].at % 300000, 0, 'sample at is aligned to 5 min')
   assert.equal(h.points()[0].at, base, '42s+137ms collapse to the window start')
-  // 下一个 5 分钟窗口
-  h.record(95, base + SAMPLE_MS + 1) // 对齐后 = base + SAMPLE_MS
+  // Next 5-minute window
+  h.record(95, base + SAMPLE_MS + 1) // after alignment = base + SAMPLE_MS
   assert.equal(h.points().length, 2)
   assert.equal(h.points()[1].at, base + SAMPLE_MS)
 })
 
 test('balance-host: spendBars aligns bar windows to integer 10-minute boundaries', () => {
-  const now = T0 + 42 * 60 * 1000 + 5000 // 现在:42 分 + 5 秒(不对齐)
+  const now = T0 + 42 * 60 * 1000 + 5000 // now: 42 min + 5 s (unaligned)
   const points = [
     { at: T0 - 20 * 60000, total: 100 },
     { at: T0 - 10 * 60000, total: 90 },
     { at: T0, total: 80 },
   ]
   const bars = spendBars(points, now)
-  // 对齐后 alignedNow = T0 + 40min;柱0 = [T0+30min, T0+40min],柱1 = [T0+20min, T0+30min]
+  // After alignment alignedNow = T0 + 40min; bar0 = [T0+30min, T0+40min], bar1 = [T0+20min, T0+30min]
   assert.equal(bars[0].at % 600000, 0, 'bar start aligned to 10 min')
   assert.equal(bars[1].at % 600000, 0, 'every bar aligned')
   assert.ok(bars[0].at > T0, 'newest bar window is after T0')
-  // 柱0 窗口 [T0+30m, T0+40m]:startT = T0 采样(80),endT = T0 采样(80)?两端同点 → null
-  // 实际上 T0 采样 <= T0+30m,endIdx 取 T0 采样,startIdx 也取 T0 采样 → 同点 → null
+  // Bar 0 window [T0+30m, T0+40m]: startT = T0 sample (80), endT = T0 sample (80)? Both ends same point → null
+  // In fact the T0 sample <= T0+30m, endIdx picks the T0 sample, startIdx also picks the T0 sample → same point → null
   assert.equal(bars[0].spent, null, 'window with no fresh sample between boundaries → null (not 0)')
 })
 
@@ -564,8 +566,8 @@ test('balance-host: unaligned persisted times are aligned on load (no boundary d
   const h = createBalanceHistory()
   const base = T0
   h.load([
-    { at: base - 9 * 60000 - 1000, total: 90 }, // 未对齐,load 后对齐到 base-10min
-    { at: base - 1, total: 80 }, // base-1 属于 [base-5min, base) → 对齐到 base-5min
+    { at: base - 9 * 60000 - 1000, total: 90 }, // unaligned, aligned to base-10min after load
+    { at: base - 1, total: 80 }, // base-1 falls in [base-5min, base) → aligned to base-5min
   ])
   const pts = h.points()
   assert.equal(pts[0].at % 300000, 0, 'persisted point aligned on load')
@@ -576,7 +578,7 @@ test('balance-host: unaligned persisted times are aligned on load (no boundary d
 
 // ---- Timezone-aware alignment ----
 
-/** 返回绝对时刻 ms 在 tz 的墙钟分钟-of-day。 */
+/** Return the wall-clock minute-of-day of the absolute instant ms in tz. */
 function minutesInTz(tz, ms) {
   const f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' })
   const parts = {}
@@ -585,31 +587,31 @@ function minutesInTz(tz, ms) {
 }
 
 test('balance-host: alignWallClock aligns to integer step in the GIVEN timezone (DST-safe)', () => {
-  // Asia/Shanghai (UTC+8):任何时刻对齐后,其上海墙钟分钟必为 step 的倍数
-  const raw = new Date('2026-08-18T02:37:00Z').getTime() // 上海 10:37
+  // Asia/Shanghai (UTC+8): after aligning any instant, its Shanghai wall-clock minute is a multiple of step
+  const raw = new Date('2026-08-18T02:37:00Z').getTime() // Shanghai 10:37
   const aligned = alignWallClock('Asia/Shanghai', raw, 10 * 60000)
   assert.equal(aligned % 600000, 0, 'Shanghai UTC-aligned (offset is whole 10-min multiples)')
-  // Europe/London 夏季 (UTC+1):偏移非 10 分钟整倍数但墙钟对齐仍正确
-  const londonRaw = new Date('2026-08-18T09:37:00Z').getTime() // 伦敦 10:37 BST
+  // Europe/London summer (UTC+1): offset is not a whole 10-min multiple but wall-clock alignment is still correct
+  const londonRaw = new Date('2026-08-18T09:37:00Z').getTime() // London 10:37 BST
   const londonAligned = alignWallClock('Europe/London', londonRaw, 10 * 60000)
   assert.equal(minutesInTz('Europe/London', londonAligned) % 10, 0, 'London wall-clock minute aligned to 10')
 })
 
 test('balance-host: alignWallClock handles non-10-minute-multiple offsets (Kathmandu +5:45)', () => {
-  // Asia/Kathmandu = UTC+5:45 → UTC 整 10 分钟的时刻在尼泊尔墙钟是 xx:x5 分。
-  // 时区对齐必须把它对齐到尼泊尔墙钟的整 10 分钟(xx:00 / xx:10 …),即使
-  // 结果在 UTC 上不是整 10 分钟。
-  const kathRaw = new Date('2026-08-18T04:42:00Z').getTime() // 尼泊尔 10:27
+  // Asia/Kathmandu = UTC+5:45 → instants at whole 10-min UTC are xx:x5 in the Nepali wall clock.
+  // Timezone alignment must align to whole 10 minutes of the Nepali wall clock (xx:00 / xx:10 …), even
+  // when the result is not a whole 10 minutes in UTC.
+  const kathRaw = new Date('2026-08-18T04:42:00Z').getTime() // Nepal 10:27
   const aligned = alignWallClock('Asia/Kathmandu', kathRaw, 10 * 60000)
   assert.ok(aligned !== undefined)
   assert.equal(minutesInTz('Asia/Kathmandu', aligned) % 10, 0, 'Kathmandu wall-clock minute aligned to 10')
   assert.equal(aligned % 600000 !== 0, true, 'result is NOT UTC-aligned (offset is 5:45) — this is the point')
-  // 对齐后不晚于原始时刻
+  // The aligned result is not later than the original instant
   assert.ok(aligned <= kathRaw, 'aligns backwards (floor), never forward')
 })
 
 test('balance-host: spendBars(tz) produces bar windows on integer minutes of that timezone', () => {
-  const kathRaw = new Date('2026-08-18T04:42:00Z').getTime() // 尼泊尔 10:27
+  const kathRaw = new Date('2026-08-18T04:42:00Z').getTime() // Nepal 10:27
   const points = [
     { at: kathRaw - 30 * 60000, total: 100 },
     { at: kathRaw - 20 * 60000, total: 90 },
@@ -617,11 +619,11 @@ test('balance-host: spendBars(tz) produces bar windows on integer minutes of tha
     { at: kathRaw, total: 70 },
   ]
   const bars = spendBars(points, kathRaw, 48, 10 * 60000, 'Asia/Kathmandu')
-  // 每根柱的 at(窗口起点)在尼泊尔墙钟都是整 10 分钟
+  // Every bar's at (window start) is a whole 10 minutes in the Nepali wall clock
   for (const b of bars) {
     assert.equal(minutesInTz('Asia/Kathmandu', b.at) % 10, 0, 'every bar start sits on an integer 10-min boundary in the configured tz')
   }
-  // 无 tz → UTC 对齐(兼容默认)
+  // No tz → UTC-aligned (default compatibility)
   const barsUtc = spendBars(points, kathRaw, 48, 10 * 60000)
   assert.equal(barsUtc[0].at % 600000, 0, 'no tz → UTC-aligned')
 })
@@ -636,7 +638,7 @@ test('balance-host: alignWallClock returns undefined for invalid timezone (calle
 test('model-class: official provider classifies flash/pro correctly', () => {
   assert.equal(classifyModel('deepseek-official', 'deepseek-v4-flash'), 'official-flash')
   assert.equal(classifyModel('deepseek-official', 'deepseek-v4-pro'), 'official-pro')
-  // 大小写不敏感
+  // Case-insensitive
   assert.equal(classifyModel('DEEPSEEK-OFFICIAL', 'DeepSeek-V4-Flash'), 'official-flash')
 })
 

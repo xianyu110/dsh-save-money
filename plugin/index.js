@@ -202,36 +202,46 @@ function validateWindows(windows, defaultTz) {
     return { ok: true };
 }
 /**
- * dsh-save-money — Account balance query (DeepSeek API /user/balance), Host side.
- * ...doc...
+ * dsh-save-money — Balance history (sampling queue + persistence), Host side.
+ *
+ * A fixed-size queue of balance samples (one per 5-minute wall-clock window,
+ * up to 288 points = 24 hours), used to derive "how much was spent in the
+ * last 1 hour / 10 minutes / 24 hours" from balance changes, plus the
+ * account-level persistence file (~/.dsh/dsh-save-money-balance.json).
+ *
+ * Inlined into the host plugin body at build time (scripts/build.js): no
+ * imports survive, so cross-module references are `declare`d for standalone
+ * type-checking and resolve to the inlined scope at runtime.
  */
-/** Cache window; the header polls every 30s, so keep the upstream call rare. */
-const CACHE_MS = 60000;
-/** 余额采样周期:后端每 5 分钟记录一次余额。 */
+/** Balance sampling period: the backend records the balance every 5 minutes. */
 const SAMPLE_MS = 5 * 60 * 1000;
-/** 采样点上限:5min × 288 = 24 小时。 */
+/** Sample cap: 5min × 288 = 24 hours. */
 const HISTORY_LEN = 288;
 /**
- * 余额历史队列:每 5 分钟一个采样点,保留最近 24 小时。
- * 用途:由余额变化计算「最近 1 小时 / 10 分钟 / 24 小时消费了多少钱」。
+ * Balance history queue: one sample per 5 minutes, keeps the last 24 hours.
+ * Purpose: derive "spend in the last 1h / 10min / 24h" from balance changes.
  *
- * 防膨胀保证(绝对上限,任何输入都不可能突破):
- *  - record() 先做输入校验:非有限数字(NaN / ±Infinity / 非数字)直接忽略,
- *    不会入队,也不可能污染 latest() / spend()。
- *  - 同一 5 分钟窗口内的再次 record 只更新最新值(不新增点)。
- *  - 时间戳乱序(倒退)一律不新增:at <= last.at 时视为同窗口更新,从根上
- *    杜绝乱序 push 破坏升序;只有严格递增且间隔 >= SAMPLE_MS 才新增。
- *  - push 后立即用 splice 强制裁剪到 HISTORY_LEN —— 即使某次批量 push 了
- *    多个点,数组长度也一次性回到上限内,峰值严格 <= HISTORY_LEN + 批量数,
- *    且 splice(0, overflow) 只发生一次。调用路径当前每次仅 push 1 个,
- *    所以实际峰值恒为 HISTORY_LEN + 1 = 289,随后即回到 288。
+ * Anti-growth guarantees (hard ceiling, no input can ever break through):
+ *  - record() validates input first: non-finite numbers (NaN / ±Infinity /
+ *    non-numbers) are ignored, never enqueued, cannot pollute latest()/spend().
+ *  - A second record() inside the same 5-minute window only updates the
+ *    newest value (no new point).
+ *  - Out-of-order timestamps (going backwards) never add a point: at <=
+ *    last.at is treated as a same-window update, so out-of-order pushes can
+ *    never break the ascending order; only strictly increasing gaps >=
+ *    SAMPLE_MS add a point.
+ *  - After a push the array is immediately trimmed to HISTORY_LEN with one
+ *    splice — even a batch push peaks at HISTORY_LEN + batch size, and
+ *    splice(0, overflow) happens exactly once. The current call path pushes
+ *    1 point at a time, so the actual peak is always HISTORY_LEN + 1 = 289,
+ *    then back to 288.
  */
 function createBalanceHistory() {
     const points = [];
     const pushPoint = (at, total, activity) => {
         points.push({ at, total, ...(activity === undefined ? {} : { activity }) });
         if (points.length > HISTORY_LEN) {
-            points.splice(0, points.length - HISTORY_LEN); // 一次裁掉全部溢出
+            points.splice(0, points.length - HISTORY_LEN); // trim all overflow at once
         }
     };
     return {
@@ -240,13 +250,16 @@ function createBalanceHistory() {
                 return;
             if (typeof total !== 'number' || !Number.isFinite(total))
                 return;
-            // 采样点对齐到整数 5 分钟(07:42:37 → 07:40):任何时区偏移都是整分钟,
-            // 所以 ms % SAMPLE_MS == 0 在所有时区都落在整 5 分钟上 —— 与墙钟对齐,
-            // 便于和官方后台(按整点计费)对比。对齐后同窗口的多次 record 共享同
-            // 一个 at,自然落入「同刻更新」分支,去重语义与整数边界完全一致。
+            // Align the sample to an integer 5-minute boundary (07:42:37 → 07:40):
+            // every timezone offset is a whole number of minutes, so
+            // ms % SAMPLE_MS == 0 lands on an integer 5-minute mark in every zone —
+            // aligned with the wall clock, comparable with the official per-hour
+            // billing. After alignment, repeated records in the same window share
+            // one `at` and naturally fall into the same-window update branch.
             at = at - (at % SAMPLE_MS);
             const last = points[points.length - 1];
-            // 乱序(倒退或同刻)一律按同窗口更新,绝不新增:保持数组按 at 升序。
+            // Out-of-order (backwards or same instant) always updates in place,
+            // never adds: keeps the array ascending by `at`.
             if (last && at <= last.at) {
                 last.total = total;
                 if (activity !== undefined)
@@ -261,11 +274,11 @@ function createBalanceHistory() {
             }
             pushPoint(at, total, activity);
         },
-        /** 最新一条余额,无采样时返回 null。 */
+        /** Latest balance, or null when nothing has been sampled yet. */
         latest() {
             return points.length > 0 ? points[points.length - 1].total : null;
         },
-        /** now - ms 时刻的余额(取不晚于该时刻的最近采样);历史不足返回 null。 */
+        /** Balance at `now - ms` (nearest sample not later than that instant); null when history is too short. */
         totalAgo(ms, now = Date.now()) {
             if (typeof ms !== 'number' || !Number.isFinite(ms) || typeof now !== 'number' || !Number.isFinite(now))
                 return null;
@@ -276,7 +289,7 @@ function createBalanceHistory() {
             }
             return null;
         },
-        /** 最近 ms 的消费金额(正数 = 花掉;余额回升时为负);历史不足返回 null。 */
+        /** Spend over the last `ms` (positive = spent; balance top-up = negative); null when history is too short. */
         spend(ms, now = Date.now()) {
             const cur = this.latest();
             const prev = this.totalAgo(ms, now);
@@ -284,11 +297,11 @@ function createBalanceHistory() {
                 return null;
             return prev - cur;
         },
-        /** 当前全部采样点(调试/展示)。 */
+        /** All current samples (debug/display). */
         points() {
             return points.slice();
         },
-        /** 用持久化的数据整体替换当前历史(启动时调用);空/非法输入忽略。 */
+        /** Replace the whole history with persisted data (startup); empty/invalid input is ignored. */
         load(persisted) {
             if (!Array.isArray(persisted) || persisted.length === 0)
                 return;
@@ -298,15 +311,16 @@ function createBalanceHistory() {
                     continue;
                 if (typeof p.total !== 'number' || !Number.isFinite(p.total))
                     continue;
-                // 对齐到整数 5 分钟(与 record 一致):旧版本可能存了任意时刻,载入后统一
+                // Align to an integer 5-minute boundary (same as record): old versions
+                // may have stored arbitrary instants; unify on load.
                 const aligned = p.at - (p.at % SAMPLE_MS);
                 clean.push({ at: aligned, total: p.total, ...(p.activity === undefined ? {} : { activity: !!p.activity }) });
             }
             if (clean.length === 0)
                 return;
-            // 保证升序(持久化文件可能乱序)
+            // Ascending order (the persisted file may be out of order)
             clean.sort((a, b) => a.at - b.at);
-            // 去重(同一时刻保留最后一条)
+            // Dedupe (same instant keeps the last entry)
             const deduped = [];
             for (const p of clean) {
                 const last = deduped[deduped.length - 1];
@@ -323,9 +337,10 @@ function createBalanceHistory() {
     };
 }
 /**
- * 账户指纹:对 DeepSeek API key 做 FNV-1a 32 位散列(前 8 位十六进制)。
- * 仅用于「换 key = 换账户 = 旧历史作废」的身份比对,不是安全用途
- * (密钥本身不进持久化文件,也不会被这个哈希还原)。
+ * Account fingerprint: FNV-1a 32-bit hash of the DeepSeek API key (first 8 hex
+ * chars). Only used to compare "new key = new account = old history is
+ * invalid"; NOT a security primitive (the key itself never enters the
+ * persisted file and cannot be recovered from this hash).
  */
 function keyFingerprint(key) {
     let h = 0x811c9dc5;
@@ -335,13 +350,13 @@ function keyFingerprint(key) {
     }
     return (h >>> 0).toString(16).padStart(8, '0');
 }
-/** 余额历史持久化文件名(用户目录 ~/.dsh 下,账户级、跨项目共享)。 */
+/** Balance history persistence file name (under the user home ~/.dsh, account-level, shared across projects). */
 const BALANCE_HISTORY_FILE = 'dsh-save-money-balance.json';
-/** 序列化历史(供写盘)。 */
+/** Serialize the history (for writing to disk). */
 function serializeBalanceHistory(p) {
     return JSON.stringify({ keyId: p.keyId, points: p.points });
 }
-/** 解析持久化历史;非法 JSON / 非对象 / 结构不符返回 null(绝不 throw)。 */
+/** Parse persisted history; invalid JSON / non-object / wrong shape returns null (never throws). */
 function parseBalanceHistory(text) {
     try {
         const data = JSON.parse(text);
@@ -355,15 +370,32 @@ function parseBalanceHistory(text) {
         return null;
     }
 }
-/** 官方 DeepSeek provider 路由名(harness 硬编码)。 */
+/**
+ * dsh-save-money — Model classification + spend bars (Host side).
+ *
+ * Two pure logic groups:
+ *  - classifyModel / modelApplyEnabled: which model tier a request belongs to
+ *    and whether that tier is checked in the save-mode config (checked = pause
+ *    inside windows, unchecked = exempt). Used by the request gate.
+ *  - spendBars / alignWallClock: aggregate balance samples into per-10-minute
+ *    spend bars aligned to wall-clock boundaries in the configured timezone.
+ *
+ * Inlined into the host plugin body at build time (scripts/build.js): no
+ * imports survive, so cross-module references are `declare`d for standalone
+ * type-checking and resolve to the inlined scope at runtime.
+ */
+/** Official DeepSeek provider route name (hard-coded by the harness). */
 const OFFICIAL_PROVIDER = 'deepseek-official';
 /**
- * 按 provider 名 + 模型名识别请求的档位。纯函数、永不抛异常:
- *  - 服务商:provider 小写含 'opencode' → OpenCode(go/zen 网关复用同路由);
- *    provider === 'deepseek-official' → 官方;其余 → null(豁免)。
- *  - 档位:模型名小写含 'pro' → pro;含 'flash' → flash;否则 null(豁免,
- *    包括旧名 chat/reasoner 与未知模型 —— 只有明确 flash/pro 才可能被暂停)。
- * 任何输入形态(undefined/非字符串)都安全返回 null。
+ * Classify a request's tier from the provider name + model name. Pure
+ * function, never throws:
+ *  - Provider: lowercase contains 'opencode' → OpenCode (the go/zen gateway
+ *    reuses the same route); provider === 'deepseek-official' → official;
+ *    anything else → null (exempt).
+ *  - Tier: model name lowercase contains 'pro' → pro; contains 'flash' →
+ *    flash; otherwise null (exempt, including the legacy chat/reasoner names
+ *    and unknown models — only explicit flash/pro can ever be paused).
+ * Any input shape (undefined / non-string) safely returns null.
  */
 function classifyModel(provider, model) {
     const p = typeof provider === 'string' ? provider.toLowerCase() : '';
@@ -373,23 +405,24 @@ function classifyModel(provider, model) {
     const isPro = m.indexOf('pro') >= 0;
     const isFlash = m.indexOf('flash') >= 0;
     if (!isPro && !isFlash)
-        return null; // unknown → 豁免
+        return null; // unknown → exempt
     if (p === OFFICIAL_PROVIDER)
         return isPro ? 'official-pro' : 'official-flash';
     if (p.indexOf('opencode') >= 0)
         return isPro ? 'opencode-pro' : 'opencode-flash';
-    return null; // 其他第三方 → 豁免(它们没有 DeepSeek 峰谷策略)
+    return null; // other third parties → exempt (they have no DeepSeek peak pricing)
 }
 /**
- * 查询某一档位在当前 modelApply 配置中是否勾选(是否应执行省钱)。
- * 配置缺省/损坏时返回 false(安全方向:不暂停);档位为 null 时恒 false。
+ * Whether a tier is checked in the current modelApply config (should save).
+ * Missing/corrupt config returns false (safe direction: no pause); a null
+ * tier is always false.
  */
 function modelApplyEnabled(applied, cls) {
     if (!applied || typeof applied !== 'object' || cls === null)
         return false;
     return applied[cls] === true;
 }
-/** tz 时区的墙钟分钟-of-day(0..1439)。内部工具,供时区对齐使用。 */
+/** Wall-clock minutes-of-day (0..1439) for tz. Internal helper for tz alignment. */
 function tzMinutes(tz, date) {
     try {
         const f = new Intl.DateTimeFormat('en-US', {
@@ -404,14 +437,16 @@ function tzMinutes(tz, date) {
     }
     catch (e) {
         return -1;
-    } // 非法时区 → 调用方回退到 UTC 对齐
+    } // invalid tz → caller falls back to UTC alignment
 }
-/** 把绝对时刻 ms 对齐到「tz 时区墙钟的整 step 分钟」。
- * 例如 tz=Asia/Shanghai、step=10min:任何时刻都对齐到 xx:00 / xx:10 / xx:20 …。
- * 关键:对齐基于**墙钟分钟**而不是 UTC 毫秒——对偏移非 10 分钟整倍数的
- * 时区(如 Asia/Kathmandu +5:45)也正确,柱边界恒显示为整数 10 分钟,
- * 与官方后台按当地整点计费的数据可比。DST 安全(基于实时区规则,不是
- * 固定偏移)。非法 tz 返回 undefined,调用方回退到 UTC 对齐。 */
+/** Align an absolute instant ms to "whole `step` minutes of the tz wall
+ * clock". E.g. tz=Asia/Shanghai, step=10min: any instant aligns to
+ * xx:00 / xx:10 / xx:20 …. Key point: alignment is based on the WALL-CLOCK
+ * minute, not UTC milliseconds — timezones whose offset is not a multiple of
+ * 10 minutes (e.g. Asia/Kathmandu +5:45) are still correct, and bar
+ * boundaries always display as integer 10 minutes, comparable with the
+ * official local per-hour billing. DST-safe (real timezone rules, not a fixed
+ * offset). Returns undefined for an invalid tz (caller falls back to UTC). */
 function alignWallClock(tz, ms, stepMs) {
     const m = tzMinutes(tz, new Date(ms));
     if (m < 0)
@@ -420,8 +455,10 @@ function alignWallClock(tz, ms, stepMs) {
     if (!(stepMin >= 1))
         return undefined;
     const aligned = m - (m % stepMin);
-    // 用对齐后的墙钟分钟求绝对时刻:先近似 UTC,再按 tz 规则迭代校正
-    // (wallToUTC 的思路:对齐 DST 偏移造成的日差,再对分钟差)。
+    // Reconstruct the absolute instant from the aligned wall-clock minute:
+    // start from an approximate UTC guess, then correct iteratively by the tz
+    // rules (wallToUTC's approach: fix the day difference from DST offsets,
+    // then the minute difference).
     const wc = (() => {
         const f = new Intl.DateTimeFormat('en-US', {
             timeZone: tz, hour12: false,
@@ -449,20 +486,22 @@ function alignWallClock(tz, ms, stepMs) {
     return out;
 }
 /**
- * 从余额采样点聚合「最近 8 小时、10 分钟一根」的消费柱形数据。
- * 每根柱 = 窗口起始时刻的余额 − 窗口结束时刻的余额(正=花掉,负=回升)。
- * 窗口边界对齐:tz 给定(推荐)时按**该时区墙钟的整 10 分钟**对齐,柱窗口
- * 恒为「07:40–07:50」「07:50–08:00」这类整数区间,与官方后台按当地整点
- * 计费的数据天然可比(DST 安全);tz 缺省或非法时回退到 UTC 对齐。
- * 窗口两端的余额取自不晚于该时刻的最近采样;任一端无采样,或两端取到
- * **同一个采样点**(该窗口内没有可观测的余额变化,历史覆盖不足),则该柱
- * 为 null——绝不用假 0 冒充"没有消费"。
- * activity:该柱时间窗内任一采样点带 activity=true 即为 true(本环境有活动)。
- * 数组从最近到最远排列(第 0 根是最近 10 分钟)。
- * 纯函数、不抛异常、长度恒为 count(默认 48 = 8 小时)。
+ * Aggregate balance samples into "last 8 hours, one bar per 10 minutes" spend
+ * data. Each bar = balance at window start − balance at window end (positive =
+ * spent, negative = top-up). Window boundaries: with tz given (recommended)
+ * they align to the INTEGER 10-minute marks of that tz's wall clock, so bars
+ * are always "07:40–07:50" / "07:50–08:00" intervals, naturally comparable
+ * with the official local per-hour billing (DST-safe); without tz (or invalid
+ * tz) it falls back to UTC alignment. Each end's balance is the nearest sample
+ * not later than that instant; if either end has no sample, or both ends land
+ * on the SAME sample (no observable balance change inside the window, history
+ * too thin), the bar is null — never a fake 0 pretending "no spend".
+ * activity: true when any sample inside the window carries activity=true.
+ * The array runs newest-first (index 0 = the most recent 10 minutes).
+ * Pure function, never throws, length always `count` (default 48 = 8 hours).
  */
 function spendBars(points, now = Date.now(), count = 48, barMs = 10 * 60 * 1000, tz) {
-    // 返回不晚于 t 的最近采样索引;无则 -1。
+    // Index of the nearest sample not later than t; -1 when none.
     const indexAt = (t) => {
         for (let i = points.length - 1; i >= 0; i--) {
             if (points[i].at <= t)
@@ -470,8 +509,8 @@ function spendBars(points, now = Date.now(), count = 48, barMs = 10 * 60 * 1000,
         }
         return -1;
     };
-    // 对齐 now:优先按 tz 墙钟的整 barMs 分钟对齐(官方后台按当地整点计费);
-    // tz 缺省/非法时回退到 UTC 对齐。
+    // Align now: prefer the tz wall-clock integer barMs marks (official billing
+    // uses local whole hours); fall back to UTC alignment without tz / invalid tz.
     const alignedNow = (tz ? alignWallClock(tz, now, barMs) : undefined) ?? (now - (now % barMs));
     const out = [];
     for (let i = 0; i < count; i++) {
@@ -479,11 +518,12 @@ function spendBars(points, now = Date.now(), count = 48, barMs = 10 * 60 * 1000,
         const start = alignedNow - (i + 1) * barMs;
         const endIdx = indexAt(end);
         const startIdx = indexAt(start);
-        // 任一端无采样,或两端是同一个采样点(窗口内无余额变化信息)→ null。
+        // Either end has no sample, or both ends are the same sample (no balance
+        // change info inside the window) → null.
         const spent = (startIdx >= 0 && endIdx >= 0 && startIdx !== endIdx)
             ? points[startIdx].total - points[endIdx].total
             : null;
-        // 窗口内(start..end] 任一采样点有活动 → 本环境活动为 true
+        // Any sample with activity=true inside the window (start..end] → local activity
         let activity = false;
         for (let j = Math.max(0, startIdx); j <= endIdx && j < points.length; j++) {
             if (points[j].activity === true) {
@@ -495,6 +535,21 @@ function spendBars(points, now = Date.now(), count = 48, barMs = 10 * 60 * 1000,
     }
     return out;
 }
+/**
+ * dsh-save-money — Balance transport: one upstream /user/balance request
+ * (official DeepSeek API), Host side.
+ *
+ * createBalanceService exposes a cached, in-flight-deduped query() that never
+ * throws: it gates on the official API config, fetches through real fetch (the
+ * official module form) or curl via the subprocess service (the dynamic-plugin
+ * sandbox, where fetch is a guard stub), and fails closed on any error.
+ *
+ * Inlined into the host plugin body at build time (scripts/build.js): no
+ * imports survive, so cross-module references are `declare`d for standalone
+ * type-checking and resolve to the inlined scope at runtime.
+ */
+/** Cache window; the header polls every 30s, so keep the upstream call rare. */
+const CACHE_MS = 60000;
 /** Hard ceiling for one upstream balance attempt (fetch or subprocess settle).
  * The DeepSeek /user/balance call normally returns in ~1s; a 5s bound gives
  * plenty of headroom while guaranteeing a hung child can never pin the plugin. */
@@ -660,733 +715,1247 @@ async function fetchBalance(ctx, sandbox) {
         return { ok: false, error: String((e && e.message) || e) };
     }
 }
+/**
+ * dsh-save-money — Config controller (single source of truth for settings).
+ *
+ * Owns the persisted settings: defaults, validation, load/persist to the
+ * workspace file (save-money.config.json), the config-location resolver
+ * (pointer file + candidate directories), and the applyConfig/snapshot pair.
+ * Extracted from src/host.ts so the plugin body stays small and this module is
+ * independently testable.
+ *
+ * Inlined into the Host plugin body at build time (scripts/build.js) — same
+ * mechanism as src/core.ts and src/balance-host.ts. It exports factories and
+ * plain functions only; the apply() glue in host.ts calls createConfig().
+ */
+/** Defaults: official flash/pro apply (paused); opencode tiers exempt. */
+const CONFIG_DEFAULTS = {
+    enabled: false,
+    timezone: 'Asia/Shanghai',
+    warnMinutes: 5,
+    windows: [],
+    reconcileOnStart: true,
+    lang: 'auto',
+    showBalance: false,
+    modelApply: {
+        'official-flash': true,
+        'official-pro': true,
+        'opencode-flash': false,
+        'opencode-pro': false,
+    },
+};
+const LANGS = ['auto', 'zh', 'zh-TW', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko'];
+const MODEL_APPLY_KEYS = ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro'];
+const CONFIG_FILE = 'save-money.config.json';
+const POINTER_FILE = 'save-money-config-path.json';
+// Pure time helpers inlined from src/core.ts at build time — the `import`
+// below keeps dist/config.js a runnable ESM module for the unit tests; the
+// inline pass strips the import line (scripts/build.js stripExports) so the
+// same-scope core helpers resolve at runtime inside the plugin body.
 
-export function apply(ctx) {
-        const DEFAULTS = {
-            enabled: false,
-            timezone: 'Asia/Shanghai',
-            warnMinutes: 5,
-            windows: [],
-            reconcileOnStart: true,
-            lang: 'auto',
-            showBalance: false,
-            // v1.4.1:按模型档位决定是否执行省钱。默认只勾官方两项 —— 全新用户
-            // 启用省钱只作用于官方 flash/pro;OpenCode(订阅套餐)与未知模型默认
-            // 豁免,用户主动勾选才暂停。用户改过配置后尊重持久化值,绝不重置。
-            modelApply: {
-                'official-flash': true,
-                'official-pro': true,
-                'opencode-flash': false,
-                'opencode-pro': false,
+/** DSH user dir (~/.dsh): exists on Windows / macOS / Linux. */
+function dshHome() {
+    try {
+        const h = (typeof process !== 'undefined' && process && process.env)
+            ? (process.env.DSH_HOME || process.env.USERPROFILE || process.env.HOME)
+            : '';
+        return typeof h === 'string' && h.length > 0 ? h.replace(/[\\/]+$/, '') : '';
+    }
+    catch (e) {
+        return '';
+    }
+}
+/** Session working directory (any of the shapes DSH exposes). */
+function sessionCwdOf(s) {
+    const c = s && (s.meta && s.meta.cwd || s.header && s.header.cwd || s.cwd);
+    return typeof c === 'string' ? c : '';
+}
+/** Read the pointer file (best-effort; '' when absent/unreadable). */
+async function readPointer(deps) {
+    const home = dshHome();
+    const fs = deps.getFs();
+    if (!home || !fs)
+        return '';
+    try {
+        const target = await fs.resolve(POINTER_FILE, { cwd: home });
+        const text = await fs.readText(target);
+        const data = JSON.parse(text);
+        const p = data && typeof data.path === 'string' ? data.path : '';
+        return p.replace(/[\\/]+$/, '');
+    }
+    catch (e) {
+        return '';
+    }
+}
+/** Record the last real config dir in ~/.dsh (best-effort; never throws). */
+async function writePointer(deps, dir) {
+    const home = dshHome();
+    const fs = deps.getFs();
+    if (!home || !fs || !dir)
+        return;
+    try {
+        const target = await fs.resolve(POINTER_FILE, { cwd: home });
+        await fs.writeText(target, JSON.stringify({ path: dir }, null, 2), undefined, undefined, { mode: 'workspace-write', workspaceRoot: home });
+    }
+    catch (e) { /* best-effort */ }
+}
+/**
+ * Candidate config directories, highest priority first. The pointer (the last
+ * real location) is handled separately in resolveWorkspaceRoot.
+ */
+function candidateRoots(deps, defaultWorkspaceRoot) {
+    const out = [];
+    const push = (c) => {
+        c = String(c || '').replace(/[\\/]+$/, '');
+        if (c && !out.includes(c))
+            out.push(c);
+    };
+    // 1. the calling session (agents.currentInitiator): the session that
+    //    actually uses the plugin, so config follows the user's workspace.
+    try {
+        const agentsSvc = deps.getAgents();
+        const init = agentsSvc && typeof agentsSvc.currentInitiator === 'function'
+            ? agentsSvc.currentInitiator()
+            : undefined;
+        const sessionsSvc = deps.getSessions();
+        if (init && sessionsSvc && typeof sessionsSvc.get === 'function') {
+            push(sessionCwdOf(sessionsSvc.get(init.id) || init));
+        }
+    }
+    catch (e) { /* skip */ }
+    // 2. every session whose cwd matches the repo basename (last wins, so the
+    //    newest checkout is preferred when several exist).
+    const sessionsSvc = deps.getSessions();
+    if (sessionsSvc && typeof sessionsSvc.list === 'function') {
+        try {
+            const matches = [];
+            for (const s of sessionsSvc.list()) {
+                const c = sessionCwdOf(s).replace(/[\\/]+$/, '');
+                if (/dsh-save-money$/i.test(c))
+                    matches.push(c);
+            }
+            for (const m of matches)
+                push(m);
+        }
+        catch (e) { /* skip */ }
+    }
+    // 3. process.cwd() itself (official module form only; the harness may be
+    //    started from the repo checkout).
+    try {
+        if (typeof process !== 'undefined' && process && typeof process.cwd === 'function') {
+            push(String(process.cwd()));
+        }
+    }
+    catch (e) { /* skip */ }
+    // 4. sibling of process.cwd() named dsh-save-money — the README
+    //    quick-install layout: ~/app/dsh-save-money next to
+    //    ~/app/deepseek-harness, harness started from the latter.
+    try {
+        if (typeof process !== 'undefined' && process && typeof process.cwd === 'function') {
+            const cwd = String(process.cwd()).replace(/[\\/]+$/, '');
+            const idx = Math.max(cwd.lastIndexOf('\\'), cwd.lastIndexOf('/'));
+            if (idx > 0)
+                push(cwd.slice(0, idx + 1) + 'dsh-save-money');
+        }
+    }
+    catch (e) { /* skip */ }
+    // 5. sandboxPolicy fallback (the harness install dir).
+    push(defaultWorkspaceRoot);
+    return out;
+}
+/**
+ * Create the config controller bound to one plugin instance.
+ *
+ * `deps` supplies the deferred service getters and an optional gate-open
+ * callback. The returned controller owns the mutable config state and exposes
+ * the persistence + validation surface the rest of the plugin calls.
+ */
+function createConfig(deps) {
+    // Mutable config state. `cfgRef` is a stable object whose `.cfg` field is
+    // replaced on load/apply — callers that hold `cfgRef` always see the latest.
+    const cfgRef = { cfg: { ...CONFIG_DEFAULTS, windows: [] } };
+    let configLoaded = false;
+    let configPath = '';
+    let resolvedConfigDir = '';
+    const defaultWorkspaceRoot = (() => {
+        const sandboxPolicy = deps.getSandboxPolicy();
+        return (sandboxPolicy && typeof sandboxPolicy.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot.length > 0)
+            ? sandboxPolicy.workspaceRoot
+            : '';
+    })();
+    /** The first directory that actually contains a config file wins; see
+     * candidateRoots for the priority list. */
+    const resolveWorkspaceRoot = async () => {
+        const fs = deps.getFs();
+        if (!fs)
+            return defaultWorkspaceRoot;
+        const ptr = await readPointer(deps);
+        if (ptr) {
+            try {
+                await fs.readText(await fs.resolve(CONFIG_FILE, { cwd: ptr }));
+                resolvedConfigDir = ptr;
+                return ptr;
+            }
+            catch (e) { /* pointer stale — fall through to candidates */ }
+        }
+        const roots = candidateRoots(deps, defaultWorkspaceRoot);
+        for (const dir of roots) {
+            if (!dir)
+                continue;
+            try {
+                await fs.readText(await fs.resolve(CONFIG_FILE, { cwd: dir }));
+                resolvedConfigDir = dir;
+                return dir;
+            }
+            catch (e) { /* no config here — try next */ }
+        }
+        // No config exists anywhere yet: prefer a repo-named candidate (the
+        // sibling-directory layout from the README, or a session cwd), so a fresh
+        // install writes next to the checkout instead of polluting the harness
+        // install dir; fall back to the first candidate.
+        let target = '';
+        for (const dir of roots) {
+            if (dir && /dsh-save-money$/i.test(dir)) {
+                target = dir;
+                break;
+            }
+        }
+        resolvedConfigDir = target || roots[0] || defaultWorkspaceRoot;
+        return resolvedConfigDir;
+    };
+    const persistConfig = async () => {
+        const fs = deps.getFs();
+        if (!fs) {
+            console.error('[save-money] persist skipped: fs service unavailable');
+            return;
+        }
+        try {
+            const workspaceRoot = await resolveWorkspaceRoot();
+            if (!workspaceRoot)
+                return;
+            const target = await fs.resolve(CONFIG_FILE, { cwd: workspaceRoot });
+            configPath = fs.processPath ? String(fs.processPath(target)) : String(target && (target.path || target.filePath || ''));
+            await fs.writeText(target, JSON.stringify(snapshot(), null, 2), undefined, undefined, { mode: 'workspace-write', workspaceRoot });
+            await writePointer(deps, workspaceRoot);
+            console.log('[save-money] config persisted to ' + workspaceRoot + '\\' + CONFIG_FILE);
+        }
+        catch (e) {
+            console.error('[save-money] persist failed: ' + String((e && e.message) || e));
+        }
+    };
+    const loadConfig = async () => {
+        const fs = deps.getFs();
+        if (!fs) {
+            console.error('[save-money] load skipped: fs service unavailable');
+            return;
+        }
+        try {
+            const workspaceRoot = await resolveWorkspaceRoot();
+            if (!workspaceRoot)
+                return;
+            const target = await fs.resolve(CONFIG_FILE, { cwd: workspaceRoot });
+            configPath = fs.processPath ? String(fs.processPath(target)) : String(target && (target.path || target.filePath || ''));
+            const text = await fs.readText(target);
+            const data = JSON.parse(text);
+            configLoaded = true;
+            const next = { ...cfgRef.cfg };
+            if (typeof data.enabled === 'boolean')
+                next.enabled = data.enabled;
+            if (typeof data.timezone === 'string' && isValidTz(data.timezone))
+                next.timezone = data.timezone;
+            if (typeof data.warnMinutes === 'number' && data.warnMinutes >= 0)
+                next.warnMinutes = data.warnMinutes;
+            if (typeof data.reconcileOnStart === 'boolean')
+                next.reconcileOnStart = data.reconcileOnStart;
+            if (typeof data.showBalance === 'boolean')
+                next.showBalance = data.showBalance;
+            if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'zh-TW' || data.lang === 'en' ||
+                data.lang === 'de' || data.lang === 'fr' || data.lang === 'es' || data.lang === 'it' ||
+                data.lang === 'pt' || data.lang === 'ja' || data.lang === 'ko')
+                next.lang = data.lang;
+            if (Array.isArray(data.windows)) {
+                const v = validateWindows(data.windows, next.timezone);
+                if (v.ok)
+                    next.windows = data.windows.map((w) => ({ ...w }));
+            }
+            // modelApply: only adopt tiers the user actually saved (boolean per tier;
+            // broken/missing tiers keep the current value). No field → keep default.
+            if (data.modelApply && typeof data.modelApply === 'object') {
+                const ma = { ...next.modelApply };
+                for (const key of MODEL_APPLY_KEYS) {
+                    if (typeof data.modelApply[key] === 'boolean')
+                        ma[key] = data.modelApply[key];
+                }
+                next.modelApply = ma;
+            }
+            // In-place update keeps the `cfgRef.cfg` reference stable, so callers
+            // that captured it (e.g. the host's `const cfg = cfgRef.cfg`) always see
+            // the latest config without re-reading.
+            Object.assign(cfgRef.cfg, next);
+            console.log('[save-money] config loaded from ' + workspaceRoot + '\\' + CONFIG_FILE);
+        }
+        catch (e) {
+            console.log('[save-money] no config file (fresh start): ' + String((e && e.message) || e));
+        }
+    };
+    /**
+     * Apply a partial patch with full validation. On success persists and (when
+     * the gate opens) wakes waiters via deps.onConfigOpened.
+     */
+    function applyConfig(patch) {
+        // Whitelist: only known config keys are accepted, so a malformed/unknown
+        // patch (e.g. `evil: 42`, `enabled: "yes"`) can never pollute the live
+        // config object. Boolean fields are type-checked below.
+        const p = (patch && typeof patch === 'object') ? patch : {};
+        const next = { ...cfgRef.cfg };
+        for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'modelApply']) {
+            if (p[key] !== undefined)
+                next[key] = p[key];
+        }
+        if (next.windows === undefined)
+            next.windows = [];
+        if (next.enabled !== undefined && typeof next.enabled !== 'boolean') {
+            return { ok: false, error: 'enabled must be a boolean' };
+        }
+        if (next.reconcileOnStart !== undefined && typeof next.reconcileOnStart !== 'boolean') {
+            return { ok: false, error: 'reconcileOnStart must be a boolean' };
+        }
+        const v = validateWindows(next.windows, next.timezone);
+        if (!v.ok)
+            return { ok: false, error: v.error };
+        if (next.timezone !== undefined && !isValidTz(next.timezone)) {
+            return { ok: false, error: 'invalid IANA timezone: ' + next.timezone };
+        }
+        if (next.warnMinutes !== undefined && (!Number.isFinite(next.warnMinutes) || next.warnMinutes < 0)) {
+            return { ok: false, error: 'warnMinutes must be >= 0' };
+        }
+        if (next.showBalance !== undefined && typeof next.showBalance !== 'boolean') {
+            return { ok: false, error: 'showBalance must be a boolean' };
+        }
+        if (next.modelApply !== undefined) {
+            if (!next.modelApply || typeof next.modelApply !== 'object') {
+                return { ok: false, error: 'modelApply must be an object' };
+            }
+            for (const key of MODEL_APPLY_KEYS) {
+                if (next.modelApply[key] !== undefined && typeof next.modelApply[key] !== 'boolean') {
+                    return { ok: false, error: 'modelApply.' + key + ' must be a boolean' };
+                }
+            }
+        }
+        if (next.lang !== undefined && !LANGS.includes(next.lang)) {
+            return { ok: false, error: 'lang must be one of auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko' };
+        }
+        // modelApply per-tier merge: a patch only overrides the tiers it names,
+        // so { modelApply: { 'opencode-pro': true } } keeps the official tiers.
+        if (patch && patch.modelApply && typeof patch.modelApply === 'object') {
+            const merged = { ...cfgRef.cfg.modelApply };
+            for (const key of MODEL_APPLY_KEYS) {
+                if (typeof patch.modelApply[key] === 'boolean')
+                    merged[key] = patch.modelApply[key];
+            }
+            next.modelApply = merged;
+        }
+        // In-place update keeps the `cfgRef.cfg` reference stable (see loadConfig).
+        Object.assign(cfgRef.cfg, next);
+        // Delegate the wake decision to the host: the gate is open only when the
+        // new config actually releases suspended requests (disable / window
+        // change), so the host wakes waiters only then.
+        if (deps.onConfigOpened)
+            deps.onConfigOpened();
+        void persistConfig();
+        return { ok: true, config: snapshot() };
+    }
+    function snapshot() {
+        return {
+            enabled: cfgRef.cfg.enabled,
+            timezone: cfgRef.cfg.timezone,
+            warnMinutes: cfgRef.cfg.warnMinutes,
+            reconcileOnStart: cfgRef.cfg.reconcileOnStart,
+            lang: cfgRef.cfg.lang,
+            showBalance: cfgRef.cfg.showBalance,
+            modelApply: { ...cfgRef.cfg.modelApply },
+            windows: cfgRef.cfg.windows.map((w) => ({ ...w })),
+        };
+    }
+    return {
+        get cfg() { return cfgRef.cfg; },
+        get configLoaded() { return configLoaded; },
+        get configPath() { return configPath; },
+        get resolvedConfigDir() { return resolvedConfigDir; },
+        get defaultWorkspaceRoot() { return defaultWorkspaceRoot; },
+        load: loadConfig,
+        persist: persistConfig,
+        apply: applyConfig,
+        snapshot,
+        resolveWorkspaceRoot,
+    };
+}
+/**
+ * dsh-save-money — Pure state machine (window scheduling decisions).
+ *
+ * computeRawState decides the plugin's state (NORMAL / WARN / PAUSED) from the
+ * config + "end this save mode" in-memory state. Pure and side-effect free —
+ * the caller (host.ts onTick) owns the mutable endWindow/lastState state and
+ * performs the freeze/resume side effects. Extracted from src/host.ts so this
+ * decision logic is independently testable.
+ *
+ * Inlined into the Host plugin body at build time (scripts/build.js), same as
+ * src/core.ts / src/balance-host.ts / src/config.ts: the `import` below is
+ * stripped by the inline pass (stripExports) and resolves to the same-scope
+ * core helpers at runtime, while dist/state.js stays a runnable ESM module
+ * (it imports core.js) for the unit tests.
+ */
+
+/** Window identity key (pauseAt|resumeAt|timezone) used by end-this-save-mode. */
+function windowKey(w, tz) {
+    return w.pauseAt + '|' + w.resumeAt + '|' + (w.timezone || tz);
+}
+/**
+ * Decide the raw plugin state at `now`.
+ *
+ * Order: disabled → NORMAL; inside a window → PAUSED (unless that window is
+ * ended via end-this-save-mode → NORMAL); an upcoming window within
+ * warnMinutes → WARN; otherwise NORMAL. Pure — reads only `input`.
+ */
+function computeRawState(now, input) {
+    const { enabled, timezone, warnMinutes, windows, endWindowUntil, endWindowKey } = input;
+    if (!enabled)
+        return { name: 'NORMAL', reason: 'disabled' };
+    for (const w of windows) {
+        const tz = w.timezone || timezone;
+        if (windowMatchesAt(w, wallClock(tz, now))) {
+            // "End this save mode" only affects the exact window it was applied to —
+            // a stale endWindowUntil must not suppress later windows.
+            if (endWindowUntil > now.getTime() && endWindowKey === windowKey(w, tz))
+                return { name: 'NORMAL', reason: 'ended', window: w };
+            return { name: 'PAUSED', window: w };
+        }
+    }
+    let nearest = null;
+    for (const w of windows) {
+        const tz = w.timezone || timezone;
+        const wc = wallClock(tz, now);
+        const np = nextPause(w, tz, wc);
+        if (!np)
+            continue;
+        const delta = np.dayOffset * 1440 + np.minutes - wc.minutes;
+        if (nearest === null || delta < nearest.delta)
+            nearest = { delta, window: w };
+    }
+    if (nearest !== null && nearest.delta > 0 && nearest.delta <= warnMinutes) {
+        // The upcoming window may already be ended via "end this save mode"
+        // (clicked while WARN) — suppress the warning until the window's resumeAt.
+        if (endWindowUntil > now.getTime() && endWindowKey === windowKey(nearest.window, nearest.window.timezone || timezone)) {
+            return { name: 'NORMAL', reason: 'ended', window: nearest.window };
+        }
+        return { name: 'WARN', window: nearest.window, minutesToPause: nearest.delta };
+    }
+    return { name: 'NORMAL', reason: 'no-window' };
+}
+
+/**
+ * dsh-save-money — Goal freeze/resume manager (Host side).
+ *
+ * Owns the pause record (which goals this plugin froze, for restore on
+ * resume/unload) and the agents/goals interactions: collecting active tasks,
+ * freezing them at pause time, resuming them at release, and reconciling
+ * paused goals at startup.
+ *
+ * Inlined into the host plugin body at build time (scripts/build.js): no
+ * imports survive, so cross-module references are `declare`d for standalone
+ * type-checking and resolve to the inlined scope at runtime.
+ *
+ * `S` is the shared plugin state object (created by the host body): the
+ * pause record lives on S.pauseRecord so other modules (status, gate, end
+ * window) can read it without extra plumbing.
+ */
+/**
+ * Create the goal manager for one plugin instance.
+ * @param ctx - plugin context (ctx.get for agents / goals services).
+ * @param S - shared plugin state (S.pauseRecord is owned here).
+ * @param getCfg - returns the live config (for the record's timezone).
+ */
+function createGoalManager(ctx, S, getCfg) {
+    function collectTasks() {
+        const agents = ctx.get('agents');
+        const goals = ctx.get('goals');
+        if (!agents || !goals)
+            return { ok: false, tasks: [], reason: 'agents/goals services unavailable' };
+        const tasks = [];
+        for (const agent of agents.list()) {
+            let gv = undefined;
+            try {
+                gv = goals.get(agent);
+            }
+            catch (e) {
+                gv = undefined;
+            }
+            if (gv && (gv.phase === 'active' || (S.pauseRecord && S.pauseRecord.paused && S.pauseRecord.paused.some((p) => p.sessionId === agent.id)))) {
+                tasks.push({ agent, sessionId: agent.id, goalId: gv.id, revision: gv.revision, phase: gv.phase });
+            }
+        }
+        return { ok: true, tasks };
+    }
+    function freeze(window) {
+        const col = collectTasks();
+        if (!col.ok) {
+            console.error('[save-money] freeze skipped:', col.reason);
+            return { frozen: 0, record: null };
+        }
+        const freezeTargets = col.tasks.filter((t) => t.phase === 'active');
+        if (freezeTargets.length === 0) {
+            console.log('[save-money] pauseAt reached but no active tasks; not pausing');
+            return { frozen: 0, record: null };
+        }
+        const goals = ctx.get('goals');
+        const paused = [];
+        for (const t of freezeTargets) {
+            try {
+                goals.pause(t.agent, { id: t.goalId, revision: t.revision });
+                paused.push({ sessionId: t.sessionId, goalId: t.goalId, revision: t.revision, pausedAt: Date.now() });
+            }
+            catch (e) {
+                console.error('[save-money] goals.pause failed for ' + t.sessionId + ': ' + String((e && e.message) || e));
+            }
+        }
+        S.pauseRecord = {
+            pausedBySaveMoney: true,
+            at: new Date().toISOString(),
+            window: window ? { pauseAt: window.pauseAt, resumeAt: window.resumeAt, timezone: window.timezone || getCfg().timezone } : null,
+            paused,
+            cascaded: true,
+        };
+        console.log('[save-money] FROZEN ' + paused.length + ' goal(s), record written');
+        return { frozen: paused.length, record: S.pauseRecord };
+    }
+    function unfreeze() {
+        if (!S.pauseRecord)
+            return { resumed: 0, record: null };
+        const agents = ctx.get('agents');
+        const goals = ctx.get('goals');
+        const remaining = [];
+        let resumed = 0;
+        const targets = S.pauseRecord.paused || [];
+        for (const p of targets) {
+            const agent = agents && agents.get(p.sessionId);
+            if (!agent)
+                continue;
+            try {
+                const gv = goals.get(agent);
+                if (gv && gv.phase === 'paused') {
+                    goals.resume(agent, { id: gv.id, revision: gv.revision });
+                    resumed++;
+                }
+                else if (gv && gv.phase === 'active') {
+                    resumed++;
+                }
+            }
+            catch (e) {
+                console.error('[save-money] goals.resume failed for ' + p.sessionId + ': ' + String((e && e.message) || e));
+                remaining.push(p);
+            }
+        }
+        S.pauseRecord = remaining.length > 0 ? { ...S.pauseRecord, paused: remaining } : null;
+        console.log('[save-money] RESUMED ' + resumed + ' goal(s)' + (remaining.length > 0 ? ', ' + remaining.length + ' still pending' : ', record cleared'));
+        return { resumed, record: S.pauseRecord };
+    }
+    // Startup reconciliation: any goal still paused when the plugin starts
+    // (e.g. a previous crash while frozen) is resumed — nothing must stay
+    // frozen across restarts.
+    function reconcile() {
+        const col = collectTasks();
+        if (!col.ok)
+            return { restored: 0, reason: col.reason };
+        const goals = ctx.get('goals');
+        const agents = ctx.get('agents');
+        let restored = 0;
+        for (const agent of agents.list()) {
+            let gv = undefined;
+            try {
+                gv = goals.get(agent);
+            }
+            catch (e) {
+                gv = undefined;
+            }
+            if (gv && gv.phase === 'paused') {
+                try {
+                    goals.resume(agent, { id: gv.id, revision: gv.revision });
+                    restored++;
+                    console.log('[save-money] reconcile: restored paused goal of ' + agent.id);
+                }
+                catch (e) {
+                    console.error('[save-money] reconcile resume failed for ' + agent.id + ': ' + String((e && e.message) || e));
+                }
+            }
+        }
+        return { restored };
+    }
+    return { collectTasks, freeze, unfreeze, reconcile };
+}
+
+/**
+ * dsh-save-money — Request-level gate (Host side).
+ *
+ * Inside a pause window every streaming model call is intercepted (llm/stream
+ * is the mandatory waterfall every call goes through). The gate uses the same
+ * "inside window and not ignored" check as the state machine and does NOT
+ * depend on the freeze record: even when no active goal is frozen,
+ * manual-conversation model requests are still suspended — that is the
+ * saving-money semantics.
+ *
+ * Implementation notes:
+ *  - Cordis 3 registration API is ctx.on only; llm.stream dispatches via
+ *    ctx.waterfall, and listeners must synchronously return an AsyncIterable
+ *    (the caller for-await's it; an async listener would break the return
+ *    type). So we return a WRAPPER stream: iteration waits for the gate to
+ *    open first, then calls next() to get the real stream — options pass
+ *    through untouched, routing/retry/validation are unaffected (we are
+ *    registered at the chain tail; the suspend happens before the actual
+ *    adapterStream).
+ *  - The sandbox has no Node timer globals (setTimeout throws and fails the
+ *    turn as "this run failed"); ctx.timer.timeout is a fiber effect and can
+ *    still throw when registered inside an agent-turn fiber context. So
+ *    waiting is EVENT-DRIVEN: suspending = registering the resolve into
+ *    gateWaiters, woken by: ① the 60s tick (registered in the plugin apply
+ *    context, runs reliably); ② applyConfig (disable / window change);
+ *    ③ endWindowHandler (end-window); ④ plugin unload (fail-open); ⑤ request
+ *    signal abort. No timers / fiber-effect calls → cannot throw, cannot
+ *    interrupt a turn.
+ *
+ * Inlined into the host plugin body at build time (scripts/build.js): no
+ * imports survive, so cross-module references are `declare`d for standalone
+ * type-checking and resolve to the inlined scope at runtime.
+ */
+/**
+ * Create the request gate for one plugin instance.
+ * @param deps.ctx - plugin context (ctx.on registration, ctx.effect).
+ * @param deps.getCfg - returns the live config (enabled + modelApply).
+ * @param deps.computeRawStateLocal - state-machine wrapper (same check as the
+ *   tick, fed with the live config + end-this-save-mode state).
+ * @param deps.onRequest - called for EVERY llm/stream request before the gate
+ *   check: the host uses it to mark balance staleness / last provider / local
+ *   activity (activity feeds the spend bars' activity flag).
+ */
+function createGate(deps) {
+    const ctx = deps.ctx;
+    let gateDisposed = false;
+    let gateWaiters = [];
+    const wakeGateWaiters = () => {
+        const waiters = gateWaiters;
+        gateWaiters = [];
+        for (const release of waiters) {
+            // Each waiter synchronously calls next() inside release(); if the
+            // waterfall chain (DSH's own llm/stream invariants run first) throws
+            // synchronously — e.g. the request context was torn down while the
+            // gate held it — the exception must NOT escape into the host callback
+            // that woke us (60s tick / applyConfig / unload). That would surface as
+            // an uncaughtException and crash the harness. We swallow it here; the
+            // pending request then rejects with the same error via the promise.
+            try {
+                release();
+            }
+            catch (e) {
+                console.error('[save-money] gate release failed: ' + String((e && e.message) || e));
+            }
+        }
+    };
+    const gateClosedAt = (now) => {
+        if (!deps.getCfg().enabled)
+            return false;
+        // The gate follows the state machine exactly: computeRawStateLocal already
+        // exempts the ended window (endWindowKey match + endWindowUntil), so a
+        // different window (e.g. cross-timezone overlap) stays gated.
+        const st = deps.computeRawStateLocal(now);
+        return st.name === 'PAUSED';
+    };
+    const gateInstalled = typeof ctx.on === 'function';
+    const install = () => {
+        if (typeof ctx.on !== 'function') {
+            console.error('[save-money] ctx.on unavailable; llm/stream gate not installed');
+            return;
+        }
+        ctx.effect(() => {
+            const dispose = ctx.on('llm/stream', (options, next) => {
+                // Fresh user/model activity: every llm/stream request counts (also for
+                // exempted tiers — it is real usage), so mark it before any check.
+                deps.onRequest(options);
+                // Model-tier exemption: classify the request's provider/model tier; if
+                // that tier is unchecked in modelApply (or recognition fails = null),
+                // pass straight through — not paused inside windows either. Any
+                // classification/query error fails safely as exempt (no pause), never
+                // throws.
+                try {
+                    const cls = classifyModel(options && options.provider, options && options.model);
+                    if (!modelApplyEnabled(deps.getCfg().modelApply, cls))
+                        return next();
+                }
+                catch (e) { /* classification error → exempt (no pause) */ }
+                if (!gateClosedAt(new Date()))
+                    return next();
+                const waitForOpen = () => new Promise((resolve) => {
+                    const ready = () => gateDisposed || !gateClosedAt(new Date())
+                        || !!(options && options.signal && options.signal.aborted);
+                    // Release helper: call next() defensively. A synchronous throw from
+                    // the waterfall chain (request context torn down / invariant fail)
+                    // must surface as a rejected promise — never as an exception
+                    // escaping into the abort event dispatch or wakeGateWaiters.
+                    // Once-guard: the abort listener AND wakeGateWaiters (60s tick /
+                    // config change / unload) can both reach release() in the same
+                    // instant — resolve() is idempotent but next() is NOT, so a second
+                    // call would invoke the downstream chain twice.
+                    let released = false;
+                    const release = () => {
+                        if (released)
+                            return;
+                        released = true;
+                        try {
+                            resolve(next());
+                        }
+                        catch (e) {
+                            resolve(Promise.reject(e));
+                        }
+                    };
+                    if (ready())
+                        return release();
+                    const waiter = () => { release(); };
+                    gateWaiters.push(waiter);
+                    if (options && options.signal && typeof options.signal.addEventListener === 'function') {
+                        options.signal.addEventListener('abort', () => {
+                            const i = gateWaiters.indexOf(waiter);
+                            if (i >= 0)
+                                gateWaiters.splice(i, 1);
+                            release();
+                        }, { once: true });
+                    }
+                });
+                // Wrapper stream: iteration waits only when the gate is closed; once
+                // open → next() → the real request proceeds as usual.
+                let inner = null;
+                const getInner = () => (inner !== null ? Promise.resolve(inner) : waitForOpen().then((s) => { inner = s; return inner; }));
+                return {
+                    [Symbol.asyncIterator]() {
+                        let it = null;
+                        return {
+                            next() {
+                                return getInner().then((s) => {
+                                    if (!it)
+                                        it = s[Symbol.asyncIterator]();
+                                    return it.next();
+                                });
+                            },
+                            return(value) {
+                                return getInner().then((s) => {
+                                    if (!it)
+                                        it = s[Symbol.asyncIterator]();
+                                    return it.return ? it.return(value) : { done: true, value };
+                                });
+                            },
+                            throw(e) {
+                                return getInner().then((s) => {
+                                    if (!it)
+                                        it = s[Symbol.asyncIterator]();
+                                    return it.throw ? it.throw(e) : { done: true, value: e };
+                                });
+                            },
+                        };
+                    },
+                };
+            }, { global: true });
+            return () => {
+                gateDisposed = true;
+                try {
+                    wakeGateWaiters();
+                }
+                catch (e) { /* unload must never throw */ }
+                dispose();
+            };
+        });
+    };
+    return { gateInstalled, gateClosedAt, wakeGateWaiters, install };
+}
+
+/**
+ * dsh-save-money — Balance history sampling, persistence and query (Host side).
+ *
+ * Wraps the balance transport (createBalanceService) with:
+ *  - sampling: every 5 minutes the current balance is recorded into the
+ *    history queue, tagged with a local-activity signal;
+ *  - persistence: the history is saved to ~/.dsh/dsh-save-money-balance.json
+ *    (account-level, shared across projects; a keyId fingerprint invalidates
+ *    the history when the API key changes);
+ *  - query: the /save-money/balance response — latest balance + spend stats
+ *    over the last 10min / 1h / 24h + per-10-minute spend bars.
+ *
+ * Inlined into the host plugin body at build time (scripts/build.js): no
+ * imports survive, so cross-module references are `declare`d for standalone
+ * type-checking and resolve to the inlined scope at runtime.
+ *
+ * `S` is the shared plugin state object: S.balanceDirty / S.lastRequestProvider
+ * / S.lastActivityAt cross the module boundary (set by the gate's onRequest,
+ * read here and by status()).
+ */
+/**
+ * Create the balance tracker for one plugin instance.
+ * @param ctx - plugin context (ctx.get for credentials / fs).
+ * @param S - shared plugin state (S.balanceDirty / S.lastRequestProvider /
+ *   S.lastActivityAt).
+ * @param deps.getFs - returns the fs service (may be undefined until late).
+ * @param deps.getCfg - returns the live config (showBalance / timezone).
+ * @param deps.sandbox - true in the dynamic-plugin sandbox (no real fetch).
+ */
+function createBalanceTracker(ctx, S, deps) {
+    const balanceSvc = createBalanceService(ctx, { sandbox: deps.sandbox });
+    const balanceHistory = createBalanceHistory();
+    const historyFile = (() => {
+        const home = dshHome();
+        return home ? home + (home.includes('\\') ? '\\' : '/') + BALANCE_HISTORY_FILE : '';
+    })();
+    let historyKeyId = null;
+    // Dirty flag lives on the SHARED state object S: the host body's unload
+    // flush and 5-minute write throttle gate on S.historyDirty, so a local flag
+    // here would make those persist call sites dead code.
+    const markDirty = () => { S.historyDirty = true; };
+    // Record one balance sample (with the current activity signal) and mark the
+    // history dirty for the next write.
+    const recordBalance = (total) => {
+        const now = Date.now();
+        // Activity signal: a llm/stream request within SAMPLE_MS → this
+        // environment produced model activity.
+        const activity = S.lastActivityAt > 0 && now - S.lastActivityAt < SAMPLE_MS;
+        balanceHistory.record(total, now, activity);
+        markDirty();
+    };
+    // Load the persisted history: adopted only when its keyId matches the
+    // current credential fingerprint (otherwise the old account's trail is
+    // void). A credential that cannot be RESOLVED (transient failure) keeps the
+    // parsed history — only a resolved key that differs discards it.
+    const loadBalanceHistory = async () => {
+        const fs = deps.getFs();
+        if (!fs || !historyFile)
+            return;
+        try {
+            const text = await fs.readText(await fs.resolve(historyFile));
+            const parsed = parseBalanceHistory(text);
+            if (!parsed) {
+                console.log('[save-money] balance history: unreadable, starting fresh');
+                return;
+            }
+            const creds = ctx.get('credentials');
+            const key = creds && typeof creds.resolve === 'function'
+                ? await creds.resolve('DEEPSEEK_API_KEY').then((r) => r && r.value).catch(() => undefined)
+                : undefined;
+            if (typeof key === 'string' && key.length > 0) {
+                historyKeyId = keyFingerprint(key);
+                if (parsed.keyId !== historyKeyId) {
+                    console.log('[save-money] balance history: key changed (' + String(parsed.keyId) + ' → ' + String(historyKeyId) + '), discarding old history');
+                    balanceHistory.clear();
+                    return;
+                }
+            }
+            // key unresolved → keep the parsed history (transient credential
+            // failure must not destroy the old account's trail); the fingerprint
+            // is re-checked on the next load.
+            balanceHistory.load(parsed.points);
+            console.log('[save-money] balance history loaded: ' + balanceHistory.points().length + ' samples');
+        }
+        catch (e) {
+            console.log('[save-money] balance history: none yet (fresh start)');
+        }
+    };
+    // Write to disk: best-effort, never throws. The dirty flag is cleared only
+    // AFTER a successful write, so a failure keeps the marker for the next
+    // throttle cycle (and the unload flush).
+    const persistBalanceHistory = async () => {
+        const fs = deps.getFs();
+        if (!fs || !historyFile)
+            return;
+        try {
+            const creds = ctx.get('credentials');
+            const key = creds && typeof creds.resolve === 'function'
+                ? await creds.resolve('DEEPSEEK_API_KEY').then((r) => r && r.value).catch(() => undefined)
+                : undefined;
+            const kid = typeof key === 'string' && key.length > 0 ? keyFingerprint(key) : historyKeyId;
+            if (!kid) {
+                // No resolved key yet: never overwrite the persisted file with a
+                // placeholder fingerprint — wait for the credential to resolve.
+                console.log('[save-money] balance history persist skipped: no credential resolved');
+                return;
+            }
+            historyKeyId = kid;
+            const points = balanceHistory.points();
+            const target = await fs.resolve(historyFile);
+            // Write location: the history file's directory (~/.dsh) acts as the
+            // workspaceRoot so the sandbox permits the write.
+            const dir = historyFile.slice(0, Math.max(historyFile.lastIndexOf('\\'), historyFile.lastIndexOf('/')));
+            await fs.writeText(target, serializeBalanceHistory({ keyId: kid, points }), undefined, undefined, { mode: 'workspace-write', workspaceRoot: dir });
+            S.historyDirty = false;
+        }
+        catch (e) {
+            console.error('[save-money] balance history persist failed: ' + String((e && e.message) || e));
+        }
+    };
+    // Pull one balance and record a history sample (same 5-min window updates,
+    // never adds).
+    const sampleBalance = async () => {
+        try {
+            const out = await balanceSvc.query();
+            if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
+                const total = parseFloat(out.balance[0].total);
+                if (Number.isFinite(total))
+                    recordBalance(total);
+            }
+        }
+        catch (e) { /* the sampler must never throw */ }
+    };
+    const balanceQuery = async () => {
+        if (!deps.getCfg().showBalance)
+            return { ok: false, error: 'balance display is disabled' };
+        const out = await balanceSvc.query();
+        S.balanceDirty = false; // a fresh balance was just fetched for the client
+        // Record this balance as the newest sample (deduped inside the window),
+        // then attach the spend stats.
+        if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
+            const total = parseFloat(out.balance[0].total);
+            if (Number.isFinite(total))
+                recordBalance(total);
+        }
+        // Unified window-clock baseline: the three spend windows and the bar
+        // chart share the same "config-timezone integer 10-minute" alignment, so
+        // m10 and bars[0] point at the same period (hover card matches the chart)
+        // and both land on integer boundaries of the configured timezone
+        // (comparable with the official local per-hour billing).
+        const nowMs = Date.now();
+        const alignedNow = (deps.getCfg().timezone ? alignWallClock(deps.getCfg().timezone, nowMs, 10 * 60 * 1000) : undefined)
+            ?? (nowMs - (nowMs % (10 * 60 * 1000)));
+        const spendAt = {
+            m10: alignedNow - 10 * 60 * 1000,
+            h1: alignedNow - 60 * 60 * 1000,
+            // h24 spans days: no HH:mm range label (avoids yesterday/today ambiguity)
+        };
+        return {
+            ...out,
+            // Provider of the most recent model request: null when no request has
+            // been made yet (show the balance — the official account is queryable),
+            // otherwise the client shows the balance only for 'deepseek-official'.
+            provider: S.lastRequestProvider,
+            spend: {
+                m10: balanceHistory.spend(10 * 60 * 1000, alignedNow),
+                h1: balanceHistory.spend(60 * 60 * 1000, alignedNow),
+                h24: balanceHistory.spend(24 * 60 * 60 * 1000, alignedNow),
+            },
+            // Window start instants (ms) — the hover card labels the exact ranges.
+            spendAt,
+            // Last-8h per-10-minute spend bars (index 0 = most recent 10 minutes);
+            // same source and alignment as `spend`, drawn by the client on click.
+            bars: spendBars(balanceHistory.points(), nowMs, 48, 10 * 60 * 1000, deps.getCfg().timezone),
+        };
+    };
+    return {
+        load: loadBalanceHistory,
+        persist: persistBalanceHistory,
+        sample: sampleBalance,
+        query: balanceQuery,
+    };
+}
+
+/**
+ * dsh-save-money — HTTP endpoints for the official bundle Client half
+ * (Host side).
+ *
+ * The bundled Client half (plugin/client.js, no harness global) talks to the
+ * same-origin webServer endpoints registered here (/save-money/*). The
+ * dynamic-plugin Client half keeps using the harness RPC and never registers
+ * routes on the host's global webServer.
+ *
+ * Inlined into the host plugin body at build time (scripts/build.js): no
+ * imports survive; everything needed arrives through the `deps` object.
+ */
+/**
+ * Register the /save-money/* endpoints on a webServer service.
+ * @param ws - the webServer service (or undefined before it exists).
+ * @param deps.status - () => current status object.
+ * @param deps.balanceQuery - () => Promise<balance response>.
+ * @param deps.applyConfig - (patch) => applied config.
+ * @param deps.endWindowHandler - () => Promise<new status>.
+ * @returns the webServer disposer, or undefined when ws is unusable.
+ */
+function registerHttpEndpoints(ws, deps) {
+    if (!ws || typeof ws.register !== 'function')
+        return;
+    const sendJson = (res, code, obj) => {
+        res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify(obj));
+    };
+    return ws.register({
+        kind: 'prefix',
+        path: '/save-money',
+        handler: async (req, res) => {
+            try {
+                const rawPath = String(req.url || '/').split('?')[0];
+                const path = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : rawPath;
+                if (path === '/save-money/status') {
+                    sendJson(res, 200, deps.status());
+                    return;
+                }
+                if (path === '/save-money/balance') {
+                    sendJson(res, 200, await deps.balanceQuery());
+                    return;
+                }
+                if (req.method === 'POST' && path === '/save-money/configure') {
+                    let raw = '';
+                    for await (const chunk of req)
+                        raw += chunk;
+                    let patch = {};
+                    try {
+                        patch = JSON.parse(raw || '{}');
+                    }
+                    catch (e) {
+                        patch = {};
+                    }
+                    sendJson(res, 200, deps.applyConfig(patch));
+                    return;
+                }
+                if (req.method === 'POST' && path === '/save-money/end-window') {
+                    for await (const _ of req) { /* drain */ }
+                    sendJson(res, 200, await deps.endWindowHandler());
+                    return;
+                }
+                sendJson(res, 404, { ok: false, message: 'not found: ' + path });
+            }
+            catch (e) {
+                sendJson(res, 500, { ok: false, message: String((e && e.message) || e) });
+            }
+        },
+    });
+}
+
+/**
+ * dsh-save-money — Dynamic tools registration (Host side).
+ *
+ * The four save-money tools (status / configure / end-window / debug-tick),
+ * registered through the harness in the dynamic-plugin sandbox and through
+ * the ctx.tools service in the official module (plugin/index.js) form.
+ *
+ * Inlined into the host plugin body at build time (scripts/build.js): no
+ * imports survive; everything needed arrives through the `deps` object.
+ */
+/**
+ * Register every save-money tool for one plugin instance.
+ * @param deps.harnessApi - harness global in the dynamic sandbox (or null).
+ * @param deps.ctx - plugin context (ctx.get for the tools service).
+ * @param deps.status - () => current status object.
+ * @param deps.configure - (args) => applyConfig(unwrap(args) || {}).
+ * @param deps.onTick - () => run one state-machine transition (debug tool).
+ * @param deps.endWindowHandler - () => Promise<new status>.
+ */
+function createToolRegistrar(deps) {
+    const harnessApi = deps.harnessApi;
+    const ctx = deps.ctx;
+    const TOOL_DEFS = [
+        {
+            name: 'save_money_status',
+            description: 'Query the save-money plugin state: enabled, gate state (NORMAL/WARN/PAUSED), busy detection, current window with UTC projection, PauseRecord summary, and full config.',
+            parameters: { type: 'object', properties: {} },
+            execute: async () => deps.status(),
+        },
+        {
+            name: 'save_money_configure',
+            description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), modelApply (object of booleans: official-flash / official-pro / opencode-flash / opencode-pro — checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    enabled: { type: 'boolean' },
+                    timezone: { type: 'string' },
+                    warnMinutes: { type: 'number' },
+                    reconcileOnStart: { type: 'boolean' },
+                    lang: { type: 'string' },
+                    showBalance: { type: 'boolean' },
+                    modelApply: {
+                        type: 'object',
+                        properties: {
+                            'official-flash': { type: 'boolean' },
+                            'official-pro': { type: 'boolean' },
+                            'opencode-flash': { type: 'boolean' },
+                            'opencode-pro': { type: 'boolean' },
+                        },
+                    },
+                    windows: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                pauseAt: { type: 'string' },
+                                resumeAt: { type: 'string' },
+                                days: { type: 'array', items: { type: 'number' } },
+                                timezone: { type: 'string' },
+                            },
+                        },
+                    },
+                },
+            },
+            execute: async (args) => deps.configure(args),
+        },
+        {
+            name: 'save_money_end_window',
+            description: 'End save mode for the currently active pause window only (one-shot, in-memory, not persisted): if paused, immediately resumes frozen goals and releases the request gate; if a pause is upcoming, cancels it. The window is skipped until its resumeAt. The next window (today or later) still takes effect; the persistent enabled flag is untouched. Returns the new status.',
+            parameters: { type: 'object', properties: {} },
+            execute: async () => deps.endWindowHandler(),
+        },
+        {
+            name: 'save_money_debug_tick',
+            description: 'Development tool: run one state-machine transition manually (as if a tick fired now). Returns the new status. Useful to verify freeze/resume without waiting for the timer.',
+            parameters: { type: 'object', properties: {} },
+            execute: async () => {
+                deps.onTick();
+                return deps.status();
+            },
+        },
+    ];
+    for (const def of TOOL_DEFS) {
+        const tool = {
+            ...def,
+            output: {
+                schema: { type: 'object', properties: {}, additionalProperties: true },
+                render: (_args, result) => [{ type: 'text', text: JSON.stringify(result) }],
             },
         };
-        let cfg = { ...DEFAULTS, windows: [] };
-        let pauseRecord = null;
-        // "End this save mode" state — one-shot, in-memory only (never persisted):
-        // applies to the exact window it was invoked for (matched by key), expires
-        // at that window's resumeAt, and leaves the persistent `enabled` flag
-        // untouched. The next window (today or later) is unaffected.
-        let endWindowUntil = 0;
-        let endWindowKey = null;
-        let lastStateKey = 'NORMAL';
-        let configLoaded = false;
-        let configPath = '';
-        const unwrap = (args) => (args && typeof args === 'object' && args.arguments && typeof args.arguments === 'object' ? args.arguments : args);
-        // Config persistence to the workspace file (survives browser refresh /
-        // plugin re-activation). The config location is resolved AT RUNTIME by
-        // walking a candidate list (see candidateRoots) — session cwd first, then
-        // process cwd and its sibling directory (the README quick-install layout
-        // ~/app/dsh-save-money next to ~/app/deepseek-harness), then the
-        // sandboxPolicy fallback. The FIRST directory that actually contains a
-        // save-money.config.json wins; a pointer file in the DSH user dir
-        // (~/.dsh/save-money-config-path.json) records the last real location so
-        // a later restart resolves the SAME file even when no session cwd matches
-        // (e.g. the harness was started from a different directory). No machine
-        // path is ever hard-coded.
-        const CONFIG_FILE = 'save-money.config.json';
-        const POINTER_FILE = 'save-money-config-path.json';
-        // Services are read DYNAMICALLY on every use, not captured once at apply():
-        // the official bundle form (plugin/index.js) is a plugin row that can be
-        // activated BEFORE the base bundle's fs-sandbox / sandbox-policy / sessions
-        // rows (Cordis activation order is composition order, and the user's plugin
-        // row is inserted into the profile alongside them). A one-shot
-        // `const fs = ctx.get('fs')` would permanently capture `undefined` on such
-        // machines — exactly the "settings never persist / never load" report on a
-        // second computer. Each helper re-reads the service at call time, and the
-        // boot path also waits via ctx.inject(['fs']) (see startup below), so a
-        // late fs service is picked up as soon as it exists.
+        if (harnessApi) {
+            ctx.effect(() => harnessApi.registerTool(ctx, harnessApi.defineTool(tool)));
+        }
+        else {
+            const tools = ctx.get('tools');
+            if (tools && typeof tools.register === 'function')
+                ctx.effect(() => tools.register(tool));
+        }
+    }
+}
+
+export function apply(ctx) {
+        // ---- Config (moved to src/config.ts) ----
+        // The config controller owns defaults, validation, load/persist and the
+        // workspace resolver; `cfg` below is its live config object.
         const getFs = () => ctx.get('fs');
         const getSessions = () => ctx.get('sessions');
         const getAgents = () => ctx.get('agents');
         const getSandboxPolicy = () => ctx.get('sandboxPolicy');
-        const defaultWorkspaceRoot = (() => {
-            const sandboxPolicy = getSandboxPolicy();
-            return (sandboxPolicy && typeof sandboxPolicy.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot.length > 0)
-                ? sandboxPolicy.workspaceRoot
-                : '';
-        })();
-        // sandboxPolicy.workspaceRoot is the process cwd (the DSH install dir), not
-        // the session workspace. The plugin config belongs to the save-money
-        // workspace, so prefer a session whose cwd points at this repo (matched by
-        // directory basename only — no machine path is hard-coded).
-        const sessionCwdOf = (s) => {
-            const c = s && (s.meta && s.meta.cwd || s.header && s.header.cwd || s.cwd);
-            return typeof c === 'string' ? c : '';
-        };
-        // DSH user dir (~/.dsh): exists on Windows / macOS / Linux. The pointer
-        // file lives here because it is the one location that never moves with the
-        // harness install dir or the session cwd.
-        const dshHome = () => {
-            try {
-                const h = (typeof process !== 'undefined' && process && process.env)
-                    ? (process.env.DSH_HOME || process.env.USERPROFILE || process.env.HOME)
-                    : '';
-                return typeof h === 'string' && h.length > 0 ? h.replace(/[\\/]+$/, '') : '';
-            }
-            catch (e) {
-                return '';
-            }
-        };
-        // Read the pointer file (best-effort; '' when absent/unreadable).
-        const readPointer = async () => {
-            const home = dshHome();
-            const fs = getFs();
-            if (!home || !fs)
-                return '';
-            try {
-                const target = await fs.resolve(POINTER_FILE, { cwd: home });
-                const text = await fs.readText(target);
-                const data = JSON.parse(text);
-                const p = data && typeof data.path === 'string' ? data.path : '';
-                return p.replace(/[\\/]+$/, '');
-            }
-            catch (e) {
-                return '';
-            }
-        };
-        // Record the last real config dir in ~/.dsh (best-effort; never throws).
-        const writePointer = async (dir) => {
-            const home = dshHome();
-            const fs = getFs();
-            if (!home || !fs || !dir)
-                return;
-            try {
-                const target = await fs.resolve(POINTER_FILE, { cwd: home });
-                await fs.writeText(target, JSON.stringify({ path: dir }, null, 2), undefined, undefined, { mode: 'workspace-write', workspaceRoot: home });
-            }
-            catch (e) { /* best-effort */ }
-        };
-        // Candidate config directories, highest priority first. The pointer (the
-        // last real location) is handled separately in resolveWorkspaceRoot.
-        const candidateRoots = () => {
-            const out = [];
-            const push = (c) => {
-                c = String(c || '').replace(/[\\/]+$/, '');
-                if (c && !out.includes(c))
-                    out.push(c);
-            };
-            // ① the calling session (agents.currentInitiator): the session that
-            //    actually uses the plugin, so config follows the user's workspace.
-            try {
-                const agentsSvc = getAgents();
-                const init = agentsSvc && typeof agentsSvc.currentInitiator === 'function'
-                    ? agentsSvc.currentInitiator()
-                    : undefined;
-                const sessionsSvc = getSessions();
-                if (init && sessionsSvc && typeof sessionsSvc.get === 'function') {
-                    push(sessionCwdOf(sessionsSvc.get(init.id) || init));
-                }
-            }
-            catch (e) { /* skip */ }
-            // ② every session whose cwd matches the repo basename (last wins, so
-            //    the newest checkout is preferred when several exist).
-            const sessionsSvc = getSessions();
-            if (sessionsSvc && typeof sessionsSvc.list === 'function') {
-                try {
-                    const matches = [];
-                    for (const s of sessionsSvc.list()) {
-                        const c = sessionCwdOf(s).replace(/[\\/]+$/, '');
-                        if (/dsh-save-money$/i.test(c))
-                            matches.push(c);
-                    }
-                    for (const m of matches)
-                        push(m);
-                }
-                catch (e) { /* skip */ }
-            }
-            // ③ process.cwd() itself (official module form only; the harness may be
-            //    started from the repo checkout).
-            try {
-                if (typeof process !== 'undefined' && process && typeof process.cwd === 'function') {
-                    push(String(process.cwd()));
-                }
-            }
-            catch (e) { /* skip */ }
-            // ④ sibling of process.cwd() named dsh-save-money — the README
-            //    quick-install layout: ~/app/dsh-save-money next to
-            //    ~/app/deepseek-harness, harness started from the latter.
-            try {
-                if (typeof process !== 'undefined' && process && typeof process.cwd === 'function') {
-                    const cwd = String(process.cwd()).replace(/[\\/]+$/, '');
-                    const idx = Math.max(cwd.lastIndexOf('\\'), cwd.lastIndexOf('/'));
-                    if (idx > 0)
-                        push(cwd.slice(0, idx + 1) + 'dsh-save-money');
-                }
-            }
-            catch (e) { /* skip */ }
-            // ⑤ sandboxPolicy fallback (the harness install dir).
-            push(defaultWorkspaceRoot);
-            return out;
-        };
-        // The last successfully used config dir (for status diagnostics + write
-        // targeting without re-resolving on every call).
-        let resolvedConfigDir = '';
-        const resolveWorkspaceRoot = async () => {
-            const fs = getFs();
-            if (!fs)
-                return defaultWorkspaceRoot;
-            // ① pointer file: the last real location wins, so a restart resolves the
-            //    same file even when no session cwd matches (the harness was started
-            //    from a different directory than the repo).
-            const ptr = await readPointer();
-            if (ptr) {
-                try {
-                    await fs.readText(await fs.resolve(CONFIG_FILE, { cwd: ptr }));
-                    resolvedConfigDir = ptr;
-                    return ptr;
-                }
-                catch (e) { /* pointer stale — fall through to candidates */ }
-            }
-            const roots = candidateRoots();
-            for (const dir of roots) {
-                if (!dir)
-                    continue;
-                try {
-                    await fs.readText(await fs.resolve(CONFIG_FILE, { cwd: dir }));
-                    resolvedConfigDir = dir;
-                    return dir;
-                }
-                catch (e) { /* no config here — try next */ }
-            }
-            // No config exists anywhere yet: prefer a repo-named candidate (the
-            // sibling-directory layout from the README, or a session cwd), so a
-            // fresh install writes next to the checkout instead of polluting the
-            // harness install dir; fall back to the first candidate.
-            let target = '';
-            for (const dir of roots) {
-                if (dir && /dsh-save-money$/i.test(dir)) {
-                    target = dir;
-                    break;
-                }
-            }
-            resolvedConfigDir = target || roots[0] || defaultWorkspaceRoot;
-            return resolvedConfigDir;
-        };
-        const windowKey = (w, tz) => w.pauseAt + '|' + w.resumeAt + '|' + (w.timezone || tz);
-        const persistConfig = async () => {
-            const fs = getFs();
-            if (!fs) {
-                console.error('[save-money] persist skipped: fs service unavailable');
-                return;
-            }
-            try {
-                const workspaceRoot = await resolveWorkspaceRoot();
-                if (!workspaceRoot)
-                    return;
-                const resolveOpts = { cwd: workspaceRoot };
-                const writePolicy = { mode: 'workspace-write', workspaceRoot };
-                const target = await fs.resolve(CONFIG_FILE, resolveOpts);
-                configPath = fs.processPath ? String(fs.processPath(target)) : String(target && (target.path || target.filePath || ''));
-                await fs.writeText(target, JSON.stringify(snapshot(), null, 2), undefined, undefined, writePolicy);
-                await writePointer(workspaceRoot);
-                console.log('[save-money] config persisted to ' + workspaceRoot + '\\' + CONFIG_FILE);
-            }
-            catch (e) {
-                console.error('[save-money] persist failed: ' + String((e && e.message) || e));
-            }
-        };
-        const loadConfig = async () => {
-            const fs = getFs();
-            if (!fs) {
-                console.error('[save-money] load skipped: fs service unavailable');
-                return;
-            }
-            try {
-                const workspaceRoot = await resolveWorkspaceRoot();
-                if (!workspaceRoot)
-                    return;
-                const resolveOpts = { cwd: workspaceRoot };
-                const target = await fs.resolve(CONFIG_FILE, resolveOpts);
-                configPath = fs.processPath ? String(fs.processPath(target)) : String(target && (target.path || target.filePath || ''));
-                const text = await fs.readText(target);
-                const data = JSON.parse(text);
-                configLoaded = true;
-                const next = { ...cfg };
-                if (typeof data.enabled === 'boolean')
-                    next.enabled = data.enabled;
-                if (typeof data.timezone === 'string' && isValidTz(data.timezone))
-                    next.timezone = data.timezone;
-                if (typeof data.warnMinutes === 'number' && data.warnMinutes >= 0)
-                    next.warnMinutes = data.warnMinutes;
-                if (typeof data.reconcileOnStart === 'boolean')
-                    next.reconcileOnStart = data.reconcileOnStart;
-                if (typeof data.showBalance === 'boolean')
-                    next.showBalance = data.showBalance;
-                if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'zh-TW' || data.lang === 'en' ||
-                    data.lang === 'de' || data.lang === 'fr' || data.lang === 'es' || data.lang === 'it' ||
-                    data.lang === 'pt' || data.lang === 'ja' || data.lang === 'ko')
-                    next.lang = data.lang;
-                if (Array.isArray(data.windows)) {
-                    const v = validateWindows(data.windows, next.timezone);
-                    if (v.ok)
-                        next.windows = data.windows.map((w) => ({ ...w }));
-                }
-                // modelApply:仅当用户保存过才采用(逐档校验 boolean,只合并合法档位,
-                // 损坏/缺失的档位保持默认)。没有该字段 → 保持默认(官方两项勾选)。
-                if (data.modelApply && typeof data.modelApply === 'object') {
-                    const ma = { ...next.modelApply };
-                    for (const key of ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro']) {
-                        if (typeof data.modelApply[key] === 'boolean')
-                            ma[key] = data.modelApply[key];
-                    }
-                    next.modelApply = ma;
-                }
-                cfg = next;
-                console.log('[save-money] config loaded from ' + workspaceRoot + '\\' + CONFIG_FILE);
-            }
-            catch (e) {
-                console.log('[save-money] no config file (fresh start): ' + String((e && e.message) || e));
-            }
-        };
-        // ---------- Config ----------
-        // Pure helpers (wallClock / parseHHMM / windowMatchesAt / nextPause /
-        // wallToUTC / isValidTz / validateWindows) live in src/core.ts and are
-        // inlined into this body at build time; see the declarations above.
-        function applyConfig(patch) {
-            const next = { ...cfg, ...patch };
-            if (next.windows === undefined)
-                next.windows = [];
-            const v = validateWindows(next.windows, next.timezone);
-            if (!v.ok)
-                return { ok: false, error: v.error };
-            if (next.timezone !== undefined && !isValidTz(next.timezone)) {
-                return { ok: false, error: 'invalid IANA timezone: ' + next.timezone };
-            }
-            if (next.warnMinutes !== undefined && (!Number.isFinite(next.warnMinutes) || next.warnMinutes < 0)) {
-                return { ok: false, error: 'warnMinutes must be >= 0' };
-            }
-            if (next.showBalance !== undefined && typeof next.showBalance !== 'boolean') {
-                return { ok: false, error: 'showBalance must be a boolean' };
-            }
-            // modelApply:接受对象,逐档必须是 boolean(缺档保持原值)
-            if (next.modelApply !== undefined) {
-                if (!next.modelApply || typeof next.modelApply !== 'object') {
-                    return { ok: false, error: 'modelApply must be an object' };
-                }
-                for (const key of ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro']) {
-                    if (next.modelApply[key] !== undefined && typeof next.modelApply[key] !== 'boolean') {
-                        return { ok: false, error: 'modelApply.' + key + ' must be a boolean' };
-                    }
-                }
-            }
-            const LANGS = ['auto', 'zh', 'zh-TW', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko'];
-            if (next.lang !== undefined && !LANGS.includes(next.lang)) {
-                return { ok: false, error: 'lang must be one of auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko' };
-            }
+        const cfgRef = createConfig({
+            getFs, getSessions, getAgents, getSandboxPolicy,
+            // Wake suspended requests whenever a config change opens the gate
+            // (disable / window change / re-enable). Late-bound: the gate is
+            // created below; the callback runs at apply time, after this apply().
+            onConfigOpened: () => {
+                if (gate && !gate.gateClosedAt(new Date()))
+                    gate.wakeGateWaiters();
+            },
+        });
+        const cfg = cfgRef.cfg;
+        const applyConfig = (patch) => {
+            const r = cfgRef.apply(patch);
             // Re-activation resets the one-shot "end this save mode" state: when
-            // `enabled` goes false -> true, clear endWindowUntil/endWindowKey so
-            // every window takes effect again. The user gets a deterministic way to
-            // re-arm saving money (e.g. after skipping a window during a test) by
-            // toggling the Enable switch off and on.
-            if (patch && patch.enabled === true && !cfg.enabled) {
-                endWindowUntil = 0;
-                endWindowKey = null;
-                console.log('[save-money] re-enabled: end-this-save-mode state reset');
-            }
-            // modelApply 逐档合并:patch 只覆盖给定的档位,其余保留当前值,
-            // 避免 { modelApply: { 'opencode-pro': true } } 丢掉官方两项。
-            if (patch && patch.modelApply && typeof patch.modelApply === 'object') {
-                const merged = { ...cfg.modelApply };
-                for (const key of ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro']) {
-                    if (typeof patch.modelApply[key] === 'boolean')
-                        merged[key] = patch.modelApply[key];
+            // `enabled` goes false -> true, the user gets a deterministic way to
+            // re-arm saving money (e.g. after skipping a window during a test).
+            if (r && r.ok && patch && patch.enabled === true) {
+                if (S.endWindowUntil > 0 || S.endWindowKey !== null) {
+                    S.endWindowUntil = 0;
+                    S.endWindowKey = null;
+                    console.log('[save-money] re-enabled: end-this-save-mode state reset');
                 }
-                next.modelApply = merged;
             }
-            cfg = next;
-            // Wake waiters only when the gate is actually open (unconditional wake
-            // released suspended requests inside the window — observed as "still
-            // thinking after pause" caused by the tick releasing every 60s).
-            if (!gateClosedAt(new Date()))
-                wakeGateWaiters();
-            void persistConfig(); // persist on every config change
-            return { ok: true, config: snapshot() };
-        }
-        function snapshot() {
-            return {
+            return r;
+        };
+        const snapshot = () => cfgRef.snapshot();
+        const loadConfig = () => cfgRef.load();
+        const unwrap = (args) => (args && typeof args === 'object' && args.arguments && typeof args.arguments === 'object' ? args.arguments : args);
+        // "End this save mode" state — one-shot, in-memory only (never persisted):
+        // applies to the exact window it was invoked for (matched by key), expires
+        // at that window's resumeAt, and leaves the persistent `enabled` flag
+        // untouched. The next window (today or later) is unaffected.
+        // Shared plugin state (cross-module): consumed by the goal manager, the
+        // request gate and the balance tracker.
+        const S = {
+            endWindowUntil: 0,
+            endWindowKey: null,
+            lastStateKey: 'NORMAL',
+            pauseRecord: null,
+            balanceDirty: false,
+            lastRequestProvider: null,
+            lastActivityAt: 0,
+            historyDirty: false,
+        };
+        // ---------- Goals: freeze/resume/reconcile (src/host-goals.ts) ----------
+        const goals = createGoalManager(ctx, S, () => cfg);
+        // ---------- State computation ----------
+        // Pure decision logic lives in src/state.ts (computeRawState); here we
+        // wrap it to feed the live config + end-this-save-mode state.
+        function computeRawStateLocal(now) {
+            return computeRawState(now, {
                 enabled: cfg.enabled,
                 timezone: cfg.timezone,
                 warnMinutes: cfg.warnMinutes,
-                reconcileOnStart: cfg.reconcileOnStart,
-                lang: cfg.lang,
-                showBalance: cfg.showBalance,
-                modelApply: { ...cfg.modelApply },
-                windows: cfg.windows.map((w) => ({ ...w })),
-            };
-        }
-        // ---------- Busy detection / freeze / resume ----------
-        function collectTasks() {
-            const agents = ctx.get('agents');
-            const goals = ctx.get('goals');
-            if (!agents || !goals)
-                return { ok: false, tasks: [], reason: 'agents/goals services unavailable' };
-            const tasks = [];
-            for (const agent of agents.list()) {
-                let gv = undefined;
-                try {
-                    gv = goals.get(agent);
-                }
-                catch (e) {
-                    gv = undefined;
-                }
-                if (gv && (gv.phase === 'active' || (pauseRecord && pauseRecord.paused && pauseRecord.paused.some((p) => p.sessionId === agent.id)))) {
-                    tasks.push({ agent, sessionId: agent.id, goalId: gv.id, revision: gv.revision, phase: gv.phase });
-                }
-            }
-            return { ok: true, tasks };
-        }
-        function freeze(window) {
-            const col = collectTasks();
-            if (!col.ok) {
-                console.error('[save-money] freeze skipped:', col.reason);
-                return { frozen: 0, record: null };
-            }
-            const freezeTargets = col.tasks.filter((t) => t.phase === 'active');
-            if (freezeTargets.length === 0) {
-                console.log('[save-money] pauseAt reached but no active tasks; not pausing');
-                return { frozen: 0, record: null };
-            }
-            const goals = ctx.get('goals');
-            const paused = [];
-            for (const t of freezeTargets) {
-                try {
-                    goals.pause(t.agent, { id: t.goalId, revision: t.revision });
-                    paused.push({ sessionId: t.sessionId, goalId: t.goalId, revision: t.revision, pausedAt: Date.now() });
-                }
-                catch (e) {
-                    console.error('[save-money] goals.pause failed for ' + t.sessionId + ': ' + String((e && e.message) || e));
-                }
-            }
-            pauseRecord = {
-                pausedBySaveMoney: true,
-                at: new Date().toISOString(),
-                window: window ? { pauseAt: window.pauseAt, resumeAt: window.resumeAt, timezone: window.timezone || cfg.timezone } : null,
-                paused,
-                cascaded: true,
-            };
-            console.log('[save-money] FROZEN ' + paused.length + ' goal(s), record written');
-            return { frozen: paused.length, record: pauseRecord };
-        }
-        function unfreeze() {
-            if (!pauseRecord)
-                return { resumed: 0, record: null };
-            const agents = ctx.get('agents');
-            const goals = ctx.get('goals');
-            const remaining = [];
-            let resumed = 0;
-            const targets = pauseRecord.paused || [];
-            for (const p of targets) {
-                const agent = agents && agents.get(p.sessionId);
-                if (!agent)
-                    continue;
-                try {
-                    const gv = goals.get(agent);
-                    if (gv && gv.phase === 'paused') {
-                        goals.resume(agent, { id: gv.id, revision: gv.revision });
-                        resumed++;
-                    }
-                    else if (gv && gv.phase === 'active') {
-                        resumed++;
-                    }
-                }
-                catch (e) {
-                    console.error('[save-money] goals.resume failed for ' + p.sessionId + ': ' + String((e && e.message) || e));
-                    remaining.push(p);
-                }
-            }
-            pauseRecord = remaining.length > 0 ? { ...pauseRecord, paused: remaining } : null;
-            console.log('[save-money] RESUMED ' + resumed + ' goal(s)' + (remaining.length > 0 ? ', ' + remaining.length + ' still pending' : ', record cleared'));
-            return { resumed, record: pauseRecord };
-        }
-        ctx.effect(() => {
-            return () => {
-                if (pauseRecord && pauseRecord.paused && pauseRecord.paused.length > 0) {
-                    console.log('[save-money] plugin unloading: restoring paused goals');
-                    unfreeze();
-                }
-            };
-        });
-        // ---------- State computation ----------
-        function computeRawState(now) {
-            if (!cfg.enabled)
-                return { name: 'NORMAL', reason: 'disabled' };
-            for (const w of cfg.windows) {
-                const tz = w.timezone || cfg.timezone;
-                if (windowMatchesAt(w, wallClock(tz, now))) {
-                    // "End this save mode" only affects the exact window it was applied
-                    // to — a stale endWindowUntil must not suppress later windows.
-                    if (endWindowUntil > now.getTime() && endWindowKey === windowKey(w, tz))
-                        return { name: 'NORMAL', reason: 'ended', window: w };
-                    return { name: 'PAUSED', window: w };
-                }
-            }
-            let nearest = null;
-            for (const w of cfg.windows) {
-                const tz = w.timezone || cfg.timezone;
-                const wc = wallClock(tz, now);
-                const np = nextPause(w, tz, wc);
-                if (!np)
-                    continue;
-                const delta = np.dayOffset * 1440 + np.minutes - wc.minutes;
-                if (nearest === null || delta < nearest.delta)
-                    nearest = { delta, window: w };
-            }
-            if (nearest !== null && nearest.delta > 0 && nearest.delta <= cfg.warnMinutes) {
-                // The upcoming window may already be ended via "end this save mode"
-                // (clicked while WARN) — do not keep showing "pause soon", suppress it
-                // until the window's own resumeAt.
-                if (endWindowUntil > now.getTime() && endWindowKey === windowKey(nearest.window, nearest.window.timezone || cfg.timezone)) {
-                    return { name: 'NORMAL', reason: 'ended', window: nearest.window };
-                }
-                return { name: 'WARN', window: nearest.window, minutesToPause: nearest.delta };
-            }
-            return { name: 'NORMAL', reason: 'no-window' };
+                windows: cfg.windows,
+                endWindowUntil: S.endWindowUntil,
+                endWindowKey: S.endWindowKey,
+            });
         }
         function onTick(now) {
-            const raw = computeRawState(now);
+            const raw = computeRawStateLocal(now);
             let st = raw;
             if (raw.name === 'PAUSED') {
-                if (!pauseRecord) {
-                    const col = collectTasks();
+                if (!S.pauseRecord) {
+                    const col = goals.collectTasks();
                     if (!col.ok || col.tasks.length === 0)
                         st = { name: 'NORMAL', reason: 'no-task' };
                 }
             }
             const key = st.name + (st.window ? ':' + st.window.pauseAt : '');
-            if (key !== lastStateKey) {
-                const prevName = lastStateKey.split(':')[0];
-                lastStateKey = key;
+            if (key !== S.lastStateKey) {
+                const prevName = S.lastStateKey.split(':')[0];
+                S.lastStateKey = key;
                 if (st.name === 'PAUSED' && prevName !== 'PAUSED') {
-                    freeze(st.window);
+                    goals.freeze(st.window);
                 }
                 else if (st.name !== 'PAUSED' && prevName === 'PAUSED') {
-                    unfreeze();
+                    goals.unfreeze();
                 }
                 console.log('[save-money] state -> ' + key);
             }
         }
-        // ---------- Request-level gate (event-driven suspension; never throws,
-        //            zero timer dependencies) ----------
-        // Inside a pause window every streaming model call is intercepted (llm/stream
-        // is the mandatory waterfall every call goes through). The gate uses the
-        // same "inside window and not ignored" check as the state machine, and does
-        // NOT depend on the freeze record: even when no active goal is frozen,
-        // manual-conversation model requests are still suspended — that is
-        // the saving-money semantics.
-        // Implementation notes:
-        //  - Cordis 3 registration API is ctx.on only; llm.stream dispatches via
-        //    ctx.waterfall, and listeners must synchronously return an AsyncIterable
-        //    (the caller for-await's it; an async listener would break the return
-        //    type). So we return a WRAPPER stream: iteration waits for the gate to
-        //    open first, then calls next() to get the real stream — options pass
-        //    through untouched, routing/retry/validation are unaffected (we are
-        //    registered at the chain tail; the suspend happens before the actual
-        //    adapterStream).
-        //  - The sandbox has no Node timer globals (setTimeout throws and fails the
-        //    turn as "this run failed"); ctx.timer.timeout is a fiber effect and can
-        //    still throw when registered inside an agent-turn fiber context. So
-        //    waiting is EVENT-DRIVEN: suspending = registering the resolve into
-        //    gateWaiters, woken by: ① the 60s tick (registered in the plugin apply
-        //    context, runs reliably); ② applyConfig (disable / window change);
-        //    ③ endWindowHandler (end-window); ④ plugin unload (fail-open); ⑤ request
-        //    signal abort. No timers / fiber-effect calls → cannot throw, cannot
-        //    interrupt a turn.
-        let gateDisposed = false;
-        let gateWaiters = [];
-        const wakeGateWaiters = () => {
-            const waiters = gateWaiters;
-            gateWaiters = [];
-            for (const release of waiters) {
-                // Each waiter synchronously calls next() inside release(); if the
-                // waterfall chain (DSH's own llm/stream invariants run first) throws
-                // synchronously — e.g. the request context was torn down while the
-                // gate held it — the exception must NOT escape into the host callback
-                // that woke us (60s tick / applyConfig / unload). That would surface as
-                // an uncaughtException and crash the harness. We swallow it here; the
-                // pending request then rejects with the same error via the promise.
+        // ---------- Request-level gate (src/gate.ts) ----------
+        // Event-driven suspension, never throws, zero timer dependencies — full
+        // implementation notes live in the module.
+        const gate = createGate({
+            ctx,
+            getCfg: () => cfg,
+            computeRawStateLocal,
+            // Called for EVERY llm/stream request (also exempted tiers — real
+            // usage): marks the balance stale for the client, records the last
+            // provider, and timestamps local activity (feeds the spend bars).
+            onRequest: (options) => {
+                S.balanceDirty = true;
+                S.lastActivityAt = Date.now();
                 try {
-                    release();
+                    S.lastRequestProvider = (options && typeof options.provider === 'string' && options.provider.length > 0)
+                        ? options.provider
+                        : null;
                 }
                 catch (e) {
-                    console.error('[save-money] gate release failed: ' + String((e && e.message) || e));
+                    S.lastRequestProvider = null;
                 }
-            }
-        };
-        const gateClosedAt = (now) => {
-            if (!cfg.enabled)
-                return false;
-            // The gate follows the state machine exactly: computeRawState already
-            // exempts the ended window (endWindowKey match + endWindowUntil), so a
-            // different window (e.g. cross-timezone overlap) stays gated.
-            const st = computeRawState(now);
-            return st.name === 'PAUSED';
-        };
-        const gateInstalled = typeof ctx.on === 'function';
-        // "User sent a message" signal for the balance display: every llm/stream
-        // request corresponds to fresh user activity, so mark the balance stale —
-        // the client refreshes it on the next poll (message-driven update; the
-        // 10-minute timer is the client-side fallback cadence).
-        // lastRequestProvider records the provider of the MOST RECENT model
-        // request (multi-provider setups: DeepSeek + SiliconFlow/relays). The
-        // balance is a property of the official DeepSeek account, so it stays
-        // shown only while the latest actual request ran on the official provider;
-        // a switch to another provider hides it WITHOUT clearing the sampled
-        // history, so switching back re-shows it immediately.
-        let balanceDirty = false;
-        let lastRequestProvider = null;
-        if (typeof ctx.on === 'function') {
-            ctx.effect(() => {
-                const dispose = ctx.on('llm/stream', (options, next) => {
-                    balanceDirty = true;
-                    lastActivityAt = Date.now(); // 活动信号:本环境正在产生模型请求
-                    try {
-                        lastRequestProvider = (options && typeof options.provider === 'string' && options.provider.length > 0)
-                            ? options.provider
-                            : null;
-                    }
-                    catch (e) {
-                        lastRequestProvider = null;
-                    }
-                    // v1.4.1 模型档位豁免:识别请求的 provider/model 档位,若该档位在
-                    // modelApply 中未勾选(或识别失败=null),直接放行 —— 窗口内也不
-                    // 暂停。豁免的请求同样算「本环境活动」(balanceDirty/activity 已
-                    // 在上方打点),因为它确实是真实使用。识别/查询任何异常都安全失败
-                    // 为豁免(不暂停),绝不抛出。
-                    try {
-                        const cls = classifyModel(options && options.provider, options && options.model);
-                        if (!modelApplyEnabled(cfg.modelApply, cls))
-                            return next();
-                    }
-                    catch (e) { /* 识别异常 → 豁免(不暂停) */ }
-                    if (!gateClosedAt(new Date()))
-                        return next();
-                    const waitForOpen = () => new Promise((resolve) => {
-                        const ready = () => gateDisposed || !gateClosedAt(new Date())
-                            || !!(options && options.signal && options.signal.aborted);
-                        // Release helper: call next() defensively. A synchronous throw from
-                        // the waterfall chain (request context torn down / invariant fail)
-                        // must surface as a rejected promise — never as an exception
-                        // escaping into the abort event dispatch or wakeGateWaiters.
-                        const release = () => {
-                            try {
-                                resolve(next());
-                            }
-                            catch (e) {
-                                resolve(Promise.reject(e));
-                            }
-                        };
-                        if (ready())
-                            return release();
-                        const waiter = () => { release(); };
-                        gateWaiters.push(waiter);
-                        if (options && options.signal && typeof options.signal.addEventListener === 'function') {
-                            options.signal.addEventListener('abort', () => {
-                                const i = gateWaiters.indexOf(waiter);
-                                if (i >= 0)
-                                    gateWaiters.splice(i, 1);
-                                release();
-                            }, { once: true });
-                        }
-                    });
-                    // Wrapper stream: iteration waits only when the gate is closed; once
-                    // open → next() → the real request proceeds as usual.
-                    let inner = null;
-                    const getInner = () => (inner !== null ? Promise.resolve(inner) : waitForOpen().then((s) => { inner = s; return inner; }));
-                    return {
-                        [Symbol.asyncIterator]() {
-                            let it = null;
-                            return {
-                                next() {
-                                    return getInner().then((s) => {
-                                        if (!it)
-                                            it = s[Symbol.asyncIterator]();
-                                        return it.next();
-                                    });
-                                },
-                                return(value) {
-                                    return getInner().then((s) => {
-                                        if (!it)
-                                            it = s[Symbol.asyncIterator]();
-                                        return it.return ? it.return(value) : { done: true, value };
-                                    });
-                                },
-                                throw(e) {
-                                    return getInner().then((s) => {
-                                        if (!it)
-                                            it = s[Symbol.asyncIterator]();
-                                        return it.throw ? it.throw(e) : { done: true, value: e };
-                                    });
-                                },
-                            };
-                        },
-                    };
-                }, { global: true });
-                return () => {
-                    gateDisposed = true;
-                    try {
-                        wakeGateWaiters();
-                    }
-                    catch (e) { /* unload must never throw */ }
-                    dispose();
-                };
-            });
-        }
-        else {
-            console.error('[save-money] ctx.on unavailable; llm/stream gate not installed');
-        }
-        // ---------- Startup reconciliation ----------
-        function reconcile() {
-            const col = collectTasks();
-            if (!col.ok)
-                return { restored: 0, reason: col.reason };
-            const goals = ctx.get('goals');
-            const agents = ctx.get('agents');
-            let restored = 0;
-            for (const agent of agents.list()) {
-                let gv = undefined;
-                try {
-                    gv = goals.get(agent);
+            },
+        });
+        gate.install();
+        // Unload: restore any goals this plugin froze (fail-open, never hang).
+        ctx.effect(() => {
+            return () => {
+                if (S.pauseRecord && S.pauseRecord.paused && S.pauseRecord.paused.length > 0) {
+                    console.log('[save-money] plugin unloading: restoring paused goals');
+                    goals.unfreeze();
                 }
-                catch (e) {
-                    gv = undefined;
-                }
-                if (gv && gv.phase === 'paused') {
-                    try {
-                        goals.resume(agent, { id: gv.id, revision: gv.revision });
-                        restored++;
-                        console.log('[save-money] reconcile: restored paused goal of ' + agent.id);
-                    }
-                    catch (e) {
-                        console.error('[save-money] reconcile resume failed for ' + agent.id + ': ' + String((e && e.message) || e));
-                    }
-                }
-            }
-            return { restored };
-        }
-        // ---- Owned timers (explicitly disposed on unload) ----
-        // ctx.timer.timeout/interval are fiber effects and *should* be cleaned up
-        // automatically when the fiber disposes, but hot-updates (run/update) are
-        // the one path where we do NOT rely on implicit cleanup: save both
+            };
+        });
+        // ---------- Startup reconciliation + owned timers ----------
+        // ctx.timer.timeout/interval are fiber effects cleaned up automatically on
+        // dispose, but hot-updates (run/update) must not rely on that: save both
         // disposers and call them explicitly in the unload effect, so a repeated
         // update can never leak a 60s tick or a boot timeout.
         ctx.effect(() => {
@@ -1395,28 +1964,28 @@ export function apply(ctx) {
                 // Balance history loads in parallel (keyId-gated; independent of config).
                 void loadConfig().then(() => {
                     if (cfg.reconcileOnStart) {
-                        const r = reconcile();
+                        const r = goals.reconcile();
                         if (r.restored > 0)
                             console.log('[save-money] startup reconcile restored ' + r.restored + ' goal(s)');
                     }
                 });
-                void loadBalanceHistory();
+                void tracker.load();
             }, 100);
             const tick = ctx.timer.interval(() => {
                 try {
-                    // Fallback release: whenever the gate is open (window ended / disabled /
-                    // end-window active) wake the waiters — this MUST run before the enabled
-                    // check, so disabling also releases waiters and suspended requests never
-                    // hang forever.
-                    if (!gateClosedAt(new Date()))
-                        wakeGateWaiters();
+                    // Fallback release: whenever the gate is open (window ended /
+                    // disabled / end-window active) wake the waiters — this MUST run
+                    // before the enabled check, so disabling also releases waiters and
+                    // suspended requests never hang forever.
+                    if (!gate.gateClosedAt(new Date()))
+                        gate.wakeGateWaiters();
                     if (!cfg.enabled)
                         return;
                     onTick(new Date());
                 }
                 catch (e) {
-                    // A timer callback is a host callback: an escaping exception would be
-                    // an uncaughtException and crash the harness. Log and continue.
+                    // A timer callback is a host callback: an escaping exception would
+                    // be an uncaughtException and crash the harness. Log and continue.
                     console.error('[save-money] tick failed: ' + String((e && e.message) || e));
                 }
             }, 60000);
@@ -1431,10 +2000,8 @@ export function apply(ctx) {
         });
         // fs may activate AFTER the 100ms boot timer on compositions where the
         // save-money row precedes the base bundle's fs-sandbox row. Wait for the
-        // service (Cordis resolves the dependency as soon as it exists) and run the
-        // same boot load + reconcile then — loadConfig is idempotent (it re-reads
-        // the file and re-applies), so running it a second time is harmless and
-        // only fills the gap when the first attempt found no fs yet.
+        // service and run the same boot load + reconcile then — loadConfig is
+        // idempotent, so the second run only fills the gap of the first attempt.
         if (typeof ctx.inject === 'function') {
             // Bind keeps `this` (the ctx) when Cordis calls the returned inject
             // function, and gives the closure a non-optional reference so the
@@ -1444,7 +2011,7 @@ export function apply(ctx) {
                 sub.effect(() => {
                     void loadConfig().then(() => {
                         if (cfg.reconcileOnStart) {
-                            const r = reconcile();
+                            const r = goals.reconcile();
                             if (r.restored > 0)
                                 console.log('[save-money] late-fs reconcile restored ' + r.restored + ' goal(s)');
                         }
@@ -1454,20 +2021,20 @@ export function apply(ctx) {
         }
         // ---------- Status ----------
         function status(now) {
-            const st = computeRawState(now);
-            const col = collectTasks();
+            const st = computeRawStateLocal(now);
+            const col = goals.collectTasks();
             const out = {
                 enabled: cfg.enabled,
                 state: st.name,
                 reason: st.reason || null,
-                gate: gateClosedAt(now) ? 'closed' : 'open',
-                gateInstalled,
+                gate: gate.gateClosedAt(now) ? 'closed' : 'open',
+                gateInstalled: gate.gateInstalled,
                 // Diagnostics (runtime workspace resolution) — helps verify where the
                 // config file is loaded from / persisted to. resolveWorkspaceRoot is
                 // async (pointer + fs probes), so report the last resolved value.
-                workspaceRoot: resolvedConfigDir || defaultWorkspaceRoot,
-                configLoaded,
-                configPath,
+                workspaceRoot: cfgRef.resolvedConfigDir || cfgRef.defaultWorkspaceRoot,
+                configLoaded: cfgRef.configLoaded,
+                configPath: cfgRef.configPath,
                 nowUTC: now.toISOString(),
                 nowLocal: String(now),
                 busy: col.ok ? (col.tasks.length > 0) : null,
@@ -1475,7 +2042,7 @@ export function apply(ctx) {
             };
             // Balance staleness signal: true when a user message arrived since the
             // last balance query (the client refreshes on the next poll).
-            out.balanceDirty = balanceDirty;
+            out.balanceDirty = S.balanceDirty;
             if (st.window) {
                 const tz = st.window.timezone || cfg.timezone;
                 const wc = wallClock(tz, now);
@@ -1491,22 +2058,20 @@ export function apply(ctx) {
             }
             if (st.name === 'WARN')
                 out.minutesToPause = st.minutesToPause;
-            if (endWindowUntil > now.getTime())
-                out.endWindowUntil = new Date(endWindowUntil).toISOString();
-            out.pauseRecord = pauseRecord ? {
-                at: pauseRecord.at,
-                window: pauseRecord.window,
-                pausedCount: (pauseRecord.paused || []).length,
-                paused: (pauseRecord.paused || []).map((p) => ({ sessionId: p.sessionId, goalId: p.goalId })),
+            if (S.endWindowUntil > now.getTime())
+                out.endWindowUntil = new Date(S.endWindowUntil).toISOString();
+            out.pauseRecord = S.pauseRecord ? {
+                at: S.pauseRecord.at,
+                window: S.pauseRecord.window,
+                pausedCount: (S.pauseRecord.paused || []).length,
+                paused: (S.pauseRecord.paused || []).map((p) => ({ sessionId: p.sessionId, goalId: p.goalId })),
             } : null;
             out.config = snapshot();
             return out;
         }
-        // ---- Host RPC (dynamic-plugin form: registered on the harness sandbox)
-        // ---- + HTTP endpoints (official bundle form ONLY: the bundled Client half
-        //      talks to the same-origin webServer; the dynamic Client half keeps
-        //      using the harness RPC below and never registers routes on the host's
-        //      global webServer).
+        // ---- Host RPC (dynamic-plugin form: harness sandbox) + HTTP endpoints
+        // ---- (official bundle form ONLY: same-origin webServer /save-money/*;
+        //      the dynamic Client half never registers host routes).
         const harnessApi = typeof harness !== 'undefined' ? harness : null;
         if (harnessApi) {
             ctx.effect(() => harnessApi.handle('save-money/status', async () => status(new Date())));
@@ -1516,66 +2081,20 @@ export function apply(ctx) {
         // The plugin row only injects timer, so in the official bundle form apply()
         // can run BEFORE the webServer service is registered. Register the HTTP
         // endpoints via Cordis' inject() dependency waiting — it runs the callback
-        // as soon as webServer is available (immediately when already present), so
-        // the bundled Client half never sees 404s (e.g. the Enable checkbox would
-        // silently fail to configure). The disposer returned by webServer.register
-        // is owned by the injected sub-context. Skipped entirely in the dynamic
-        // form (harnessApi present).
-        const registerHttpEndpoints = (ws) => {
-            if (!ws || typeof ws.register !== 'function')
-                return;
-            const sendJson = (res, code, obj) => {
-                res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
-                res.end(JSON.stringify(obj));
-            };
-            return ws.register({
-                kind: 'prefix',
-                path: '/save-money',
-                handler: async (req, res) => {
-                    try {
-                        const rawPath = String(req.url || '/').split('?')[0];
-                        const path = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : rawPath;
-                        if (path === '/save-money/status') {
-                            sendJson(res, 200, status(new Date()));
-                            return;
-                        }
-                        if (path === '/save-money/balance') {
-                            sendJson(res, 200, await balanceQuery());
-                            return;
-                        }
-                        if (req.method === 'POST' && path === '/save-money/configure') {
-                            let raw = '';
-                            for await (const chunk of req)
-                                raw += chunk;
-                            let patch = {};
-                            try {
-                                patch = JSON.parse(raw || '{}');
-                            }
-                            catch (e) {
-                                patch = {};
-                            }
-                            sendJson(res, 200, applyConfig(patch));
-                            return;
-                        }
-                        if (req.method === 'POST' && path === '/save-money/end-window') {
-                            for await (const _ of req) { /* drain */ }
-                            sendJson(res, 200, await endWindowHandler());
-                            return;
-                        }
-                        sendJson(res, 404, { ok: false, message: 'not found: ' + path });
-                    }
-                    catch (e) {
-                        sendJson(res, 500, { ok: false, message: String((e && e.message) || e) });
-                    }
-                },
-            });
+        // as soon as webServer is available, so the bundled Client half never sees
+        // 404s. Skipped entirely in the dynamic form (harnessApi present).
+        const httpDeps = {
+            status: () => status(new Date()),
+            balanceQuery: () => tracker.query(),
+            applyConfig,
+            endWindowHandler: () => endWindowHandler(),
         };
         if (!harnessApi && webServer && typeof webServer.register === 'function') {
-            ctx.effect(() => registerHttpEndpoints(webServer));
+            ctx.effect(() => registerHttpEndpoints(webServer, httpDeps));
         }
         else if (!harnessApi && typeof ctx.inject === 'function') {
             ctx.inject(['webServer'], (sub) => {
-                sub.effect(() => registerHttpEndpoints(sub.get('webServer')));
+                sub.effect(() => registerHttpEndpoints(sub.get('webServer'), httpDeps));
             });
         }
         // UTC instant of a window's resumeAt (handles midnight-crossing windows).
@@ -1585,139 +2104,52 @@ export function apply(ctx) {
             const base = new Date(Date.UTC(baseWc.y, baseWc.mo - 1, baseWc.d + off));
             return wallToUTC(tz, base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate(), r);
         };
-        // "End this save mode" — one-shot, current window only:
-        //  - paused: immediately resumes frozen goals and clears the record
-        //  - pause upcoming (WARN): cancels the upcoming pause
-        //  - no active window: nothing happens (never touches later windows)
-        // The window is skipped until its resumeAt; the next window (today or
-        // later) still takes effect; the persistent `enabled` flag is untouched.
+        // "End this save mode" — one-shot, current window only: paused →
+        // immediately resumes frozen goals and clears the record; pause upcoming
+        // (WARN) → cancels it; no active window → nothing happens (never touches
+        // later windows). The window is skipped until its resumeAt; the persistent
+        // `enabled` flag is untouched.
         const endWindowHandler = async () => {
             const now = new Date();
-            const raw = computeRawState(now);
+            const raw = computeRawStateLocal(now);
             if (!raw.window) {
                 console.log('[save-money] end-window: no active window');
                 return { ok: false, message: 'no active pause window to end', ...status(now) };
             }
             const tz = raw.window.timezone || cfg.timezone;
             const wc = wallClock(tz, now);
-            endWindowUntil = endWindowUntilUTC(raw.window, tz, wc, 0);
-            endWindowKey = windowKey(raw.window, tz);
-            if (lastStateKey.split(':')[0] === 'PAUSED') {
-                lastStateKey = 'NORMAL';
-                unfreeze();
+            S.endWindowUntil = endWindowUntilUTC(raw.window, tz, wc, 0);
+            S.endWindowKey = windowKey(raw.window, tz);
+            if (S.lastStateKey.split(':')[0] === 'PAUSED') {
+                S.lastStateKey = 'NORMAL';
+                goals.unfreeze();
             }
-            wakeGateWaiters(); // the gate is now open (endWindowUntil), release immediately
-            console.log('[save-money] ended save mode for this window until ' + new Date(endWindowUntil).toISOString());
+            gate.wakeGateWaiters(); // the gate is now open (endWindowUntil), release immediately
+            console.log('[save-money] ended save mode for this window until ' + new Date(S.endWindowUntil).toISOString());
             return status(new Date());
         };
         if (harnessApi) {
             ctx.effect(() => harnessApi.handle('save-money/end-window', async () => endWindowHandler()));
         }
-        // ---- Account balance (DeepSeek API /user/balance, shown in the header) ----
-        // Implemented in src/balance-host.ts (inlined at build time): host-side
-        // request, official-API guard, fetch/curl transport, 60s cache + in-flight
-        // dedupe. The balance display is opt-in (cfg.showBalance, persisted,
-        // default off): when off, the query reports unavailable so the UI hides
-        // the balance entirely. Every failure returns ok:false and never throws.
-        const balanceSvc = createBalanceService(ctx, { sandbox: !!harnessApi });
-        // 余额历史(5 分钟采样 × 288 = 24 小时):由余额变化计算
-        // 最近 1 小时 / 10 分钟 / 24 小时的消费金额。
-        // 持久化到 ~/.dsh/dsh-save-money-balance.json(账户级、跨项目共享),
-        // 插件更新/重启不丢历史;文件带 keyId 指纹,换 key(=换账户)自动作废旧历史。
-        const balanceHistory = createBalanceHistory();
-        const historyFile = (() => {
-            const home = dshHome();
-            return home ? home + (home.includes('\\') ? '\\' : '/') + BALANCE_HISTORY_FILE : '';
-        })();
-        // 本环境活动信号:llm/stream 每次请求都打点;采样点据此标记 activity,
-        // 柱形图用它在「下降」时区分「本环境消费」(可信)与「可能外部消费」(警示)。
-        let lastActivityAt = 0;
-        let historyDirty = false;
-        let historyKeyId = null;
-        // 记录一次余额(带当前活动信号),并标脏待写盘。
-        const recordBalance = (total) => {
-            const now = Date.now();
-            // 活动信号:距上次 llm/stream 请求在 SAMPLE_MS 内 → 本环境有活动
-            const activity = lastActivityAt > 0 && now - lastActivityAt < SAMPLE_MS;
-            balanceHistory.record(total, now, activity);
-            historyDirty = true;
-        };
-        // 加载持久化历史:keyId 与当前凭据指纹一致才采用(否则旧账户轨迹作废)。
-        const loadBalanceHistory = async () => {
-            const fs = getFs();
-            if (!fs || !historyFile)
-                return;
-            try {
-                const text = await fs.readText(await fs.resolve(historyFile));
-                const parsed = parseBalanceHistory(text);
-                if (!parsed) {
-                    console.log('[save-money] balance history: unreadable, starting fresh');
-                    return;
-                }
-                const creds = ctx.get('credentials');
-                const key = creds && typeof creds.resolve === 'function'
-                    ? await creds.resolve('DEEPSEEK_API_KEY').then((r) => r && r.value).catch(() => undefined)
-                    : undefined;
-                historyKeyId = typeof key === 'string' && key.length > 0 ? keyFingerprint(key) : null;
-                if (parsed.keyId !== historyKeyId) {
-                    console.log('[save-money] balance history: key changed (' + String(parsed.keyId) + ' → ' + String(historyKeyId) + '), discarding old history');
-                    balanceHistory.clear();
-                    return;
-                }
-                balanceHistory.load(parsed.points);
-                console.log('[save-money] balance history loaded: ' + balanceHistory.points().length + ' samples');
-            }
-            catch (e) {
-                console.log('[save-money] balance history: none yet (fresh start)');
-            }
-        };
-        // 写盘:best-effort,绝不 throw。
-        const persistBalanceHistory = async () => {
-            const fs = getFs();
-            if (!fs || !historyFile)
-                return;
-            historyDirty = false;
-            try {
-                const creds = ctx.get('credentials');
-                const key = creds && typeof creds.resolve === 'function'
-                    ? await creds.resolve('DEEPSEEK_API_KEY').then((r) => r && r.value).catch(() => undefined)
-                    : undefined;
-                const kid = typeof key === 'string' && key.length > 0 ? keyFingerprint(key) : historyKeyId || 'unknown';
-                historyKeyId = kid;
-                const points = balanceHistory.points();
-                const target = await fs.resolve(historyFile);
-                // 写入位置:历史文件所在目录(~/.dsh)作为 workspaceRoot,确保沙箱放行。
-                const dir = historyFile.slice(0, Math.max(historyFile.lastIndexOf('\\'), historyFile.lastIndexOf('/')));
-                await fs.writeText(target, serializeBalanceHistory({ keyId: kid, points }), undefined, undefined, { mode: 'workspace-write', workspaceRoot: dir });
-            }
-            catch (e) {
-                console.error('[save-money] balance history persist failed: ' + String((e && e.message) || e));
-            }
-        };
-        // 卸载时强制落盘(异步尽力,通常能完成)。
+        // ---- Account balance (src/balance-host.ts transport +
+        //      src/balance-tracker.ts sampling/persist/query) ----
+        // The balance display is opt-in (cfg.showBalance, persisted, default off):
+        // when off, the query reports unavailable so the UI hides the balance.
+        // Every failure returns ok:false and never throws.
+        const tracker = createBalanceTracker(ctx, S, { getFs, getCfg: () => cfg, sandbox: !!harnessApi });
+        // Unload: force-flush the dirty history (async best-effort).
         ctx.effect(() => {
             return () => {
-                if (historyDirty)
-                    void persistBalanceHistory();
+                if (S.historyDirty)
+                    void tracker.persist();
             };
         });
-        /** 拉一次余额并写入历史采样点(5 分钟窗口内只更新不新增)。 */
-        const sampleBalance = async () => {
-            try {
-                const out = await balanceSvc.query();
-                if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
-                    const total = parseFloat(out.balance[0].total);
-                    if (Number.isFinite(total))
-                        recordBalance(total);
-                }
-            }
-            catch (e) { /* the sampler must never throw */ }
-        };
-        // 后端 5 分钟采样定时器:仅「显示余额」开启时拉取并记录(关闭时跳过,不产生请求)。
+        // Backend 5-minute sampler: only while the balance display is on
+        // (skipped when off — no upstream requests are produced).
         ctx.effect(() => {
             const dispose = ctx.timer.interval(() => {
                 if (cfg.showBalance)
-                    void sampleBalance();
+                    void tracker.sample();
             }, 300000);
             return () => {
                 try {
@@ -1726,11 +2158,12 @@ export function apply(ctx) {
                 catch (e) { /* unload must never throw */ }
             };
         });
-        // 写盘节流:与采样同频 5 分钟;有脏数据才写(减少磁盘 IO)。
+        // Write throttle: same 5-minute cadence as the sampler; only writes when
+        // dirty (less disk IO).
         ctx.effect(() => {
             const dispose = ctx.timer.interval(() => {
-                if (historyDirty)
-                    void persistBalanceHistory();
+                if (S.historyDirty)
+                    void tracker.persist();
             }, 300000);
             return () => {
                 try {
@@ -1739,127 +2172,16 @@ export function apply(ctx) {
                 catch (e) { /* unload must never throw */ }
             };
         });
-        const balanceQuery = async () => {
-            if (!cfg.showBalance)
-                return { ok: false, error: 'balance display is disabled' };
-            const out = await balanceSvc.query();
-            balanceDirty = false; // a fresh balance was just fetched for the client
-            // 把本次余额记为最新采样点(窗口内去重),再附带消费统计。
-            if (out && out.ok && Array.isArray(out.balance) && out.balance.length > 0 && typeof out.balance[0].total === 'string') {
-                const total = parseFloat(out.balance[0].total);
-                if (Number.isFinite(total))
-                    recordBalance(total);
-            }
-            // 统一的窗口时钟基准:spend 三窗口与柱形图共享同一个「配置时区整 10 分钟」
-            // 对齐时刻,这样 m10 与 bars[0] 指向同一段时间(hover 卡与柱形图对得上),
-            // 且都落在配置时区的整数边界上(与官方后台按当地整点计费可比)。
-            const nowMs = Date.now();
-            const alignedNow = (cfg.timezone ? alignWallClock(cfg.timezone, nowMs, 10 * 60 * 1000) : undefined)
-                ?? (nowMs - (nowMs % (10 * 60 * 1000)));
-            const spendAt = {
-                m10: alignedNow - 10 * 60 * 1000,
-                h1: alignedNow - 60 * 60 * 1000,
-                // h24 跨天,不做 HH:mm 范围标注(避免"昨天/今天"歧义)
-            };
-            return {
-                ...out,
-                // Provider of the most recent model request: null when no request has
-                // been made yet (show the balance — the official account is queryable),
-                // otherwise the client shows the balance only for 'deepseek-official'.
-                provider: lastRequestProvider,
-                spend: {
-                    m10: balanceHistory.spend(10 * 60 * 1000, alignedNow),
-                    h1: balanceHistory.spend(60 * 60 * 1000, alignedNow),
-                    h24: balanceHistory.spend(24 * 60 * 60 * 1000, alignedNow),
-                },
-                // 各窗口的起始时刻(ms),hover 卡据此标注精确时间范围
-                spendAt,
-                // 最近 8 小时、10 分钟一根的消费柱形(第 0 根 = 最近 10 分钟);
-                // 与 spend 相同来源、相同对齐基准,点击余额后由客户端绘制。
-                bars: spendBars(balanceHistory.points(), nowMs, 48, 10 * 60 * 1000, cfg.timezone),
-            };
-        };
         if (harnessApi) {
-            ctx.effect(() => harnessApi.handle('save-money/balance', async () => balanceQuery()));
+            ctx.effect(() => harnessApi.handle('save-money/balance', async () => tracker.query()));
         }
-        // ---- Dynamic tools ----
-        // Registered through harness in the dynamic-plugin sandbox; through the
-        // ctx.tools service in the official module (plugin/index.js) form.
-        const TOOL_DEFS = [
-            {
-                name: 'save_money_status',
-                description: 'Query the save-money plugin state: enabled, gate state (NORMAL/WARN/PAUSED), busy detection, current window with UTC projection, PauseRecord summary, and full config.',
-                parameters: { type: 'object', properties: {} },
-                execute: async () => status(new Date()),
-            },
-            {
-                name: 'save_money_configure',
-                description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), modelApply (object of booleans: official-flash / official-pro / opencode-flash / opencode-pro — checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        enabled: { type: 'boolean' },
-                        timezone: { type: 'string' },
-                        warnMinutes: { type: 'number' },
-                        reconcileOnStart: { type: 'boolean' },
-                        lang: { type: 'string' },
-                        showBalance: { type: 'boolean' },
-                        modelApply: {
-                            type: 'object',
-                            properties: {
-                                'official-flash': { type: 'boolean' },
-                                'official-pro': { type: 'boolean' },
-                                'opencode-flash': { type: 'boolean' },
-                                'opencode-pro': { type: 'boolean' },
-                            },
-                        },
-                        windows: {
-                            type: 'array',
-                            items: {
-                                type: 'object',
-                                properties: {
-                                    pauseAt: { type: 'string' },
-                                    resumeAt: { type: 'string' },
-                                    days: { type: 'array', items: { type: 'number' } },
-                                    timezone: { type: 'string' },
-                                },
-                            },
-                        },
-                    },
-                },
-                execute: async (args) => applyConfig(unwrap(args) || {}),
-            },
-            {
-                name: 'save_money_end_window',
-                description: 'End save mode for the currently active pause window only (one-shot, in-memory, not persisted): if paused, immediately resumes frozen goals and releases the request gate; if a pause is upcoming, cancels it. The window is skipped until its resumeAt. The next window (today or later) still takes effect; the persistent enabled flag is untouched. Returns the new status.',
-                parameters: { type: 'object', properties: {} },
-                execute: async () => endWindowHandler(),
-            },
-            {
-                name: 'save_money_debug_tick',
-                description: 'Development tool: run one state-machine transition manually (as if a tick fired now). Returns the new status. Useful to verify freeze/resume without waiting for the timer.',
-                parameters: { type: 'object', properties: {} },
-                execute: async () => {
-                    onTick(new Date());
-                    return status(new Date());
-                },
-            },
-        ];
-        for (const def of TOOL_DEFS) {
-            const tool = {
-                ...def,
-                output: {
-                    schema: { type: 'object', properties: {}, additionalProperties: true },
-                    render: (_args, result) => [{ type: 'text', text: JSON.stringify(result) }],
-                },
-            };
-            if (harnessApi) {
-                ctx.effect(() => harnessApi.registerTool(ctx, harnessApi.defineTool(tool)));
-            }
-            else {
-                const tools = ctx.get('tools');
-                if (tools && typeof tools.register === 'function')
-                    ctx.effect(() => tools.register(tool));
-            }
-        }
+        // ---- Dynamic tools (src/host-tools.ts) ----
+        createToolRegistrar({
+            harnessApi,
+            ctx,
+            status: () => status(new Date()),
+            configure: (args) => applyConfig(unwrap(args) || {}),
+            onTick: () => { onTick(new Date()); },
+            endWindowHandler,
+        });
     }

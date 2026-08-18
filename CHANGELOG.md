@@ -4,6 +4,26 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] — 2026-08-18
+
+### Changed
+
+- **Codebase refactor (internal, no behavior change)**: the oversized single files were split into small, focused modules — `src/client.ts` (1730 → 259 lines) now only wires the data layer and slots, with the UI in `src/ui/*` (badge / banner / settings / bar chart / header entry + composition root); `src/host.ts` (1234 → 400 lines) now wires sub-modules (`host-goals` / `gate` / `balance-tracker` / `host-http` / `host-tools`); the balance logic moved to `balance-history` / `balance-bars` / `balance-host` (transport); the config controller and the pure state machine live in `config.ts` / `state.ts`; the UI dictionary moved to per-language files in `src/i18n/*` (10 files + types + aggregator). Every source file stays ≤ 400 lines and all comments are in English (user-facing i18n strings excepted). 105 unit tests still pass.
+- **Settings panel layout, more compact**: "Enable" and "Show balance" now share one row; the model-tier toggles are two rows — **Official API: flash / pro** and **opencode go·zen API: flash / pro** — instead of four stacked rows (translated in all 10 languages).
+
+### Fixed
+
+- **Balance top-ups no longer distort the spend chart**: a top-up (recharge/refund) window is no longer drawn as a negative bar and no longer stretches the Y axis — the axis stays positive-only (spend), and the hidden top-up window shows a "balance recovered (recharge/refund), not counted in spend analysis" note on hover.
+- **Balance history is actually persisted (regression)**: the 5-minute write throttle and the unload flush used to gate on a dirty flag that was never set, so the sampled history lived only in memory and was lost on every restart. The flag now lives on the shared plugin state; it is cleared only after a successful write, and a failed write keeps the marker for the next cycle.
+- **A transient credential failure no longer wipes the persisted history**: if the API key cannot be resolved at startup, the loaded history is kept and re-checked later; the file is never overwritten with a placeholder fingerprint.
+- **Saving settings no longer strips `days` and per-window timezones**: the settings UI now carries those fields through the window rows; the dropdown timezone applies only to windows without an explicit one.
+- **Config validation hardened**: `enabled` / `reconcileOnStart` are type-checked (a truthy string like `"yes"` is rejected) and unknown patch keys are dropped instead of being merged into the live config.
+- **Config changes wake suspended requests immediately**: disabling or changing windows now releases gate waiters at once (previously they could stay suspended until the 60 s tick).
+- **Re-enabling the plugin resets the skipped window**: unchecking and re-checking "Enable" clears the one-shot "end this save mode" state, so every window takes effect again.
+- **Gate double-release guarded**: an abort signal and the wake loop hitting the same suspended request in the same instant could invoke the downstream chain twice; a once-guard now prevents it.
+- **Client polling deduplicated**: one 30 s status loop per mounted component instead of an extra apply-level loop (fewer redundant requests).
+- **i18n consistency enforced**: a new test asserts every locale exports the same key set and no duplicates, so a missing translation can never silently fall back to English.
+
 ## [1.4.1] — 2026-08-18
 
 ### Added

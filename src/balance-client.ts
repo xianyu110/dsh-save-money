@@ -35,11 +35,13 @@ export function pickBalance(raw: any): { currency: string; total: string; grante
   if (!Array.isArray(raw.balance) || raw.balance.length === 0) return null
   const b = raw.balance[0]
   if (!b || typeof b !== 'object') return null
+  // `?? ''` (not `|| ''`): a literal 0 / empty string is a valid value and
+  // must not be replaced by the fallback.
   return {
-    currency: String(b.currency || ''),
-    total: String(b.total || ''),
-    granted: String(b.granted || ''),
-    toppedUp: String(b.toppedUp || ''),
+    currency: String(b.currency ?? ''),
+    total: String(b.total ?? ''),
+    granted: String(b.granted ?? ''),
+    toppedUp: String(b.toppedUp ?? ''),
   }
 }
 
@@ -60,7 +62,7 @@ function fmtSpend(v: any, sym: string): string {
   if (v === null || v === undefined) return '\u2013' // en dash — history not yet sampled
   const n = Number(v)
   if (!Number.isFinite(n)) return '\u2013'
-  // 正数=花掉(显示 "¥1.23"),负数=余额回升(显示 "+¥1.23")
+  // Positive = spent (shows "¥1.23"); negative = balance recovered (shows "+¥1.23")
   return (n >= 0 ? '' : '+') + sym + Math.abs(n).toFixed(2)
 }
 
@@ -70,11 +72,11 @@ function fmtSpend(v: any, sym: string): string {
  * window — 10m / 1h / 24h — always present so the user can see the features
  * exist. A window whose history is not yet sampled (first ~5 minutes after
  * enabling the display) shows "–" instead of a value; `labels` provides the
- * i18n texts (e.g. '近1h消费').
+ * i18n texts (e.g. the localized "Last 1h spend").
  *
  * `ranges` (when supplied) carries the wall-clock start instants of each
  * window (m10 / h1 / h24, ms). The client renders them as a time suffix so
- * the rolling spend windows are explicit — e.g. "近1h消费 07:00–08:00 ¥1.25" —
+ * the rolling spend windows are explicit — e.g. "Last 1h spend 07:00–08:00 ¥1.25" —
  * matching the bar chart's explicit "07:40–07:50" windows instead of leaving
  * two different "10 minutes" unlabeled and confusing.
  *

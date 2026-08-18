@@ -34,11 +34,23 @@ const options = {
 }
 
 const rootNames = []
-// src/core.ts, src/balance-host.ts and src/balance-client.ts are regular ESM
-// modules — type-check them as-is.
-rootNames.push(join(root, 'src', 'core.ts'))
-rootNames.push(join(root, 'src', 'balance-host.ts'))
-rootNames.push(join(root, 'src', 'balance-client.ts'))
+// Standalone ESM modules — type-check them as-is (pure logic inlined into the
+// plugin bodies at build time).
+for (const f of ['core', 'balance-history', 'balance-bars', 'balance-host', 'balance-client', 'config', 'state']) {
+  rootNames.push(join(root, 'src', f + '.ts'))
+}
+// Host sub-modules (factories wired by host.ts)
+for (const f of ['host-goals', 'gate', 'balance-tracker', 'host-http', 'host-tools']) {
+  rootNames.push(join(root, 'src', f + '.ts'))
+}
+// i18n modules (types + locale dicts + aggregator)
+for (const l of ['types', 'zh', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko', 'zh-TW', 'index']) {
+  rootNames.push(join(root, 'src', 'i18n', l + '.ts'))
+}
+// Client UI modules (per-component factories + composition root)
+for (const f of ['badge', 'banner', 'settings', 'barchart', 'header', 'index']) {
+  rootNames.push(join(root, 'src', 'ui', f + '.tsx'))
+}
 for (const name of ['host', 'client']) {
   const src = readFileSync(join(root, 'src', name + '.ts'), 'utf8')
   const marker = '\nreturn {'
