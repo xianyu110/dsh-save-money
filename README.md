@@ -91,7 +91,7 @@ pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.4.0.
 pnpm dsh --profile web      # starts DeepSeek Harness — the plugin appears top-right in the session header
 ```
 
-> Two notes: ① the tarball name on the `add` line must match what `ls` printed (`1.3.0` is just an example); ② if your harness runs via npx, replace every `pnpm dsh` above with `npx @deepseek-ai/dsh` (install commands too).
+> Two notes: ① the tarball name on the `add` line must match what `ls` printed (`1.4.0` is just an example); ② if your harness runs via npx, replace every `pnpm dsh` above with `npx @deepseek-ai/dsh` (install commands too).
 
 ### 0. Run DSH itself first
 
@@ -191,7 +191,7 @@ pnpm dsh --profile web                 # Ctrl+C to stop an already-running insta
 
 **Step 5 — open the browser** at http://127.0.0.1:3080 and **hard-refresh** (Ctrl+Shift+R). The "Save" status text appears in the session header; click it for the settings. You can also confirm the plugin is live from a conversation (`save_money_status`).
 
-**Upgrading to a newer version** (e.g. 1.2.5 → 1.3.0):
+**Upgrading to a newer version** (e.g. 1.3.0 → 1.4.0):
 
 > The commands below use `pnpm dsh`; if you launched DSH via npx, replace `pnpm dsh` with `npx @deepseek-ai/dsh`.
 

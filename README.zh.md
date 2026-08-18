@@ -95,7 +95,7 @@ pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.4.0.
 pnpm dsh --profile web      # 启动 DeepSeek Harness，可以看到本插件在右上角了
 ```
 
-> 两处注意：① 第 6 行的 tgz 文件名以 `ls` 的实际输出为准（`1.3.0` 只是示例）；② 若你的 harness 是用 npx 启动的，把上面所有 `pnpm dsh` 换成 `npx @deepseek-ai/dsh`（安装命令同理）。
+> 两处注意：① 第 6 行的 tgz 文件名以 `ls` 的实际输出为准（`1.4.0` 只是示例）；② 若你的 harness 是用 npx 启动的，把上面所有 `pnpm dsh` 换成 `npx @deepseek-ai/dsh`（安装命令同理）。
 
 ### 第 0 步：先让 DSH 跑起来
 
@@ -195,7 +195,7 @@ pnpm dsh --profile web                 # 若已有实例在跑，先 Ctrl+C 停�
 
 **第 5 步——打开浏览器**访问 http://127.0.0.1:3080 并**强制刷新**（Ctrl+Shift+R）。会话头部出现"省钱"状态文字，点击进入设置；也可在对话中让 AI 执行 `save_money_status` 确认插件已加载。
 
-**升级到新版本**（例如 1.2.5 → 1.3.0）：
+**升级到新版本**（例如 1.3.0 → 1.4.0）：
 
 > 下面用 `pnpm dsh` 写的命令，npx 启动的用户把 `pnpm dsh` 换成 `npx @deepseek-ai/dsh` 即可。
 
