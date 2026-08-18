@@ -49,7 +49,7 @@
  *   --no-publish       stop after git push (do not npm publish)
  *   --no-push          stop after the local commit + tag (no remote ops)
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, copyFileSync, unlinkSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -171,13 +171,17 @@ if (noPush || noPublish) {
   console.log('  skipped by ' + (noPush ? '--no-push' : '--no-publish'))
 } else {
   const readmeTmp = join(root, 'plugin', 'README.md')
-  writeFileSync(readmeTmp, readFileSync(join(root, 'README.md'), 'utf8'))
+  // Filesystem-level copy (no JS buffer round-trip): fast, binary-safe,
+  // works on every platform.
+  copyFileSync(join(root, 'README.md'), readmeTmp)
   try {
     run('npm publish ./plugin', { cwd: root })
   } finally {
-    try { execSync('del /f /q ' + JSON.stringify(readmeTmp), { cwd: root }) } catch (e) {
-      try { execSync('rm -f ' + JSON.stringify(readmeTmp), { cwd: root }) } catch (e2) { /* best-effort */ }
-    }
+    // Cleanup via Node fs, not a shell command: cross-platform (Windows /
+    // Linux / macOS), no shell-injection surface, no dependence on
+    // PowerShell/bash being present, exact errors. The temp README must
+    // never linger.
+    try { unlinkSync(readmeTmp) } catch (e) { /* already gone */ }
   }
 }
 
