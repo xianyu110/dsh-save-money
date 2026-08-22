@@ -1,6 +1,6 @@
 {
   "name": "dsh-save-money",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "private": true,
   "description": "DSH save-money plugin — time-window auto pause/resume for peak/off-peak API pricing (TypeScript sources, i18n zh/en).",
   "repository": {

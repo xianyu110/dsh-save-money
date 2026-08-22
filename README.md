@@ -100,13 +100,13 @@ npm install
 cd plugin
 npm pack                    # runs the build automatically; produces the plugin tarball
 
-ls                          # check the tarball name, e.g. dsh-save-money-1.4.3.tgz
+ls                          # check the tarball name, e.g. dsh-save-money-1.4.4.tgz
 
 cd ~/app/deepseek-harness   # change to your harness directory (clone it first if missing — see "0." below)
 
 pnpm dsh plugin --profile web remove dsh-save-money   # only if you installed it before; skip if you haven't
 
-pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.4.3.tgz   # use the name from `ls` above
+pnpm dsh plugin --profile web add ../dsh-save-money/plugin/dsh-save-money-1.4.4.tgz   # use the name from `ls` above
 
 pnpm dsh --profile web      # starts DeepSeek Harness — the plugin appears top-right in the session header
 ```
@@ -178,7 +178,7 @@ The bundle is a small `.tgz` that you build once and install anywhere. **You do 
 cd dsh-save-money
 npm install             # first clone only (typescript dev dependency)
 cd plugin
-npm pack                # runs the prepare build automatically; produces dsh-save-money-1.4.3.tgz
+npm pack                # runs the prepare build automatically; produces dsh-save-money-1.4.4.tgz
 ```
 
 `plugin/` is the standard bundle layout: `package.json` declares `dsh.bundle.patch` + `dsh.client`, `cordis.patch.yml` inserts the plugin row, `index.js` is the Host module and `client.js` the browser UI bundle.
@@ -186,16 +186,16 @@ npm pack                # runs the prepare build automatically; produces dsh-sav
 **Step 2 — copy the tgz to the target machine** (scp / USB stick / however you move files; run this on the build machine, **one directory above** the repository, adjusting the path to yours):
 
 ```sh
-scp dsh-save-money/plugin/dsh-save-money-1.4.3.tgz pi@<pi-ip>:~/
+scp dsh-save-money/plugin/dsh-save-money-1.4.4.tgz pi@<pi-ip>:~/
 ```
 
 **Step 3 — install into a profile** (on the target machine; first run initializes the profile with `@deepseek-ai/dsh-base`):
 
 ```sh
 # DSH run from source (inside the deepseek-harness directory):
-pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.3.tgz
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.4.tgz
 # npx-launched (Step 0, option A) or globally installed dsh: works from any directory
-npx @deepseek-ai/dsh plugin --profile web add ~/dsh-save-money-1.4.3.tgz
+npx @deepseek-ai/dsh plugin --profile web add ~/dsh-save-money-1.4.4.tgz
 ```
 
 > Both commands do the same thing: install the tgz into `~/.dsh/profiles/web/node_modules/`. Use whichever matches how you start DSH.
@@ -218,11 +218,11 @@ pnpm dsh --profile web                 # Ctrl+C to stop an already-running insta
 ```sh
 # on the build machine:
 cd dsh-save-money && git pull && cd plugin && npm pack    # fresh dsh-save-money-<new>.tgz
-scp dsh-save-money/plugin/dsh-save-money-1.4.3.tgz pi@<pi-ip>:~/
+scp dsh-save-money/plugin/dsh-save-money-1.4.4.tgz pi@<pi-ip>:~/
 
 # on the target:
 pnpm dsh plugin --profile web remove dsh-save-money
-pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.3.tgz
+pnpm dsh plugin --profile web add ~/dsh-save-money-1.4.4.tgz
 pnpm dsh --profile web                # restart, then hard-refresh the browser
 ```
 
