@@ -30,7 +30,7 @@ export function createToolRegistrar(deps: any): void {
     },
     {
       name: 'save_money_configure',
-      description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), modelApply (object of booleans: official-flash / official-pro / opencode-flash / opencode-pro — checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+      description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), activeDays (array of ISO weekday ints 1-7, may be empty = never pause; default [1,2,3,4,5] Mon-Fri), modelApply (object of booleans: official-flash / official-pro / official-vision / other-flash / other-pro / other-vision — official = the DeepSeek official API, other = every non-official provider (opencode, relays, ...); checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
       parameters: {
         type: 'object',
         properties: {
@@ -40,13 +40,16 @@ export function createToolRegistrar(deps: any): void {
           reconcileOnStart: { type: 'boolean' },
           lang: { type: 'string' },
           showBalance: { type: 'boolean' },
+          activeDays: { type: 'array', items: { type: 'number' } },
           modelApply: {
             type: 'object',
             properties: {
               'official-flash': { type: 'boolean' },
               'official-pro': { type: 'boolean' },
-              'opencode-flash': { type: 'boolean' },
-              'opencode-pro': { type: 'boolean' },
+              'official-vision': { type: 'boolean' },
+              'other-flash': { type: 'boolean' },
+              'other-pro': { type: 'boolean' },
+              'other-vision': { type: 'boolean' },
             },
           },
           windows: {

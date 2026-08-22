@@ -14,7 +14,7 @@
  * (it imports core.js) for the unit tests.
  */
 
-import { wallClock, windowMatchesAt, nextPause } from './core.js'
+import { wallClock, windowMatchesAt, nextPause, dowNum } from './core.js'
 import type { TimeWindow } from './core.js'
 
 export interface RawState {
@@ -30,6 +30,10 @@ export interface StateInput {
   timezone: string
   warnMinutes: number
   windows: TimeWindow[]
+  /** Global weekday switch (ISO 1-7): saving only applies on these days.
+   * Empty/absent = every day. Composed with each window's own `days` field
+   * (both must match for a window to apply). */
+  activeDays?: number[]
   /** "End this save mode" — only affects the exact window whose key matches. */
   endWindowUntil: number
   endWindowKey: string | null
@@ -43,13 +47,20 @@ export function windowKey(w: TimeWindow, tz: string): string {
 /**
  * Decide the raw plugin state at `now`.
  *
- * Order: disabled → NORMAL; inside a window → PAUSED (unless that window is
- * ended via end-this-save-mode → NORMAL); an upcoming window within
+ * Order: disabled → NORMAL; today (in the configured timezone) not in the
+ * global weekday switch → NORMAL; inside a window → PAUSED (unless that
+ * window is ended via end-this-save-mode → NORMAL); an upcoming window within
  * warnMinutes → WARN; otherwise NORMAL. Pure — reads only `input`.
  */
 export function computeRawState(now: Date, input: StateInput): RawState {
-  const { enabled, timezone, warnMinutes, windows, endWindowUntil, endWindowKey } = input
+  const { enabled, timezone, warnMinutes, windows, activeDays, endWindowUntil, endWindowKey } = input
   if (!enabled) return { name: 'NORMAL', reason: 'disabled' }
+  // Global weekday switch (v1.4.4): weekends off-peak all day → no saving
+  // unless the day is checked. Empty array = no active day = never pause;
+  // absent/undefined = every day applies. Uses the CONFIG timezone's today.
+  if (activeDays && !activeDays.includes(dowNum(wallClock(timezone, now).weekday))) {
+    return { name: 'NORMAL', reason: 'weekday-off' }
+  }
   for (const w of windows) {
     const tz = w.timezone || timezone
     if (windowMatchesAt(w, wallClock(tz, now))) {

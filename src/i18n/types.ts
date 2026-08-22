@@ -59,7 +59,15 @@ export interface Dict {
   modelApplyTitle: string
   modelApplyHint: string
   applyOfficial: string
-  applyOpencode: string
+  applyOther: string
+  weekdayTitle: string
+  weekdayMon: string
+  weekdayTue: string
+  weekdayWed: string
+  weekdayThu: string
+  weekdayFri: string
+  weekdaySat: string
+  weekdaySun: string
   spendH1: string
   spendM10: string
   spendH24: string

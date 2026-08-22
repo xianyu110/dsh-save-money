@@ -26,14 +26,20 @@ export interface SpendBar {
 
 /**
  * Model tier classification: only models clearly identified as official /
- * OpenCode with a flash/pro tier enter the gate's tier check; null means the
- * recognition failed → exempt (never paused).
+ * non-official with a flash / pro / vision tier enter the gate's tier check;
+ * null means the recognition failed → exempt (never paused).
+ *
+ * v1.4.4: the "other" tier group covers EVERY non-official provider (not just
+ * opencode), and the vision-exp model (deepseek-v4-flash-vision-exp) gets its
+ * own tier checked BEFORE flash — its name contains "flash".
  */
 export type ModelClass =
   | 'official-flash'
   | 'official-pro'
-  | 'opencode-flash'
-  | 'opencode-pro'
+  | 'official-vision'
+  | 'other-flash'
+  | 'other-pro'
+  | 'other-vision'
   | null
 
 /** Official DeepSeek provider route name (hard-coded by the harness). */
@@ -42,24 +48,29 @@ export const OFFICIAL_PROVIDER = 'deepseek-official'
 /**
  * Classify a request's tier from the provider name + model name. Pure
  * function, never throws:
- *  - Provider: lowercase contains 'opencode' → OpenCode (the go/zen gateway
- *    reuses the same route); provider === 'deepseek-official' → official;
- *    anything else → null (exempt).
- *  - Tier: model name lowercase contains 'pro' → pro; contains 'flash' →
- *    flash; otherwise null (exempt, including the legacy chat/reasoner names
- *    and unknown models — only explicit flash/pro can ever be paused).
+ *  - Provider: provider === 'deepseek-official' → official; ANY other provider
+ *    → the "other" group (opencode go/zen, relays, SiliconFlow, …). A missing
+ *    / empty provider → null (exempt).
+ *  - Tier: model name lowercase contains 'vision' → vision (checked first:
+ *    deepseek-v4-flash-vision-exp contains "flash"); else contains 'pro' →
+ *    pro; else contains 'flash' → flash; otherwise null (exempt, including
+ *    the legacy chat/reasoner names and unknown models — only explicit
+ *    flash/pro/vision can ever be paused).
  * Any input shape (undefined / non-string) safely returns null.
  */
 export function classifyModel(provider: any, model: any): ModelClass {
   const p = typeof provider === 'string' ? provider.toLowerCase() : ''
   const m = typeof model === 'string' ? model.toLowerCase() : ''
   if (p.length === 0 || m.length === 0) return null
-  const isPro = m.indexOf('pro') >= 0
-  const isFlash = m.indexOf('flash') >= 0
-  if (!isPro && !isFlash) return null // unknown → exempt
-  if (p === OFFICIAL_PROVIDER) return isPro ? 'official-pro' : 'official-flash'
-  if (p.indexOf('opencode') >= 0) return isPro ? 'opencode-pro' : 'opencode-flash'
-  return null // other third parties → exempt (they have no DeepSeek peak pricing)
+  // vision first: "deepseek-v4-flash-vision-exp" also contains "flash"
+  const isVision = m.indexOf('vision') >= 0
+  const isPro = !isVision && m.indexOf('pro') >= 0
+  const isFlash = !isVision && m.indexOf('flash') >= 0
+  if (!isVision && !isPro && !isFlash) return null // unknown → exempt
+  const tier = isVision ? 'vision' : isPro ? 'pro' : 'flash'
+  if (p === OFFICIAL_PROVIDER) return ('official-' + tier) as ModelClass
+  // Any other provider belongs to the "other" group (v1.4.4)
+  return ('other-' + tier) as ModelClass
 }
 
 /**

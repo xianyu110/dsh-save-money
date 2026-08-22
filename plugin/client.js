@@ -392,8 +392,16 @@ const zh = {
     showBalance: '显示余额',
     modelApplyTitle: '适用模型（勾选 = 窗口内暂停；不勾选 = 豁免）',
     modelApplyHint: '识别失败或未列出的模型（如其他第三方）一律豁免',
+    weekdayTitle: '周窗口',
+    weekdayMon: '一',
+    weekdayTue: '二',
+    weekdayWed: '三',
+    weekdayThu: '四',
+    weekdayFri: '五',
+    weekdaySat: '六',
+    weekdaySun: '日',
     applyOfficial: '官方 API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: '其他 API',
     spendH1: '近1h消费',
     spendM10: '近10m消费',
     spendH24: '近24h消费',
@@ -453,8 +461,16 @@ const en = {
     showBalance: 'Show balance',
     modelApplyTitle: 'Apply to models (checked = pause in windows; unchecked = exempt)',
     modelApplyHint: 'Models not recognized or not listed (e.g. other third parties) are always exempt',
+    weekdayTitle: 'Weekdays',
+    weekdayMon: 'Mo',
+    weekdayTue: 'Tu',
+    weekdayWed: 'We',
+    weekdayThu: 'Th',
+    weekdayFri: 'Fr',
+    weekdaySat: 'Sa',
+    weekdaySun: 'Su',
     applyOfficial: 'Official API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: 'Other API',
     spendH1: '1h spent',
     spendM10: '10m spent',
     spendH24: '24h spent',
@@ -514,8 +530,16 @@ const de = {
     showBalance: 'Guthaben anzeigen',
     modelApplyTitle: 'Gilt für Modelle (aktiviert = in Fenstern pausieren; deaktiviert = ausgenommen)',
     modelApplyHint: 'Nicht erkannte oder nicht aufgeführte Modelle (z. B. andere Drittanbieter) sind immer ausgenommen',
+    weekdayTitle: 'Wochentage',
+    weekdayMon: 'Mo',
+    weekdayTue: 'Di',
+    weekdayWed: 'Mi',
+    weekdayThu: 'Do',
+    weekdayFri: 'Fr',
+    weekdaySat: 'Sa',
+    weekdaySun: 'So',
     applyOfficial: 'Offizielle API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: 'Andere API',
     spendH1: 'Verbrauch 1h',
     spendM10: 'Verbrauch 10m',
     spendH24: 'Verbrauch 24h',
@@ -575,8 +599,16 @@ const fr = {
     showBalance: 'Afficher le solde',
     modelApplyTitle: 'Appliquer aux modèles (coché = suspendre pendant les fenêtres ; décoché = exempté)',
     modelApplyHint: 'Les modèles non reconnus ou non listés (ex. autres tiers) sont toujours exemptés',
+    weekdayTitle: 'Jours',
+    weekdayMon: 'Lu',
+    weekdayTue: 'Ma',
+    weekdayWed: 'Me',
+    weekdayThu: 'Je',
+    weekdayFri: 'Ve',
+    weekdaySat: 'Sa',
+    weekdaySun: 'Di',
     applyOfficial: 'API officielle',
-    applyOpencode: 'API opencode go/zen',
+    applyOther: 'Autres API',
     spendH1: 'dépensé 1h',
     spendM10: 'dépensé 10m',
     spendH24: 'dépensé 24h',
@@ -636,8 +668,16 @@ const es = {
     showBalance: 'Mostrar saldo',
     modelApplyTitle: 'Aplicar a modelos (marcado = pausar en ventanas; desmarcado = exento)',
     modelApplyHint: 'Los modelos no reconocidos o no listados (p. ej. otros terceros) siempre están exentos',
+    weekdayTitle: 'Días',
+    weekdayMon: 'Lu',
+    weekdayTue: 'Ma',
+    weekdayWed: 'Mi',
+    weekdayThu: 'Ju',
+    weekdayFri: 'Vi',
+    weekdaySat: 'Sá',
+    weekdaySun: 'Do',
     applyOfficial: 'API oficial',
-    applyOpencode: 'API opencode go/zen',
+    applyOther: 'Otras API',
     spendH1: 'gastado 1h',
     spendM10: 'gastado 10m',
     spendH24: 'gastado 24h',
@@ -697,8 +737,16 @@ const it = {
     showBalance: 'Mostra saldo',
     modelApplyTitle: 'Applica ai modelli (selezionato = pausa nelle finestre; deselezionato = esente)',
     modelApplyHint: 'I modelli non riconosciuti o non elencati (es. altri terzi) sono sempre esenti',
+    weekdayTitle: 'Giorni',
+    weekdayMon: 'Lu',
+    weekdayTue: 'Ma',
+    weekdayWed: 'Me',
+    weekdayThu: 'Gi',
+    weekdayFri: 'Ve',
+    weekdaySat: 'Sa',
+    weekdaySun: 'Do',
     applyOfficial: 'API ufficiale',
-    applyOpencode: 'API opencode go/zen',
+    applyOther: 'Altre API',
     spendH1: 'speso 1h',
     spendM10: 'speso 10m',
     spendH24: 'speso 24h',
@@ -758,8 +806,16 @@ const pt = {
     showBalance: 'Mostrar saldo',
     modelApplyTitle: 'Aplicar a modelos (marcado = pausar nas janelas; desmarcado = isento)',
     modelApplyHint: 'Modelos não reconhecidos ou não listados (ex. outros terceiros) estão sempre isentos',
+    weekdayTitle: 'Dias',
+    weekdayMon: 'Seg',
+    weekdayTue: 'Ter',
+    weekdayWed: 'Qua',
+    weekdayThu: 'Qui',
+    weekdayFri: 'Sex',
+    weekdaySat: 'Sáb',
+    weekdaySun: 'Dom',
     applyOfficial: 'API oficial',
-    applyOpencode: 'API opencode go/zen',
+    applyOther: 'Outras APIs',
     spendH1: 'gasto 1h',
     spendM10: 'gasto 10m',
     spendH24: 'gasto 24h',
@@ -819,8 +875,16 @@ const ja = {
     showBalance: '残高を表示',
     modelApplyTitle: '適用モデル（チェック = ウィンドウ内で一時停止;外す = 対象外）',
     modelApplyHint: '認識できない・一覧にないモデル（他社など）は常に対象外',
+    weekdayTitle: '曜日',
+    weekdayMon: '月',
+    weekdayTue: '火',
+    weekdayWed: '水',
+    weekdayThu: '木',
+    weekdayFri: '金',
+    weekdaySat: '土',
+    weekdaySun: '日',
     applyOfficial: '公式 API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: 'その他 API',
     spendH1: '1h 消費',
     spendM10: '10m 消費',
     spendH24: '24h 消費',
@@ -880,8 +944,16 @@ const ko = {
     showBalance: '잔액 표시',
     modelApplyTitle: '적용 모델 (체크 = 창 내 일시중지; 해제 = 면제)',
     modelApplyHint: '인식되지 않거나 목록에 없는 모델(예: 기타 제3자)은 항상 면제',
+    weekdayTitle: '요일',
+    weekdayMon: '월',
+    weekdayTue: '화',
+    weekdayWed: '수',
+    weekdayThu: '목',
+    weekdayFri: '금',
+    weekdaySat: '토',
+    weekdaySun: '일',
     applyOfficial: '공식 API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: '기타 API',
     spendH1: '1h 소비',
     spendM10: '10m 소비',
     spendH24: '24h 소비',
@@ -941,8 +1013,16 @@ const zhTW = {
     showBalance: '顯示餘額',
     modelApplyTitle: '適用模型（勾選 = 視窗內暫停；不勾選 = 豁免）',
     modelApplyHint: '識別失敗或未列出的模型（如其他第三方）一律豁免',
+    weekdayTitle: '週視窗',
+    weekdayMon: '一',
+    weekdayTue: '二',
+    weekdayWed: '三',
+    weekdayThu: '四',
+    weekdayFri: '五',
+    weekdaySat: '六',
+    weekdaySun: '日',
     applyOfficial: '官方 API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: '其他 API',
     spendH1: '近1小時消費',
     spendM10: '近10分鐘消費',
     spendH24: '近24小時消費',
@@ -1143,9 +1223,13 @@ function createSettingsView(deps) {
         const [wins, setWins] = React.useState(DEFAULT_WINS.map((w) => ({ ...w })));
         const [msg, setMsg] = React.useState('');
         const [langSel, setLangSel] = React.useState(cfg.lang || 'auto');
+        // Global weekday switch (v1.4.4): which days saving applies to. Default
+        // Mon–Fri — weekends are off-peak all day under the 2026-08-23 pricing.
+        const [days, setDays] = React.useState((Array.isArray(cfg.activeDays) ? [...cfg.activeDays] : [1, 2, 3, 4, 5]));
         const prevWinKey = React.useRef('');
         const prevTz = React.useRef(null);
         const prevLang = React.useRef(null);
+        const prevDays = React.useRef('');
         React.useEffect(() => {
             // Sync only when the config actually changed (the 30s poll must not
             // interrupt in-progress edits)
@@ -1158,6 +1242,12 @@ function createSettingsView(deps) {
                 prevLang.current = cl;
                 setLangSel(cl);
                 currentLang = resolveLang(cl);
+            }
+            const daysKey = JSON.stringify(cfg.activeDays);
+            if (daysKey !== prevDays.current) {
+                prevDays.current = daysKey;
+                if (Array.isArray(cfg.activeDays))
+                    setDays([...cfg.activeDays]);
             }
             const ws = cfg.windows || [];
             const key = JSON.stringify(ws);
@@ -1204,15 +1294,24 @@ function createSettingsView(deps) {
             style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
         }));
         // One model-tier group row: group label + one checkbox per tier
-        // (flash / pro) side by side. The two tier checkboxes are wrapped in a
-        // nowrap unit so they always stay on one line together (a lone wrap of
-        // "pro" would look misaligned).
-        const tierRow = (label, prefix) => React.createElement('div', { style: { margin: '4px 0', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } }, React.createElement('span', { style: { minWidth: '110px', fontSize: '13px' } }, label), React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap' } }, tierCheck(prefix + '-flash', 'flash'), tierCheck(prefix + '-pro', 'pro')));
+        // (flash / pro / vision) side by side. The tier checkboxes are wrapped in
+        // a nowrap unit so they always stay on one line together.
+        const tierRow = (label, prefix) => React.createElement('div', { style: { margin: '4px 0', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } }, React.createElement('span', { style: { minWidth: '110px', fontSize: '13px' } }, label), React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap' } }, tierCheck(prefix + '-flash', 'flash'), tierCheck(prefix + '-pro', 'pro'), tierCheck(prefix + '-vision', 'vision')));
         const tierCheck = (key, label) => React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px', lineHeight: '15px' } }, React.createElement('span', { style: { fontSize: '12px' } }, label), React.createElement('input', {
             type: 'checkbox', checked: !!(cfg.modelApply && cfg.modelApply[key] === true),
             onChange: (e) => void doConfigure({ modelApply: { ...cfg.modelApply, [key]: e.target.checked } }),
             style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
         }));
+        // One weekday toggle (ISO 1-7) for the global weekday switch row.
+        const weekdayCheck = (d) => {
+            const label = d === 1 ? t('weekdayMon') : d === 2 ? t('weekdayTue') : d === 3 ? t('weekdayWed')
+                : d === 4 ? t('weekdayThu') : d === 5 ? t('weekdayFri') : d === 6 ? t('weekdaySat') : t('weekdaySun');
+            return React.createElement('span', { key: d, style: { display: 'inline-flex', alignItems: 'center', gap: '3px', lineHeight: '15px' } }, React.createElement('span', { style: { fontSize: '12px' } }, label), React.createElement('input', {
+                type: 'checkbox', checked: days.includes(d),
+                onChange: (e) => setDays(e.target.checked ? [...days, d] : days.filter((x) => x !== d)),
+                style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
+            }));
+        };
         // Window add/remove/edit
         const setWin = (i, key, val) => setWins(wins.map((w, j) => (j === i ? { ...w, [key]: val } : w)));
         const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02' }]);
@@ -1259,7 +1358,8 @@ function createSettingsView(deps) {
         };
         // Unified Save at the bottom (replaces the old "apply windows" button).
         // Carries days / per-window timezone through; the dropdown timezone only
-        // applies to windows without an explicit one.
+        // applies to windows without an explicit one. Also persists the global
+        // weekday switch.
         const saveAll = () => {
             const clean = wins
                 .map((w) => ({
@@ -1269,7 +1369,7 @@ function createSettingsView(deps) {
                 ...(w.timezone !== undefined ? { timezone: w.timezone } : { timezone: tz }),
             }))
                 .filter((w) => w.pauseAt !== '' && w.resumeAt !== '');
-            void doConfigure({ windows: clean });
+            void doConfigure({ windows: clean, activeDays: [...days] });
             setMsg(t('savedMsg', { n: clean.length }));
         };
         const b = badgeInfo(st);
@@ -1286,11 +1386,11 @@ function createSettingsView(deps) {
         // Enable + balance display share one row (two compact switches).
         React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' } }, switchRow(t('enable'), !!st.enabled, (v) => void doConfigure({ enabled: v })), switchRow(t('showBalance'), !!cfg.showBalance, (v) => void doConfigure({ showBalance: v }))), 
         // Model tiers: checked = this tier pauses inside windows; unchecked =
-        // exempt. Two rows — official / opencode — each with flash + pro
-        // checkboxes side by side. Default is the two official tiers only;
-        // after the user edits, the persisted choice is respected.
+        // exempt. Two rows — official / other — each with flash + pro + vision
+        // checkboxes side by side. Default is the official tiers only; after the
+        // user edits, the persisted choice is respected.
         // Unrecognized/unsupported models are always exempt.
-        React.createElement('div', { style: { margin: '10px 0 2px', fontSize: '13px', fontWeight: 600 } }, t('modelApplyTitle')), tierRow(t('applyOfficial'), 'official'), tierRow(t('applyOpencode'), 'opencode'), React.createElement('div', { style: { margin: '0 0 8px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } }, t('modelApplyHint')), row(t('timezone'), React.createElement('select', {
+        React.createElement('div', { style: { margin: '10px 0 2px', fontSize: '13px', fontWeight: 600 } }, t('modelApplyTitle')), tierRow(t('applyOfficial'), 'official'), tierRow(t('applyOther'), 'other'), React.createElement('div', { style: { margin: '0 0 8px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } }, t('modelApplyHint')), row(t('timezone'), React.createElement('select', {
             value: tz,
             onChange: (e) => {
                 const v = e.target.value;
@@ -1343,7 +1443,11 @@ function createSettingsView(deps) {
         }, React.createElement('option', { value: 'auto' }, t('langAuto')), React.createElement('option', { value: 'zh' }, t('langZh')), React.createElement('option', { value: 'zh-TW' }, t('langZhTw')), React.createElement('option', { value: 'en' }, t('langEn')), React.createElement('option', { value: 'de' }, t('langDe')), React.createElement('option', { value: 'fr' }, t('langFr')), React.createElement('option', { value: 'es' }, t('langEs')), React.createElement('option', { value: 'it' }, t('langIt')), React.createElement('option', { value: 'pt' }, t('langPt')), React.createElement('option', { value: 'ja' }, t('langJa')), React.createElement('option', { value: 'ko' }, t('langKo')))), 
         // One-click DeepSeek preset button: sits right above the window list
         // (it is the windows' quick action)
-        React.createElement('div', { style: { margin: '10px 0 4px' } }, btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true)), React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } }, t('windowsTitle', { tz, n: wins.length })), wins.map((w, i) => React.createElement('div', { key: i, style: { margin: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'), React.createElement('span', { style: { fontSize: '12px' } }, t('pause')), input(w.pauseAt, (v) => setWin(i, 'pauseAt', v)), React.createElement('span', { style: { fontSize: '12px' } }, t('resume')), input(w.resumeAt, (v) => setWin(i, 'resumeAt', v)), React.createElement('button', {
+        React.createElement('div', { style: { margin: '10px 0 4px' } }, btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true)), 
+        // Global weekday switch (v1.4.4): which days saving applies to, right
+        // above the window list. Default Mon–Fri (weekends off-peak all day
+        // under the 2026-08-23 pricing rule). Saved with the windows.
+        React.createElement('div', { style: { margin: '10px 0 2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, React.createElement('span', { style: { fontSize: '13px', fontWeight: 600 } }, t('weekdayTitle')), [1, 2, 3, 4, 5, 6, 7].map((d) => weekdayCheck(d))), React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } }, t('windowsTitle', { tz, n: wins.length })), wins.map((w, i) => React.createElement('div', { key: i, style: { margin: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'), React.createElement('span', { style: { fontSize: '12px' } }, t('pause')), input(w.pauseAt, (v) => setWin(i, 'pauseAt', v)), React.createElement('span', { style: { fontSize: '12px' } }, t('resume')), input(w.resumeAt, (v) => setWin(i, 'resumeAt', v)), React.createElement('button', {
             onClick: () => delWin(i),
             style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-state-error-primary)', padding: '2px 4px' },
             title: t('removeTitle'),

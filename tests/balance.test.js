@@ -633,27 +633,32 @@ test('balance-host: alignWallClock returns undefined for invalid timezone (calle
   assert.equal(alignWallClock('Asia/Shanghai', Date.now(), 0), undefined) // bad step
 })
 
-// ---- v1.4.1 model classification (per-tier save-money) ----
+// ---- v1.4.1-1.4.4 model classification (per-tier save-money) ----
 
-test('model-class: official provider classifies flash/pro correctly', () => {
+test('model-class: official provider classifies flash/pro/vision correctly', () => {
   assert.equal(classifyModel('deepseek-official', 'deepseek-v4-flash'), 'official-flash')
   assert.equal(classifyModel('deepseek-official', 'deepseek-v4-pro'), 'official-pro')
+  // v1.4.4: vision-exp gets its own tier (its name also contains "flash",
+  // so vision must win)
+  assert.equal(classifyModel('deepseek-official', 'deepseek-v4-flash-vision-exp'), 'official-vision')
+  assert.equal(classifyModel('deepseek-official', 'deepseek-v4-flash-vision'), 'official-vision')
   // Case-insensitive
   assert.equal(classifyModel('DEEPSEEK-OFFICIAL', 'DeepSeek-V4-Flash'), 'official-flash')
+  assert.equal(classifyModel('deepseek-official', 'DeepSeek-V4-Flash-Vision-Exp'), 'official-vision')
 })
 
-test('model-class: opencode provider (go/zen aliases) classifies flash/pro', () => {
-  assert.equal(classifyModel('opencode', 'deepseek-v4-flash'), 'opencode-flash')
-  assert.equal(classifyModel('opencode', 'deepseek-v4-pro'), 'opencode-pro')
-  assert.equal(classifyModel('opencode-go', 'deepseek-v4-flash'), 'opencode-flash')
-  assert.equal(classifyModel('opencode-zen', 'deepseek-v4-pro'), 'opencode-pro')
-  assert.equal(classifyModel('opencode-go', 'deepseek-v4-flash-free'), 'opencode-flash', 'flash-free still contains flash')
-})
-
-test('model-class: unrecognized providers are exempt (null)', () => {
-  assert.equal(classifyModel('siliconflow', 'deepseek-v4-flash'), null, 'other third party → exempt')
-  assert.equal(classifyModel('my-relay', 'deepseek-v4-pro'), null, 'relay → exempt')
-  assert.equal(classifyModel('openai', 'gpt-4o'), null)
+test('model-class: EVERY non-official provider belongs to the "other" group (v1.4.4)', () => {
+  assert.equal(classifyModel('opencode', 'deepseek-v4-flash'), 'other-flash')
+  assert.equal(classifyModel('opencode', 'deepseek-v4-pro'), 'other-pro')
+  assert.equal(classifyModel('opencode-go', 'deepseek-v4-flash'), 'other-flash')
+  assert.equal(classifyModel('opencode-zen', 'deepseek-v4-pro'), 'other-pro')
+  assert.equal(classifyModel('opencode-go', 'deepseek-v4-flash-free'), 'other-flash', 'flash-free still contains flash')
+  assert.equal(classifyModel('opencode-go', 'deepseek-v4-flash-vision-exp'), 'other-vision')
+  // v1.4.4: relays / SiliconFlow / anything non-official are no longer null —
+  // they map to the "other" group (unchecked by default → exempt)
+  assert.equal(classifyModel('siliconflow', 'deepseek-v4-flash'), 'other-flash')
+  assert.equal(classifyModel('my-relay', 'deepseek-v4-pro'), 'other-pro')
+  assert.equal(classifyModel('siliconflow', 'deepseek-v4-flash-vision-exp'), 'other-vision')
 })
 
 test('model-class: unknown model names are exempt (incl. legacy chat/reasoner)', () => {
@@ -661,6 +666,7 @@ test('model-class: unknown model names are exempt (incl. legacy chat/reasoner)',
   assert.equal(classifyModel('deepseek-official', 'deepseek-reasoner'), null, 'legacy reasoner → exempt')
   assert.equal(classifyModel('opencode', 'deepseek-v3'), null, 'v3 → exempt')
   assert.equal(classifyModel('deepseek-official', 'qwen-max'), null)
+  assert.equal(classifyModel('openai', 'gpt-4o'), null, 'no flash/pro/vision in the name → exempt')
 })
 
 test('model-class: garbage input never throws, always null', () => {
@@ -672,11 +678,16 @@ test('model-class: garbage input never throws, always null', () => {
 })
 
 test('model-apply: enabled follows the config object per tier; null class → false', () => {
-  const applied = { 'official-flash': true, 'official-pro': true, 'opencode-flash': false, 'opencode-pro': false }
+  const applied = {
+    'official-flash': true, 'official-pro': true, 'official-vision': true,
+    'other-flash': false, 'other-pro': false, 'other-vision': false,
+  }
   assert.equal(modelApplyEnabled(applied, 'official-flash'), true)
   assert.equal(modelApplyEnabled(applied, 'official-pro'), true)
-  assert.equal(modelApplyEnabled(applied, 'opencode-flash'), false)
-  assert.equal(modelApplyEnabled(applied, 'opencode-pro'), false)
+  assert.equal(modelApplyEnabled(applied, 'official-vision'), true)
+  assert.equal(modelApplyEnabled(applied, 'other-flash'), false)
+  assert.equal(modelApplyEnabled(applied, 'other-pro'), false)
+  assert.equal(modelApplyEnabled(applied, 'other-vision'), false)
   assert.equal(modelApplyEnabled(applied, null), false, 'unrecognized class never applies')
   assert.equal(modelApplyEnabled(undefined, 'official-flash'), false, 'missing config → safe false')
   assert.equal(modelApplyEnabled('garbage', 'official-flash'), false)

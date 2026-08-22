@@ -389,12 +389,14 @@ const OFFICIAL_PROVIDER = 'deepseek-official';
 /**
  * Classify a request's tier from the provider name + model name. Pure
  * function, never throws:
- *  - Provider: lowercase contains 'opencode' → OpenCode (the go/zen gateway
- *    reuses the same route); provider === 'deepseek-official' → official;
- *    anything else → null (exempt).
- *  - Tier: model name lowercase contains 'pro' → pro; contains 'flash' →
- *    flash; otherwise null (exempt, including the legacy chat/reasoner names
- *    and unknown models — only explicit flash/pro can ever be paused).
+ *  - Provider: provider === 'deepseek-official' → official; ANY other provider
+ *    → the "other" group (opencode go/zen, relays, SiliconFlow, …). A missing
+ *    / empty provider → null (exempt).
+ *  - Tier: model name lowercase contains 'vision' → vision (checked first:
+ *    deepseek-v4-flash-vision-exp contains "flash"); else contains 'pro' →
+ *    pro; else contains 'flash' → flash; otherwise null (exempt, including
+ *    the legacy chat/reasoner names and unknown models — only explicit
+ *    flash/pro/vision can ever be paused).
  * Any input shape (undefined / non-string) safely returns null.
  */
 function classifyModel(provider, model) {
@@ -402,15 +404,17 @@ function classifyModel(provider, model) {
     const m = typeof model === 'string' ? model.toLowerCase() : '';
     if (p.length === 0 || m.length === 0)
         return null;
-    const isPro = m.indexOf('pro') >= 0;
-    const isFlash = m.indexOf('flash') >= 0;
-    if (!isPro && !isFlash)
+    // vision first: "deepseek-v4-flash-vision-exp" also contains "flash"
+    const isVision = m.indexOf('vision') >= 0;
+    const isPro = !isVision && m.indexOf('pro') >= 0;
+    const isFlash = !isVision && m.indexOf('flash') >= 0;
+    if (!isVision && !isPro && !isFlash)
         return null; // unknown → exempt
+    const tier = isVision ? 'vision' : isPro ? 'pro' : 'flash';
     if (p === OFFICIAL_PROVIDER)
-        return isPro ? 'official-pro' : 'official-flash';
-    if (p.indexOf('opencode') >= 0)
-        return isPro ? 'opencode-pro' : 'opencode-flash';
-    return null; // other third parties → exempt (they have no DeepSeek peak pricing)
+        return ('official-' + tier);
+    // Any other provider belongs to the "other" group (v1.4.4)
+    return ('other-' + tier);
 }
 /**
  * Whether a tier is checked in the current modelApply config (should save).
@@ -728,7 +732,8 @@ async function fetchBalance(ctx, sandbox) {
  * mechanism as src/core.ts and src/balance-host.ts. It exports factories and
  * plain functions only; the apply() glue in host.ts calls createConfig().
  */
-/** Defaults: official flash/pro apply (paused); opencode tiers exempt. */
+/** Defaults: official flash/pro apply (paused); other tiers exempt;
+ * Mon–Fri active. */
 const CONFIG_DEFAULTS = {
     enabled: false,
     timezone: 'Asia/Shanghai',
@@ -740,12 +745,22 @@ const CONFIG_DEFAULTS = {
     modelApply: {
         'official-flash': true,
         'official-pro': true,
-        'opencode-flash': false,
-        'opencode-pro': false,
+        'official-vision': true,
+        'other-flash': false,
+        'other-pro': false,
+        'other-vision': false,
     },
+    activeDays: [1, 2, 3, 4, 5],
 };
 const LANGS = ['auto', 'zh', 'zh-TW', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko'];
-const MODEL_APPLY_KEYS = ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro'];
+const MODEL_APPLY_KEYS = ['official-flash', 'official-pro', 'official-vision', 'other-flash', 'other-pro', 'other-vision'];
+/** Legacy v1.4.1-1.4.3 keys migrated to the new "other" group (v1.4.4). */
+const LEGACY_APPLY_KEYS = {
+    'opencode-flash': 'other-flash',
+    'opencode-pro': 'other-pro',
+};
+/** All weekdays (ISO 1-7) for validation/UI. */
+const ALL_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7];
 const CONFIG_FILE = 'save-money.config.json';
 const POINTER_FILE = 'save-money-config-path.json';
 // Pure time helpers inlined from src/core.ts at build time — the `import`
@@ -980,13 +995,28 @@ function createConfig(deps) {
             }
             // modelApply: only adopt tiers the user actually saved (boolean per tier;
             // broken/missing tiers keep the current value). No field → keep default.
+            // Legacy v1.4.1-1.4.3 keys (opencode-*) are migrated to the new "other"
+            // group so existing user choices survive the upgrade.
             if (data.modelApply && typeof data.modelApply === 'object') {
                 const ma = { ...next.modelApply };
                 for (const key of MODEL_APPLY_KEYS) {
                     if (typeof data.modelApply[key] === 'boolean')
                         ma[key] = data.modelApply[key];
                 }
+                for (const legacy of Object.keys(LEGACY_APPLY_KEYS)) {
+                    const target = LEGACY_APPLY_KEYS[legacy];
+                    // Migrate only when the config did NOT already set the new key
+                    // (new key wins when both are present).
+                    if (typeof data.modelApply[legacy] === 'boolean' && typeof data.modelApply[target] !== 'boolean') {
+                        ma[target] = data.modelApply[legacy];
+                    }
+                }
                 next.modelApply = ma;
+            }
+            // Global weekday switch: valid 1-7 ints; empty array is allowed (= never
+            // pause); invalid → keep default.
+            if (Array.isArray(data.activeDays)) {
+                next.activeDays = data.activeDays.filter((d) => Number.isInteger(d) && d >= 1 && d <= 7);
             }
             // In-place update keeps the `cfgRef.cfg` reference stable, so callers
             // that captured it (e.g. the host's `const cfg = cfgRef.cfg`) always see
@@ -1008,7 +1038,7 @@ function createConfig(deps) {
         // config object. Boolean fields are type-checked below.
         const p = (patch && typeof patch === 'object') ? patch : {};
         const next = { ...cfgRef.cfg };
-        for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'modelApply']) {
+        for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'modelApply', 'activeDays']) {
             if (p[key] !== undefined)
                 next[key] = p[key];
         }
@@ -1019,6 +1049,12 @@ function createConfig(deps) {
         }
         if (next.reconcileOnStart !== undefined && typeof next.reconcileOnStart !== 'boolean') {
             return { ok: false, error: 'reconcileOnStart must be a boolean' };
+        }
+        if (next.activeDays !== undefined) {
+            if (!Array.isArray(next.activeDays) ||
+                !next.activeDays.every((d) => Number.isInteger(d) && d >= 1 && d <= 7)) {
+                return { ok: false, error: 'activeDays must be an array of 1-7 (may be empty = never pause)' };
+            }
         }
         const v = validateWindows(next.windows, next.timezone);
         if (!v.ok)
@@ -1046,12 +1082,21 @@ function createConfig(deps) {
             return { ok: false, error: 'lang must be one of auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko' };
         }
         // modelApply per-tier merge: a patch only overrides the tiers it names,
-        // so { modelApply: { 'opencode-pro': true } } keeps the official tiers.
+        // so { modelApply: { 'other-pro': true } } keeps the official tiers.
+        // Legacy v1.4.1-1.4.3 keys (opencode-*) in a patch are migrated too.
         if (patch && patch.modelApply && typeof patch.modelApply === 'object') {
             const merged = { ...cfgRef.cfg.modelApply };
             for (const key of MODEL_APPLY_KEYS) {
                 if (typeof patch.modelApply[key] === 'boolean')
                     merged[key] = patch.modelApply[key];
+            }
+            for (const legacy of Object.keys(LEGACY_APPLY_KEYS)) {
+                const target = LEGACY_APPLY_KEYS[legacy];
+                // Migrate only when the patch did NOT explicitly set the new key
+                // (new key wins when both are present).
+                if (typeof patch.modelApply[legacy] === 'boolean' && typeof patch.modelApply[target] !== 'boolean') {
+                    merged[target] = patch.modelApply[legacy];
+                }
             }
             next.modelApply = merged;
         }
@@ -1074,6 +1119,7 @@ function createConfig(deps) {
             lang: cfgRef.cfg.lang,
             showBalance: cfgRef.cfg.showBalance,
             modelApply: { ...cfgRef.cfg.modelApply },
+            activeDays: [...cfgRef.cfg.activeDays],
             windows: cfgRef.cfg.windows.map((w) => ({ ...w })),
         };
     }
@@ -1113,14 +1159,21 @@ function windowKey(w, tz) {
 /**
  * Decide the raw plugin state at `now`.
  *
- * Order: disabled → NORMAL; inside a window → PAUSED (unless that window is
- * ended via end-this-save-mode → NORMAL); an upcoming window within
+ * Order: disabled → NORMAL; today (in the configured timezone) not in the
+ * global weekday switch → NORMAL; inside a window → PAUSED (unless that
+ * window is ended via end-this-save-mode → NORMAL); an upcoming window within
  * warnMinutes → WARN; otherwise NORMAL. Pure — reads only `input`.
  */
 function computeRawState(now, input) {
-    const { enabled, timezone, warnMinutes, windows, endWindowUntil, endWindowKey } = input;
+    const { enabled, timezone, warnMinutes, windows, activeDays, endWindowUntil, endWindowKey } = input;
     if (!enabled)
         return { name: 'NORMAL', reason: 'disabled' };
+    // Global weekday switch (v1.4.4): weekends off-peak all day → no saving
+    // unless the day is checked. Empty array = no active day = never pause;
+    // absent/undefined = every day applies. Uses the CONFIG timezone's today.
+    if (activeDays && !activeDays.includes(dowNum(wallClock(timezone, now).weekday))) {
+        return { name: 'NORMAL', reason: 'weekday-off' };
+    }
     for (const w of windows) {
         const tz = w.timezone || timezone;
         if (windowMatchesAt(w, wallClock(tz, now))) {
@@ -1760,7 +1813,7 @@ function createToolRegistrar(deps) {
         },
         {
             name: 'save_money_configure',
-            description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), modelApply (object of booleans: official-flash / official-pro / opencode-flash / opencode-pro — checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+            description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), activeDays (array of ISO weekday ints 1-7, may be empty = never pause; default [1,2,3,4,5] Mon-Fri), modelApply (object of booleans: official-flash / official-pro / official-vision / other-flash / other-pro / other-vision — official = the DeepSeek official API, other = every non-official provider (opencode, relays, ...); checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1770,13 +1823,16 @@ function createToolRegistrar(deps) {
                     reconcileOnStart: { type: 'boolean' },
                     lang: { type: 'string' },
                     showBalance: { type: 'boolean' },
+                    activeDays: { type: 'array', items: { type: 'number' } },
                     modelApply: {
                         type: 'object',
                         properties: {
                             'official-flash': { type: 'boolean' },
                             'official-pro': { type: 'boolean' },
-                            'opencode-flash': { type: 'boolean' },
-                            'opencode-pro': { type: 'boolean' },
+                            'official-vision': { type: 'boolean' },
+                            'other-flash': { type: 'boolean' },
+                            'other-pro': { type: 'boolean' },
+                            'other-vision': { type: 'boolean' },
                         },
                     },
                     windows: {
@@ -1893,6 +1949,7 @@ export function apply(ctx) {
                 timezone: cfg.timezone,
                 warnMinutes: cfg.warnMinutes,
                 windows: cfg.windows,
+                activeDays: cfg.activeDays,
                 endWindowUntil: S.endWindowUntil,
                 endWindowKey: S.endWindowKey,
             });

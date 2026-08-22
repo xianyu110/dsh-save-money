@@ -76,9 +76,13 @@ export function createSettingsView(deps: any) {
     const [wins, setWins] = React.useState(DEFAULT_WINS.map((w: any) => ({ ...w })))
     const [msg, setMsg] = React.useState('')
     const [langSel, setLangSel] = React.useState(cfg.lang || 'auto')
+    // Global weekday switch (v1.4.4): which days saving applies to. Default
+    // Mon–Fri — weekends are off-peak all day under the 2026-08-23 pricing.
+    const [days, setDays] = React.useState((Array.isArray(cfg.activeDays) ? [...cfg.activeDays] : [1, 2, 3, 4, 5]) as number[])
     const prevWinKey = React.useRef('')
     const prevTz = React.useRef(null)
     const prevLang = React.useRef(null)
+    const prevDays = React.useRef('')
     React.useEffect(() => {
       // Sync only when the config actually changed (the 30s poll must not
       // interrupt in-progress edits)
@@ -91,6 +95,11 @@ export function createSettingsView(deps: any) {
         prevLang.current = cl
         setLangSel(cl)
         currentLang = resolveLang(cl)
+      }
+      const daysKey = JSON.stringify(cfg.activeDays)
+      if (daysKey !== prevDays.current) {
+        prevDays.current = daysKey
+        if (Array.isArray(cfg.activeDays)) setDays([...cfg.activeDays])
       }
       const ws = cfg.windows || []
       const key = JSON.stringify(ws)
@@ -140,14 +149,14 @@ export function createSettingsView(deps: any) {
         style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
       }))
     // One model-tier group row: group label + one checkbox per tier
-    // (flash / pro) side by side. The two tier checkboxes are wrapped in a
-    // nowrap unit so they always stay on one line together (a lone wrap of
-    // "pro" would look misaligned).
+    // (flash / pro / vision) side by side. The tier checkboxes are wrapped in
+    // a nowrap unit so they always stay on one line together.
     const tierRow = (label: string, prefix: string) => React.createElement('div', { style: { margin: '4px 0', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
       React.createElement('span', { style: { minWidth: '110px', fontSize: '13px' } }, label),
       React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap' } },
         tierCheck(prefix + '-flash', 'flash'),
         tierCheck(prefix + '-pro', 'pro'),
+        tierCheck(prefix + '-vision', 'vision'),
       ),
     )
     const tierCheck = (key: string, label: string) => React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px', lineHeight: '15px' } },
@@ -157,6 +166,18 @@ export function createSettingsView(deps: any) {
         onChange: (e: any) => void doConfigure({ modelApply: { ...cfg.modelApply, [key]: e.target.checked } }),
         style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
       }))
+    // One weekday toggle (ISO 1-7) for the global weekday switch row.
+    const weekdayCheck = (d: number) => {
+      const label = d === 1 ? t('weekdayMon') : d === 2 ? t('weekdayTue') : d === 3 ? t('weekdayWed')
+        : d === 4 ? t('weekdayThu') : d === 5 ? t('weekdayFri') : d === 6 ? t('weekdaySat') : t('weekdaySun')
+      return React.createElement('span', { key: d, style: { display: 'inline-flex', alignItems: 'center', gap: '3px', lineHeight: '15px' } },
+        React.createElement('span', { style: { fontSize: '12px' } }, label),
+        React.createElement('input', {
+          type: 'checkbox', checked: days.includes(d),
+          onChange: (e: any) => setDays(e.target.checked ? [...days, d] : days.filter((x: any) => x !== d)),
+          style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
+        }))
+    }
     // Window add/remove/edit
     const setWin = (i: number, key: string, val: string) => setWins(wins.map((w: any, j: number) => (j === i ? { ...w, [key]: val } : w)))
     const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02' }])
@@ -202,7 +223,8 @@ export function createSettingsView(deps: any) {
     }
     // Unified Save at the bottom (replaces the old "apply windows" button).
     // Carries days / per-window timezone through; the dropdown timezone only
-    // applies to windows without an explicit one.
+    // applies to windows without an explicit one. Also persists the global
+    // weekday switch.
     const saveAll = () => {
       const clean = wins
         .map((w: any) => ({
@@ -212,7 +234,7 @@ export function createSettingsView(deps: any) {
           ...(w.timezone !== undefined ? { timezone: w.timezone } : { timezone: tz }),
         }))
         .filter((w: any) => w.pauseAt !== '' && w.resumeAt !== '')
-      void doConfigure({ windows: clean })
+      void doConfigure({ windows: clean, activeDays: [...days] })
       setMsg(t('savedMsg', { n: clean.length }))
     }
     const b = badgeInfo(st)
@@ -239,14 +261,14 @@ export function createSettingsView(deps: any) {
         switchRow(t('showBalance'), !!cfg.showBalance, (v: boolean) => void doConfigure({ showBalance: v })),
       ),
       // Model tiers: checked = this tier pauses inside windows; unchecked =
-      // exempt. Two rows — official / opencode — each with flash + pro
-      // checkboxes side by side. Default is the two official tiers only;
-      // after the user edits, the persisted choice is respected.
+      // exempt. Two rows — official / other — each with flash + pro + vision
+      // checkboxes side by side. Default is the official tiers only; after the
+      // user edits, the persisted choice is respected.
       // Unrecognized/unsupported models are always exempt.
       React.createElement('div', { style: { margin: '10px 0 2px', fontSize: '13px', fontWeight: 600 } },
         t('modelApplyTitle')),
       tierRow(t('applyOfficial'), 'official'),
-      tierRow(t('applyOpencode'), 'opencode'),
+      tierRow(t('applyOther'), 'other'),
       React.createElement('div', { style: { margin: '0 0 8px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } },
         t('modelApplyHint')),
       row(t('timezone'), React.createElement('select', {
@@ -317,6 +339,13 @@ export function createSettingsView(deps: any) {
       // (it is the windows' quick action)
       React.createElement('div', { style: { margin: '10px 0 4px' } },
         btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true),
+      ),
+      // Global weekday switch (v1.4.4): which days saving applies to, right
+      // above the window list. Default Mon–Fri (weekends off-peak all day
+      // under the 2026-08-23 pricing rule). Saved with the windows.
+      React.createElement('div', { style: { margin: '10px 0 2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+        React.createElement('span', { style: { fontSize: '13px', fontWeight: 600 } }, t('weekdayTitle')),
+        [1, 2, 3, 4, 5, 6, 7].map((d) => weekdayCheck(d)),
       ),
       React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } },
         t('windowsTitle', { tz, n: wins.length })),

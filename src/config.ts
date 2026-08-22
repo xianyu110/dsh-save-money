@@ -15,12 +15,16 @@
 /** Language choice: 'auto' follows the browser; the rest are explicit locales. */
 type LangChoice = 'auto' | 'zh' | 'zh-TW' | 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'ja' | 'ko'
 
-/** Per-model-tier save-mode toggles (v1.4.1). Checked = paused in windows. */
+/** Per-model-tier save-mode toggles (v1.4.4). Checked = paused in windows.
+ * Groups: official (deepseek-official) and "other" (EVERY non-official
+ * provider: opencode go/zen, relays, …), each with flash / pro / vision. */
 export interface ModelApply {
   'official-flash': boolean
   'official-pro': boolean
-  'opencode-flash': boolean
-  'opencode-pro': boolean
+  'official-vision': boolean
+  'other-flash': boolean
+  'other-pro': boolean
+  'other-vision': boolean
 }
 
 export interface SaveMoneyConfig {
@@ -32,9 +36,14 @@ export interface SaveMoneyConfig {
   lang: LangChoice
   showBalance: boolean
   modelApply: ModelApply
+  /** Global weekday switch (ISO 1-7): saving only applies on these days.
+   * Default Mon–Fri (weekends are off-peak all day under the 2026-08-23
+   * pricing rule, so no window pauses on Sat/Sun). */
+  activeDays: number[]
 }
 
-/** Defaults: official flash/pro apply (paused); opencode tiers exempt. */
+/** Defaults: official flash/pro apply (paused); other tiers exempt;
+ * Mon–Fri active. */
 export const CONFIG_DEFAULTS: SaveMoneyConfig = {
   enabled: false,
   timezone: 'Asia/Shanghai',
@@ -46,13 +55,24 @@ export const CONFIG_DEFAULTS: SaveMoneyConfig = {
   modelApply: {
     'official-flash': true,
     'official-pro': true,
-    'opencode-flash': false,
-    'opencode-pro': false,
+    'official-vision': true,
+    'other-flash': false,
+    'other-pro': false,
+    'other-vision': false,
   },
+  activeDays: [1, 2, 3, 4, 5],
 }
 
 export const LANGS: LangChoice[] = ['auto', 'zh', 'zh-TW', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'ko']
-export const MODEL_APPLY_KEYS = ['official-flash', 'official-pro', 'opencode-flash', 'opencode-pro'] as const
+export const MODEL_APPLY_KEYS = ['official-flash', 'official-pro', 'official-vision', 'other-flash', 'other-pro', 'other-vision'] as const
+/** Legacy v1.4.1-1.4.3 keys migrated to the new "other" group (v1.4.4). */
+export const LEGACY_APPLY_KEYS: Record<string, keyof ModelApply> = {
+  'opencode-flash': 'other-flash',
+  'opencode-pro': 'other-pro',
+}
+
+/** All weekdays (ISO 1-7) for validation/UI. */
+export const ALL_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const
 
 export const CONFIG_FILE = 'save-money.config.json'
 export const POINTER_FILE = 'save-money-config-path.json'
@@ -288,12 +308,27 @@ export function createConfig(deps: ConfigDeps) {
       }
       // modelApply: only adopt tiers the user actually saved (boolean per tier;
       // broken/missing tiers keep the current value). No field → keep default.
+      // Legacy v1.4.1-1.4.3 keys (opencode-*) are migrated to the new "other"
+      // group so existing user choices survive the upgrade.
       if (data.modelApply && typeof data.modelApply === 'object') {
         const ma: any = { ...next.modelApply }
         for (const key of MODEL_APPLY_KEYS) {
           if (typeof data.modelApply[key] === 'boolean') ma[key] = data.modelApply[key]
         }
+        for (const legacy of Object.keys(LEGACY_APPLY_KEYS)) {
+          const target = LEGACY_APPLY_KEYS[legacy]
+          // Migrate only when the config did NOT already set the new key
+          // (new key wins when both are present).
+          if (typeof data.modelApply[legacy] === 'boolean' && typeof data.modelApply[target] !== 'boolean') {
+            ma[target] = data.modelApply[legacy]
+          }
+        }
         next.modelApply = ma
+      }
+      // Global weekday switch: valid 1-7 ints; empty array is allowed (= never
+      // pause); invalid → keep default.
+      if (Array.isArray(data.activeDays)) {
+        next.activeDays = data.activeDays.filter((d: any) => Number.isInteger(d) && d >= 1 && d <= 7)
       }
       // In-place update keeps the `cfgRef.cfg` reference stable, so callers
       // that captured it (e.g. the host's `const cfg = cfgRef.cfg`) always see
@@ -315,7 +350,7 @@ export function createConfig(deps: ConfigDeps) {
     // config object. Boolean fields are type-checked below.
     const p: any = (patch && typeof patch === 'object') ? patch : {}
     const next: any = { ...cfgRef.cfg }
-    for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'modelApply'] as const) {
+    for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'modelApply', 'activeDays'] as const) {
       if (p[key] !== undefined) next[key] = p[key]
     }
     if (next.windows === undefined) next.windows = []
@@ -324,6 +359,12 @@ export function createConfig(deps: ConfigDeps) {
     }
     if (next.reconcileOnStart !== undefined && typeof next.reconcileOnStart !== 'boolean') {
       return { ok: false, error: 'reconcileOnStart must be a boolean' }
+    }
+    if (next.activeDays !== undefined) {
+      if (!Array.isArray(next.activeDays) ||
+          !next.activeDays.every((d: any) => Number.isInteger(d) && d >= 1 && d <= 7)) {
+        return { ok: false, error: 'activeDays must be an array of 1-7 (may be empty = never pause)' }
+      }
     }
     const v = validateWindows(next.windows, next.timezone)
     if (!v.ok) return { ok: false, error: v.error }
@@ -350,11 +391,20 @@ export function createConfig(deps: ConfigDeps) {
       return { ok: false, error: 'lang must be one of auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko' }
     }
     // modelApply per-tier merge: a patch only overrides the tiers it names,
-    // so { modelApply: { 'opencode-pro': true } } keeps the official tiers.
+    // so { modelApply: { 'other-pro': true } } keeps the official tiers.
+    // Legacy v1.4.1-1.4.3 keys (opencode-*) in a patch are migrated too.
     if (patch && patch.modelApply && typeof patch.modelApply === 'object') {
       const merged: Record<string, boolean> = { ...cfgRef.cfg.modelApply }
       for (const key of MODEL_APPLY_KEYS) {
         if (typeof patch.modelApply[key] === 'boolean') merged[key] = patch.modelApply[key]
+      }
+      for (const legacy of Object.keys(LEGACY_APPLY_KEYS)) {
+        const target = LEGACY_APPLY_KEYS[legacy]
+        // Migrate only when the patch did NOT explicitly set the new key
+        // (new key wins when both are present).
+        if (typeof patch.modelApply[legacy] === 'boolean' && typeof patch.modelApply[target] !== 'boolean') {
+          merged[target] = patch.modelApply[legacy]
+        }
       }
       next.modelApply = merged as any
     }
@@ -377,6 +427,7 @@ export function createConfig(deps: ConfigDeps) {
       lang: cfgRef.cfg.lang,
       showBalance: cfgRef.cfg.showBalance,
       modelApply: { ...cfgRef.cfg.modelApply },
+      activeDays: [...cfgRef.cfg.activeDays],
       windows: cfgRef.cfg.windows.map((w) => ({ ...w })),
     }
   }

@@ -36,7 +36,7 @@
 // `console` is a sandbox global (declared so this module type-checks
 // standalone; the host body provides it at runtime).
 declare const console: any
-declare type ModelClass = 'official-flash' | 'official-pro' | 'opencode-flash' | 'opencode-pro' | null
+declare type ModelClass = 'official-flash' | 'official-pro' | 'official-vision' | 'other-flash' | 'other-pro' | 'other-vision' | null
 declare function classifyModel(provider: any, model: any): ModelClass
 declare function modelApplyEnabled(applied: any, cls: ModelClass): boolean
 

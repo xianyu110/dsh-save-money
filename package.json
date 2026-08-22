@@ -10,7 +10,7 @@
   "scripts": {
     "build": "node scripts/build.js",
     "typecheck": "node scripts/typecheck.js",
-    "test": "npm run prepare && node --test tests/core.test.js tests/balance.test.js tests/official.test.js tests/i18n.test.js",
+    "test": "npm run prepare && node --test tests/core.test.js tests/balance.test.js tests/state.test.js tests/official.test.js tests/i18n.test.js",
     "prepare": "node scripts/build.js && node scripts/make-plugin.js"
   },
   "devDependencies": {

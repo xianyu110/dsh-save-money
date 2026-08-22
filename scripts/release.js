@@ -21,7 +21,8 @@
  *      README.md and README.zh.md)
  *   4. build + run the full test suite
  *   5. git commit (message includes the version), tag v<version>
- *   6. git push origin main --tags
+ *   6. git push main --tags to every configured release remote (origin =
+ *      GitHub and gitcode; unconfigured remotes are skipped)
  *   7. npm publish ./plugin
  *
  * README handling: npm only packs files INSIDE plugin/, so the publish step
@@ -154,13 +155,24 @@ run('git add -A', { cwd: root })
 run('git commit -m ' + JSON.stringify(commitMsg), { cwd: root })
 run('git tag v' + version, { cwd: root })
 
-// 6. Push (via proxy when given).
+// 6. Push (via proxy when given) to every configured release remote —
+//    origin (GitHub) and gitcode. A remote that is not configured on this
+//    machine is skipped with a notice, so the same script works anywhere.
 console.log('--- [6/7] git push ---')
 if (noPush) {
   console.log('  --no-push: stopping after the local commit + tag')
 } else {
   const proxyArg = proxy ? ' -c http.proxy=' + proxy : ''
-  run('git' + proxyArg + ' push origin main --tags', { cwd: root })
+  const configured = execSync('git remote', { encoding: 'utf8', cwd: root })
+    .split('\n').map((s) => s.trim()).filter((s) => s.length > 0)
+  const RELEASE_REMOTES = ['origin', 'gitcode']
+  for (const r of RELEASE_REMOTES) {
+    if (configured.includes(r)) {
+      run('git' + proxyArg + ' push ' + r + ' main --tags', { cwd: root })
+    } else {
+      console.log('  skip ' + r + ': remote not configured on this machine')
+    }
+  }
 }
 
 // 7. npm publish — with a TEMPORARY plugin/README.md (copied from the root,

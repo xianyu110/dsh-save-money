@@ -513,9 +513,9 @@ test('config resolution: late fs service (the second-machine bug) still loads co
   }
 })
 
-// ---- v1.4.1 modelApply (per-tier save-money) host integration ----
+// ---- v1.4.1-1.4.4 modelApply (per-tier save-money) host integration ----
 
-test('modelApply: default config applies to official tiers only, opencode exempt', async () => {
+test('modelApply: default config applies to official tiers only, other exempt', async () => {
   const { ctx, routes } = makeCtx({
     sessions: { list: () => [], get: () => undefined },
     agents: { currentInitiator: () => undefined, list: () => [] },
@@ -531,11 +531,15 @@ test('modelApply: default config applies to official tiers only, opencode exempt
   const ma = st.config.modelApply
   assert.equal(ma['official-flash'], true, 'official flash applies by default')
   assert.equal(ma['official-pro'], true, 'official pro applies by default')
-  assert.equal(ma['opencode-flash'], false, 'opencode flash exempt by default')
-  assert.equal(ma['opencode-pro'], false, 'opencode pro exempt by default')
+  assert.equal(ma['official-vision'], true, 'official vision applies by default')
+  assert.equal(ma['other-flash'], false, 'other flash exempt by default')
+  assert.equal(ma['other-pro'], false, 'other pro exempt by default')
+  assert.equal(ma['other-vision'], false, 'other vision exempt by default')
+  // Global weekday switch defaults to Mon–Fri (weekends off-peak all day)
+  assert.deepEqual(st.config.activeDays, [1, 2, 3, 4, 5])
 })
 
-test('modelApply: configure updates tiers and validates booleans', async () => {
+test('modelApply: configure updates tiers, migrates legacy opencode keys, validates booleans', async () => {
   const { ctx, routes } = makeCtx({
     sessions: { list: () => [], get: () => undefined },
     agents: { currentInitiator: () => undefined, list: () => [] },
@@ -552,11 +556,22 @@ test('modelApply: configure updates tiers and validates booleans', async () => {
     await handler(req, res)
     return JSON.parse(res._body)
   }
-  // update: check opencode-pro
-  const out = await call({ modelApply: { 'opencode-pro': true } })
+  // update: check other-pro (new key)
+  const out = await call({ modelApply: { 'other-pro': true } })
   assert.equal(out.ok, true)
-  assert.equal(out.config.modelApply['opencode-pro'], true)
+  assert.equal(out.config.modelApply['other-pro'], true)
   assert.equal(out.config.modelApply['official-flash'], true, 'other tiers untouched')
+  // legacy v1.4.1-1.4.3 key in a patch is migrated to other-*
+  const legacy = await call({ modelApply: { 'opencode-flash': true } })
+  assert.equal(legacy.ok, true)
+  assert.equal(legacy.config.modelApply['other-flash'], true, 'legacy opencode-flash migrates to other-flash')
+  assert.equal(legacy.config.modelApply['opencode-flash'], undefined, 'legacy key is not stored')
+  // activeDays patch
+  const days = await call({ activeDays: [6, 7] })
+  assert.equal(days.ok, true)
+  assert.deepEqual(days.config.activeDays, [6, 7])
+  const badDays = await call({ activeDays: [0, 8] })
+  assert.equal(badDays.ok, false)
   // invalid value is rejected
   const bad = await call({ modelApply: { 'official-flash': 'yes' } })
   assert.equal(bad.ok, false)
