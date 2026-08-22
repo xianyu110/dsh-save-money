@@ -4,6 +4,18 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.4.4] — 2026-08-23
+
+### 新增
+
+- **vision 模型档位**：`deepseek-v4-flash-vision-exp` 拥有独立勾选框（模型名同时含 flash，故 vision 优先识别）。**官方 API** 与**其他 API** 两行现在都有 **flash / pro / vision** 三个开关（共 6 个）。
+- **「其他 API」组取代「opencode」**：凡是 provider 不是官方 DeepSeek API 的请求（opencode go/zen、中转、硅基流动等）都归入「其他」组；勾选 = 窗口内暂停，不勾选 = 豁免（默认三档全豁免，第三方不会阻塞你，除非你主动勾选）。旧的 `opencode-flash` / `opencode-pro` 配置**自动迁移**为 `other-flash` / `other-pro`。
+- **全局周窗口开关**：窗口列表上方一行——一 ☑️ 二 ☑️ 三 ☑️ 四 ☑️ 五 ☑️ 六 ⬜ 日 ⬜——只在勾选的星期执行省钱，**默认周一~周五**。按 DeepSeek 2026-08-23 起的新计价规则，周末全天低谷价，周六日不暂停。与每个窗口自带的星期过滤叠加；全部不勾选 = 永不暂停。
+
+### 变更
+
+- 默认 `modelApply` 增加 `official-vision: true`；星期默认值为 `activeDays: [1,2,3,4,5]`。
+
 ## [1.4.3] — 2026-08-18
 
 ### 新增

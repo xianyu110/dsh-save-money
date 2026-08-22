@@ -4,6 +4,18 @@ All notable changes to **dsh-save-money**, described by what you get and how you
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.4] — 2026-08-23
+
+### Added
+
+- **Vision model tier**: `deepseek-v4-flash-vision-exp` gets its own checkbox (its name also contains "flash", so vision is classified first). Both the **Official API** and **Other API** rows now have **flash / pro / vision** toggles (six total).
+- **"Other API" group replaces "opencode"**: any request whose provider is not the official DeepSeek API (opencode go/zen, relays, SiliconFlow, …) belongs to the "other" group; checked = paused inside windows, unchecked = exempt (all three default exempt, so third parties never block you unless you opt in). Legacy `opencode-flash` / `opencode-pro` config values **migrate automatically** to `other-flash` / `other-pro`.
+- **Global weekday switch**: a row above the window list — 一 ☑️ 二 ☑️ 三 ☑️ 四 ☑️ 五 ☑️ 六 ⬜ 日 ⬜ — saving applies only on the checked days, **default Mon–Fri**. Under DeepSeek's 2026-08-23 pricing rule weekends are off-peak all day, so nothing pauses on Sat/Sun. Composed with each window's own per-weekday filter; an empty selection means never pause.
+
+### Changed
+
+- Default `modelApply` now includes `official-vision: true`; the weekday default is `activeDays: [1,2,3,4,5]`.
+
 ## [1.4.3] — 2026-08-18
 
 ### Added
